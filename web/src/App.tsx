@@ -198,32 +198,34 @@ export function App() {
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
-      <header className="flex items-center gap-3 border-b px-4 py-3">
-        <strong className="text-sm font-semibold">Workflow Builder</strong>
-        <Input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="h-8 w-48 text-sm"
-        />
-        <Button
-          size="sm"
-          onClick={save}
-          disabled={saveMutation.isPending || funcs.length === 0}
-        >
-          {saveMutation.isPending ? "saving…" : "Save"}
-        </Button>
-        <Button size="sm" variant="ghost" onClick={reset}>
-          New
-        </Button>
-        <Separator orientation="vertical" className="ml-auto h-5" />
-        <Badge variant="secondary" className="font-normal">
-          {funcs.length} func
-        </Badge>
-      </header>
+      <div className="p-2 pb-0">
+        <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-4 py-2 backdrop-blur-xl">
+          <strong className="text-sm font-semibold">Workflow Builder</strong>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="h-8 w-48 bg-background-subtle text-sm"
+          />
+          <Button
+            size="sm"
+            onClick={save}
+            disabled={saveMutation.isPending || funcs.length === 0}
+          >
+            {saveMutation.isPending ? "saving…" : "Save"}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={reset}>
+            New
+          </Button>
+          <Separator orientation="vertical" className="ml-auto h-5" />
+          <Badge variant="secondary" className="font-normal">
+            {funcs.length} func
+          </Badge>
+        </header>
+      </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 gap-2 p-2">
         <WorkflowsPanel currentId={workflowId} onLoad={load} />
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/40 bg-card">
           <div className="min-h-0 flex-1">
             <ReactFlowProvider>
               <Canvas

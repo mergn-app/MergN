@@ -16,10 +16,10 @@ function TabButton({
     <button
       onClick={onClick}
       className={cn(
-        "flex-1 border-b-2 px-4 py-2 text-sm font-medium transition-colors",
+        "flex-1 rounded-xl px-3 py-1.5 text-sm font-medium transition-colors",
         active
-          ? "border-primary text-foreground"
-          : "border-transparent text-muted-foreground hover:text-foreground",
+          ? "bg-background-subtle text-foreground"
+          : "text-muted-foreground hover:text-foreground",
       )}
     >
       {children}
@@ -39,8 +39,8 @@ export function RightPanel({
   node: ReactNode;
 }) {
   return (
-    <div className="flex w-[420px] flex-col border-l bg-muted/30">
-      <div className="flex">
+    <div className="flex w-[400px] shrink-0 flex-col overflow-hidden rounded-2xl border border-border/40 bg-muted/40 backdrop-blur-xl">
+      <div className="flex shrink-0 gap-0.5 p-1">
         <TabButton active={active === "chat"} onClick={() => onTab("chat")}>
           Chat
         </TabButton>
@@ -51,7 +51,12 @@ export function RightPanel({
       <div className={cn("min-h-0 flex-1", active === "chat" ? "flex" : "hidden")}>
         {chat}
       </div>
-      <div className={cn("min-h-0 flex-1", active === "node" ? "block" : "hidden")}>
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-hidden",
+          active === "node" ? "block" : "hidden",
+        )}
+      >
         {node}
       </div>
     </div>

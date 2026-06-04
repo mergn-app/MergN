@@ -99,8 +99,8 @@ export function Chat({
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex items-baseline gap-2 border-b px-4 py-2">
-        <span className="ml-auto font-mono text-xs text-muted-foreground">
+      <div className="flex items-center px-3 py-1.5">
+        <span className="ml-auto rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
           {totalTokens.toLocaleString()} tokens
         </span>
       </div>
@@ -123,10 +123,10 @@ export function Chat({
               <div className="mb-1 text-[11px] text-muted-foreground">{m.role}</div>
               <div
                 className={cn(
-                  "whitespace-pre-wrap rounded-xl border px-3 py-2 text-sm",
+                  "whitespace-pre-wrap rounded-xl px-3 py-2 text-sm shadow-sm",
                   m.role === "user"
-                    ? "border-primary bg-primary text-primary-foreground"
-                    : "bg-card text-card-foreground",
+                    ? "bg-muted/25 text-foreground"
+                    : "bg-muted/10 text-foreground",
                 )}
               >
                 {m.parts.map((part, i) => {
@@ -165,19 +165,23 @@ export function Chat({
         </div>
       </ScrollArea>
 
-      <form onSubmit={submit} className="flex gap-2 border-t p-3">
-        <Input
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Message the builder…"
-          className="flex-1"
-        />
-        <Button
-          type="submit"
-          disabled={status === "streaming" || status === "submitted"}
-        >
-          Send
-        </Button>
+      <form onSubmit={submit} className="p-2">
+        <div className="flex items-end gap-2 rounded-2xl border border-border/40 bg-background-subtle p-1.5 transition-colors focus-within:border-foreground/20">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="Message the builder…"
+            className="flex-1 border-none bg-transparent shadow-none focus-visible:ring-0"
+          />
+          <Button
+            type="submit"
+            size="icon"
+            disabled={status === "streaming" || status === "submitted"}
+            className="h-8 w-8 shrink-0 rounded-xl"
+          >
+            ↑
+          </Button>
+        </div>
       </form>
     </div>
   );

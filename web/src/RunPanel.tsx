@@ -76,7 +76,7 @@ export function RunPanel({
   };
 
   return (
-    <div className="flex h-56 flex-col border-t bg-card/40">
+    <div className="flex h-56 flex-col border-t border-border/40 bg-muted/20">
       <div className="flex items-center gap-2 border-b px-3 py-2">
         <span className="text-xs font-semibold">Run</span>
         <Button size="sm" onClick={run} disabled={running || funcs.length === 0}>
