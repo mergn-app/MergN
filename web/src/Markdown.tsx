@@ -1,5 +1,6 @@
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { cn } from "@/lib/utils";
 
 const components: Components = {
   p: ({ children }) => <p className="my-1.5 first:mt-0 last:mb-0">{children}</p>,
@@ -65,9 +66,20 @@ const components: Components = {
   ),
 };
 
-export function Markdown({ children }: { children: string }) {
+export function Markdown({
+  children,
+  className,
+}: {
+  children: string;
+  className?: string;
+}) {
   return (
-    <div className="min-w-0 text-[14px] leading-relaxed wrap-anywhere">
+    <div
+      className={cn(
+        "min-w-0 text-[14px] leading-relaxed wrap-anywhere",
+        className,
+      )}
+    >
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
         {children}
       </ReactMarkdown>

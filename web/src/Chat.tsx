@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import type { AuthoredFunc, InputForm, Wire, WorkflowOp } from "./types";
-import { Sparkles, ArrowUpRight } from "lucide-react";
+import { Sparkles, ArrowUpRight, Brain, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { spaceHeaders } from "./space";
@@ -28,6 +28,139 @@ interface Usage {
 
 function usageOf(metadata: unknown): Usage | undefined {
   return (metadata as { totalUsage?: Usage } | undefined)?.totalUsage;
+}
+
+interface DesignItem {
+  key: string;
+  label: string;
+  status: "active" | "pending" | "done";
+}
+
+const TOOL_VERB: Record<string, string> = {
+  design_workflow: "Designing workflow",
+  author_func: "Writing a step",
+  update_func: "Updating a step",
+  delete_func: "Removing a step",
+  wire: "Wiring steps",
+  unwire: "Disconnecting",
+  create_provider: "Creating provider",
+  search_providers: "Searching providers",
+  repair_provider: "Repairing provider",
+};
+
+function fmtElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function streamLabel(messages: { role: string; parts: ToolPart[] }[]): string {
+  const last = messages[messages.length - 1];
+  if (!last || last.role !== "assistant") return "Thinking…";
+  for (const p of last.parts) {
+    if (p.type === "data-design") {
+      const items =
+        (p as { data?: { items?: DesignItem[] } }).data?.items ?? [];
+      const active = items.find((it) => it.status === "active");
+      if (active) return active.label;
+      if (items.length && items.some((it) => it.status !== "done"))
+        return "Designing workflow";
+    }
+  }
+  for (const p of last.parts) {
+    if (
+      p.type.startsWith("tool-") &&
+      p.state &&
+      p.state !== "output-available"
+    ) {
+      return TOOL_VERB[p.type.replace("tool-", "")] ?? "Working…";
+    }
+  }
+  const lastPart = last.parts[last.parts.length - 1];
+  if (lastPart?.type === "reasoning") return "Thinking…";
+  if (lastPart?.type === "text") return "Writing…";
+  return "Working…";
+}
+
+function DesignProgress({ items }: { items: DesignItem[] }) {
+  const allDone = items.length > 0 && items.every((i) => i.status === "done");
+  const doneCount = items.filter((i) => i.status === "done").length;
+  const pct = items.length ? Math.round((doneCount / items.length) * 100) : 0;
+  const startRef = useRef(Date.now());
+  const [, force] = useState(0);
+  useEffect(() => {
+    if (allDone) return;
+    const t = setInterval(() => force((n) => n + 1), 250);
+    return () => clearInterval(t);
+  }, [allDone]);
+  const elapsed = Date.now() - startRef.current;
+
+  return (
+    <div className="my-1.5 w-full overflow-hidden p-4 border border-dashed border-border/40 rounded-3xl bg-background">
+      <div className="flex items-center gap-2.5">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium leading-tight text-foreground">
+            {allDone ? "Workflow ready" : "Designing workflow"}
+          </div>
+          <div className="text-xs leading-tight text-muted-foreground">
+            {doneCount} of {items.length} steps
+          </div>
+        </div>
+        <span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">
+          {fmtElapsed(elapsed)}
+        </span>
+      </div>
+
+      <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-muted/60">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-500 ease-out",
+            allDone ? "bg-emerald-500" : "bg-amber-400",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+
+      <div className="mt-2.5 space-y-1">
+        {items.map((it) => (
+          <div
+            key={it.key}
+            className={cn(
+              "flex items-center gap-2.5 rounded-xl border px-2.5 py-1.5 text-[13px] transition-colors",
+              it.status === "active"
+                ? "border-amber-500/25 bg-amber-500/[0.07]"
+                : it.status === "done"
+                  ? "border-border/40 bg-background/50"
+                  : "border-transparent bg-muted/20",
+            )}
+          >
+            {it.status === "done" ? (
+              <span className="flex size-3.5 shrink-0 items-center justify-center">
+                <span className="size-2 rounded-full bg-emerald-500" />
+              </span>
+            ) : it.status === "active" ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin text-amber-400" />
+            ) : (
+              <span className="flex size-3.5 shrink-0 items-center justify-center">
+                <span className="size-1.5 rounded-full ring-1 ring-muted-foreground/30" />
+              </span>
+            )}
+            <span
+              className={cn(
+                "truncate transition-colors",
+                it.status === "pending"
+                  ? "text-muted-foreground/50"
+                  : it.status === "active"
+                    ? "font-medium text-foreground"
+                    : "text-foreground/80",
+              )}
+            >
+              {it.label}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function Chat({
@@ -119,8 +252,7 @@ export function Chat({
           }
           case "tool-author_func":
           case "tool-update_func":
-            if (isFunc(o))
-              out.push({ key, kind: "funcs", funcs: [o] });
+            if (isFunc(o)) out.push({ key, kind: "funcs", funcs: [o] });
             break;
           case "tool-wire":
             if (o.from && o.to)
@@ -136,8 +268,7 @@ export function Chat({
                 key,
                 kind: "unwire",
                 to: o.to,
-                toInput:
-                  typeof o.toInput === "string" ? o.toInput : undefined,
+                toInput: typeof o.toInput === "string" ? o.toInput : undefined,
               });
             break;
         }
@@ -238,7 +369,7 @@ export function Chat({
                 <div
                   className={cn(
                     isUser
-                      ? "max-w-[85%] rounded-2xl rounded-br-md border border-border/60 bg-secondary px-3.5 py-2 text-[14px] leading-relaxed text-secondary-foreground shadow-sm wrap-anywhere"
+                      ? "max-w-[85%] rounded-2xl rounded-br-md border border-border/60 bg-secondary px-3.5 py-2 text-[14px] leading-relaxed text-secondary-foreground wrap-anywhere"
                       : "w-full min-w-0 overflow-hidden text-foreground/90",
                   )}
                 >
@@ -252,13 +383,42 @@ export function Chat({
                         <Markdown key={i}>{part.text}</Markdown>
                       );
                     }
+                    if (part.type === "reasoning") {
+                      const text = (part as { text?: string }).text ?? "";
+                      if (!text.trim()) return null;
+                      return (
+                        <div
+                          key={i}
+                          className="my-1.5 w-full rounded-2xl border border-border/40 bg-muted/20 px-3.5 py-3"
+                        >
+                          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground/70">
+                            <Brain className="size-3.5" />
+                            Thinking
+                          </div>
+                          <div className="text-muted-foreground">
+                            <Markdown className="text-[13px]">{text}</Markdown>
+                          </div>
+                        </div>
+                      );
+                    }
+                    if (part.type === "data-design") {
+                      const items = (
+                        part as { data?: { items?: DesignItem[] } }
+                      ).data?.items;
+                      if (!items?.length) return null;
+                      return <DesignProgress key={i} items={items} />;
+                    }
+                    if (part.type === "tool-design_workflow") {
+                      return null;
+                    }
                     if (part.type.startsWith("tool-")) {
                       const p = part as ToolPart;
                       const o = p.output as
                         | { id?: string; from?: string; to?: string }
                         | undefined;
                       const label =
-                        o?.id ?? (o?.from && o?.to ? `${o.from} → ${o.to}` : "");
+                        o?.id ??
+                        (o?.from && o?.to ? `${o.from} → ${o.to}` : "");
                       const done = p.state === "output-available";
                       return (
                         <div
@@ -268,7 +428,9 @@ export function Chat({
                           <span
                             className={cn(
                               "size-1.5 shrink-0 rounded-full",
-                              done ? "bg-emerald-500" : "bg-amber-500 animate-pulse",
+                              done
+                                ? "bg-emerald-500"
+                                : "bg-amber-500 animate-pulse",
                             )}
                           />
                           <span className="shrink-0">
@@ -294,8 +456,13 @@ export function Chat({
               </div>
             );
           })}
-          {status === "streaming" && (
-            <div className="text-xs text-muted-foreground">…</div>
+          {(status === "streaming" || status === "submitted") && (
+            <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
+              <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/70" />
+              <span>
+                {streamLabel(messages as { role: string; parts: ToolPart[] }[])}
+              </span>
+            </div>
           )}
         </div>
       </ScrollArea>

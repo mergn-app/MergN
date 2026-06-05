@@ -4,9 +4,12 @@ import { streamSSE } from "hono/streaming";
 import {
   streamText,
   convertToModelMessages,
+  createUIMessageStream,
+  createUIMessageStreamResponse,
   tool,
   stepCountIs,
   type UIMessage,
+  type UIMessageStreamWriter,
 } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
@@ -107,7 +110,7 @@ async function runSavedWorkflow(
   return run;
 }
 
-function makeTools(spaceId: string) {
+function makeTools(spaceId: string, writer: UIMessageStreamWriter) {
   return {
   design_workflow: tool({
     description:
@@ -120,8 +123,28 @@ function makeTools(spaceId: string) {
         ),
     }),
     execute: async ({ goal }) => {
+      const progressId = `design-${randomUUID()}`;
+      const items: {
+        key: string;
+        label: string;
+        status: "active" | "pending" | "done";
+      }[] = [{ key: "plan", label: "Planning steps", status: "active" }];
+      const emit = () =>
+        writer.write({ type: "data-design", id: progressId, data: { items } });
+      emit();
       const plan = await planWorkflow(goal);
-      return designWorkflow(registry, spaceId, plan, goal);
+      items[0].status = "done";
+      emit();
+      const result = await designWorkflow(registry, spaceId, plan, goal, (ev) => {
+        const key = `${ev.kind}:${ev.id}`;
+        const found = items.find((i) => i.key === key);
+        if (found) found.status = ev.status;
+        else items.push({ key, label: ev.label, status: ev.status });
+        emit();
+      });
+      for (const it of items) it.status = "done";
+      emit();
+      return result;
     },
   }),
   search_providers: tool({
@@ -321,26 +344,35 @@ app.post("/api/chat", async (c) => {
         "This is what already exists. For edits, target steps by their [id] and reuse exact field names shown above. Use author_func/wire for small changes; only call design_workflow to build a brand-new workflow from scratch, never for an edit."
       : SYSTEM;
 
-  const result = streamText({
-    model: google(process.env.GEMINI_MODEL ?? "gemini-2.5-flash"),
-    system,
-    messages: modelMessages,
-    stopWhen: stepCountIs(20),
-    tools: makeTools(spaceId),
-  });
-
-  return result.toUIMessageStreamResponse({
-    messageMetadata: ({ part }) => {
-      if (part.type === "finish") {
-        return { totalUsage: part.totalUsage };
-      }
-      return undefined;
+  const stream = createUIMessageStream({
+    execute: ({ writer }) => {
+      const result = streamText({
+        model: google(process.env.GEMINI_MODEL ?? "gemini-2.5-flash"),
+        system,
+        messages: modelMessages,
+        stopWhen: stepCountIs(20),
+        tools: makeTools(spaceId, writer),
+        providerOptions: {
+          google: { thinkingConfig: { includeThoughts: true } },
+        },
+      });
+      writer.merge(
+        result.toUIMessageStream({
+          sendReasoning: true,
+          messageMetadata: ({ part }) =>
+            part.type === "finish"
+              ? { totalUsage: part.totalUsage }
+              : undefined,
+        }),
+      );
     },
     onError: (error) => {
       console.error("STREAM ERROR:", error);
       return error instanceof Error ? error.message : String(error);
     },
   });
+
+  return createUIMessageStreamResponse({ stream });
 });
 
 app.get("/api/workflows", async (c) => {

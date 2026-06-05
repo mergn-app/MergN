@@ -124,11 +124,19 @@ function extractInputs(src: string): string[] {
   return [...set];
 }
 
+export type DesignProgress = (ev: {
+  kind: "provider" | "step" | "form";
+  id: string;
+  label: string;
+  status: "active" | "done";
+}) => void;
+
 export async function designWorkflow(
   registry: Registry,
   spaceId: string,
   plan: Plan,
   goal = "",
+  onProgress?: DesignProgress,
 ) {
   const providerIds = new Set(
     plan.steps.filter((s) => s.effectful && s.provider).map((s) => s.provider!),
@@ -137,9 +145,21 @@ export async function designWorkflow(
   for (const id of providerIds) {
     let spec = registry.getProvider(spaceId, id);
     if (!spec) {
+      onProgress?.({
+        kind: "provider",
+        id,
+        label: `Creating provider ${id}`,
+        status: "active",
+      });
       const draft = await authorProvider(id);
       spec = registry.registerProviderFromDraft(spaceId, draft);
       await registry.persistProvider(spaceId, draft);
+      onProgress?.({
+        kind: "provider",
+        id,
+        label: `Creating provider ${id}`,
+        status: "done",
+      });
     }
     apiDocs[id] = spec.apiDoc;
   }
@@ -149,6 +169,8 @@ export async function designWorkflow(
   const triggerFields = new Set<string>();
 
   for (const step of plan.steps) {
+    const stepLabel = `Writing ${step.title || step.id}`;
+    onProgress?.({ kind: "step", id: step.id, label: stepLabel, status: "active" });
     const body = await authorStepBody(
       step,
       step.provider ? apiDocs[step.provider] : undefined,
@@ -201,9 +223,22 @@ export async function designWorkflow(
         ? { key: "runId+funcId", mechanism: body.idempotencyMechanism ?? "none" }
         : null,
     });
+    onProgress?.({ kind: "step", id: step.id, label: stepLabel, status: "done" });
   }
 
+  onProgress?.({
+    kind: "form",
+    id: "form",
+    label: "Building input form",
+    status: "active",
+  });
   const inputForm = await authorInputForm(goal, [...triggerFields]);
+  onProgress?.({
+    kind: "form",
+    id: "form",
+    label: "Building input form",
+    status: "done",
+  });
 
   return {
     name: plan.name,
