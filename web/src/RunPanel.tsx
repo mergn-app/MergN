@@ -304,7 +304,7 @@ export function RunPanel({
               className={cn(
                 "flex items-center gap-1 rounded-md px-2.5 py-1 capitalize transition-colors",
                 tab === t
-                  ? "bg-background text-foreground shadow-sm"
+                  ? "bg-background text-foreground"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
@@ -368,7 +368,7 @@ export function RunPanel({
                       className={cn(
                         "rounded px-1.5 py-0.5 uppercase transition-colors",
                         inputMode === m
-                          ? "bg-background text-foreground shadow-sm"
+                          ? "bg-background text-foreground"
                           : "text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -436,7 +436,7 @@ export function RunPanel({
                       >
                         <span
                           className={cn(
-                            "size-5 rounded-full bg-background shadow transition-transform",
+                            "size-5 rounded-full bg-background transition-transform",
                             value === "true" && "translate-x-5",
                           )}
                         />

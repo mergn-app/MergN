@@ -55,6 +55,7 @@
   --tone-emerald: oklch(0.696 0.17 162.48);
   --tone-rose: oklch(0.645 0.246 16.439);
   --tone-violet: oklch(0.606 0.25 292.717);
+  --tone-amber-surface: oklch(0.962 0.059 95.617);
   --tone-amber-fg: oklch(0.555 0.163 48.998);
   --tone-blue-fg: oklch(0.488 0.243 264.376);
   --tone-emerald-fg: oklch(0.508 0.118 165.612);
@@ -101,6 +102,7 @@
   --tone-emerald-fg: oklch(0.845 0.143 164.978);
   --tone-rose-fg: oklch(0.81 0.117 11.638);
   --tone-violet-fg: oklch(0.811 0.111 293.571);
+  --tone-amber-surface: oklch(0.31 0.052 64);
 }
 
 @theme inline {
@@ -141,6 +143,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-tone-amber: var(--tone-amber);
+  --color-tone-amber-surface: var(--tone-amber-surface);
   --color-tone-blue: var(--tone-blue);
   --color-tone-emerald: var(--tone-emerald);
   --color-tone-rose: var(--tone-rose);

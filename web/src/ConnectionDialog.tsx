@@ -196,7 +196,7 @@ export function ConnectionDialog({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm rounded-2xl border bg-card p-5 shadow-xl"
+        className="w-full max-w-sm rounded-2xl border bg-card p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-4 flex items-center gap-2">

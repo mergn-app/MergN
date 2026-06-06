@@ -56,7 +56,7 @@ export function SpaceSwitcher() {
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-border/60 bg-card p-1 shadow-xl">
+        <div className="absolute left-0 top-full z-50 mt-1 w-56 rounded-xl border border-border/60 bg-card p-1">
           <div className="px-2 py-1 text-[10px] font-medium uppercase tracking-widest text-muted-foreground/70">
             Spaces
           </div>

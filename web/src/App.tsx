@@ -483,7 +483,7 @@ export function App() {
                   className={
                     "rounded-md px-2.5 py-1 capitalize transition-colors " +
                     (view === v
-                      ? "bg-background text-foreground shadow-sm"
+                      ? "bg-background text-foreground"
                       : "text-muted-foreground hover:text-foreground")
                   }
                 >
@@ -496,13 +496,13 @@ export function App() {
               title="Configure trigger"
               className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-foreground/90 transition-colors hover:border-border"
             >
-              <Zap className="h-3.5 w-3.5 text-amber-400" />
+              <Zap className="h-3.5 w-3.5 text-tone-amber-fg" />
               <span className="capitalize">{trigger.kind}</span>
             </button>
           </div>
           {missingProviders.length > 0 && (
             <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
-              <div className="rounded-full border border-amber-500/30 bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-200 shadow-sm">
+              <div className="rounded-full border border-tone-amber/40 bg-tone-amber-surface px-3 py-1 text-xs font-medium text-tone-amber-fg">
                 ⚠ {missingProviders.length} connection
                 {missingProviders.length > 1 ? "s" : ""} needed
               </div>
