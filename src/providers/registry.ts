@@ -54,6 +54,9 @@ export interface ProviderSpec {
   setupGuide?: SetupGuide;
   egressDomain?: string;
   aiWritten?: boolean;
+  // JS function body (token, fetch) => clientObject. Used by the remote code-exec
+  // broker (proxy mode) to run the provider host-side without leaking the token.
+  clientSource?: string;
   createClient: (token: string | undefined) => ProviderClient;
 }
 
@@ -79,6 +82,22 @@ builtins.set("slack", {
   apiDoc:
     "give the func a 'channel' input and a 'text' input, then call: const ts = await ctx.connections.<name>.postMessage(input.channel, input.text); return { ts }. Connection: name 'slack', provider 'slack', scope 'chat:write'.",
   env: "SLACK_TOKEN",
+  clientSource: `
+    const send = async (a, b) => {
+      const arg = (typeof a === 'object' && a !== null) ? a : null;
+      const channel = arg ? arg.channel : a;
+      const text = arg ? arg.text : b;
+      const res = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json; charset=utf-8' },
+        body: JSON.stringify({ channel, text }),
+      });
+      const data = await res.json();
+      if (!data.ok) throw new Error('slack error: ' + data.error);
+      return data.ts || '';
+    };
+    return new Proxy({}, { get: () => send });
+  `,
   createClient: (token) => {
     const send = async (a: unknown, b?: unknown): Promise<string> => {
       const arg =
@@ -144,6 +163,37 @@ builtins.set("github", {
       },
     ],
   },
+  clientSource: `
+    const api = async (path, init) => {
+      const res = await fetch('https://api.github.com' + path, {
+        ...init,
+        headers: {
+          Authorization: 'Bearer ' + token,
+          Accept: 'application/vnd.github+json',
+          'User-Agent': 'workflow-builder',
+          ...((init && init.headers) || {}),
+        },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error('github error: ' + (data.message || res.status));
+      return data;
+    };
+    return {
+      getUser: async () => {
+        const u = await api('/user');
+        return { login: u.login, id: u.id, name: u.name };
+      },
+      createIssue: async (arg) => {
+        const a = arg || {};
+        const issue = await api('/repos/' + a.owner + '/' + a.repo + '/issues', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: a.title, body: a.body }),
+        });
+        return { number: issue.number, url: issue.html_url };
+      },
+    };
+  `,
   createClient: (token) => {
     const api = async (
       path: string,
@@ -188,6 +238,22 @@ builtins.set("http", {
   keywords: ["http", "https", "api", "fetch", "request", "rest", "url", "webhook", "get", "post"],
   apiDoc:
     "call: const data = await ctx.connections.<name>.get(url); (returns parsed JSON) or .post(url, jsonBody). Connection: name 'http', provider 'http', no scopes.",
+  clientSource: `
+    return {
+      get: async (url) => {
+        const res = await fetch(String(url));
+        return res.json();
+      },
+      post: async (url, body) => {
+        const res = await fetch(String(url), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        return res.json();
+      },
+    };
+  `,
   createClient: () => ({
     get: async (url: unknown) => {
       const res = await fetch(String(url));
@@ -239,6 +305,7 @@ function specFromDraft(d: ProviderDraft): ProviderSpec {
     setupGuide: d.setupGuide,
     egressDomain: d.egressDomain,
     aiWritten: true,
+    clientSource: d.clientSource,
     createClient: (token) => {
       const scopedFetch = d.egressDomain ? guardedFetch(d.egressDomain) : fetch;
       const factory = new Function("token", "fetch", d.clientSource);
