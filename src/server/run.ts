@@ -24,6 +24,7 @@ import {
 } from "../engine/index";
 import type { Registry } from "../providers/registry";
 import type { Connections } from "./connections";
+import { RemoteSandboxRuntime } from "./remote-sandbox-runtime";
 
 export interface RunDeps {
   spaceId: string;
@@ -208,6 +209,39 @@ class ConnectionsResolver implements ConnectionResolver {
   }
 }
 
+export interface RemoteProviderCarrier {
+  __remoteProvider: true;
+  clientSource: string;
+  secret?: string;
+  egressDomain?: string;
+}
+
+// Used with RemoteSandboxRuntime: instead of building live clients (which can't cross
+// into the remote microVM), it carries each provider's clientSource + secret +
+// egressDomain so RemoteSandboxRuntime can forward them as the /run `providers` payload.
+// The secret stays host-side; the code-exec broker runs clientSource with it.
+class RemoteConnectionsResolver implements ConnectionResolver {
+  constructor(private deps: RunDeps) {}
+  async inject(node: FuncNode): Promise<Record<string, ProviderClient>> {
+    const { spaceId, registry, connections } = this.deps;
+    const out: Record<string, ProviderClient> = {};
+    for (const [name, provider] of Object.entries(node.connections)) {
+      const spec = registry.getProvider(spaceId, provider);
+      if (!spec?.clientSource) continue;
+      let secret = await connections.getAccessToken(spaceId, provider);
+      if (!secret && spec.env) secret = process.env[spec.env] ?? null;
+      const carrier: RemoteProviderCarrier = {
+        __remoteProvider: true,
+        clientSource: spec.clientSource,
+        secret: secret ?? undefined,
+        egressDomain: spec.egressDomain,
+      };
+      out[name] = carrier;
+    }
+    return out;
+  }
+}
+
 export async function runWorkflow(
   deps: RunDeps,
   funcs: RunFunc[],
@@ -228,11 +262,20 @@ export async function runWorkflow(
   const queue = new InMemoryQueue();
   const log = new NotifyingRunLog(onRecord);
   const scheduler = new Scheduler(workflow, log, queue);
+
+  const isRemote = process.env.CODE_RUNTIME === "remote";
+  const runtime: Runtime = isRemote
+    ? new RemoteSandboxRuntime()
+    : new EvalRuntime();
+  const resolver: ConnectionResolver = isRemote
+    ? new RemoteConnectionsResolver(deps)
+    : new ConnectionsResolver(deps);
+
   const worker = new Worker(
     workflow,
     registry,
-    new ConnectionsResolver(deps),
-    new EvalRuntime(),
+    resolver,
+    runtime,
     log,
     queue,
     scheduler,
