@@ -22,25 +22,25 @@ const STATUS_DOT: Record<string, string> = {
 
 function SourceChip({ source }: { source: Source }) {
   if (source.kind === "unbound") {
-    return <span className="text-rose-400">⚠ unwired</span>;
+    return <span className="text-tone-rose-fg">⚠ unwired</span>;
   }
   if (source.kind === "config") {
     return <span className="text-muted-foreground">← config</span>;
   }
   if (source.kind === "trigger") {
     return (
-      <span className="text-amber-300/90">
-        ← <span className="text-amber-200">trigger</span>
+      <span className="text-tone-amber-fg/90">
+        ← <span className="text-tone-amber-fg">trigger</span>
       </span>
     );
   }
   return (
-    <span className="text-[#8fb3ff]">
+    <span className="text-tone-blue-fg">
       ←{" "}
-      <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#1b2433] px-1 text-[10px] font-medium text-[#8fb3ff]">
+      <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-tone-blue/12 px-1 text-[10px] font-medium text-tone-blue-fg">
         {source.num}
       </span>{" "}
-      <span className="text-[#a9c4ff]">{source.title}</span>
+      <span className="text-tone-blue-fg">{source.title}</span>
     </span>
   );
 }
@@ -68,12 +68,12 @@ export function Pipeline({
   return (
     <div className="h-full overflow-auto">
       <div className="mx-auto flex max-w-xl flex-col items-stretch gap-0 p-6">
-        <div className="rounded-2xl border border-amber-500/25 bg-amber-500/5 p-3">
+        <div className="rounded-2xl border border-tone-amber/30 bg-tone-amber/5 p-3">
           <div className="flex items-center gap-2">
-            <div className="flex items-center justify-center rounded-xl bg-amber-500/15 p-1.5 text-amber-300">
+            <div className="flex items-center justify-center rounded-xl bg-tone-amber/15 p-1.5 text-tone-amber-fg">
               <Zap className="h-3.5 w-3.5" />
             </div>
-            <span className="text-sm font-medium text-amber-100/90">Trigger</span>
+            <span className="text-sm font-medium text-tone-amber-fg">Trigger</span>
             <span className="ml-auto text-[11px] text-muted-foreground">
               manual / api
             </span>
@@ -83,7 +83,7 @@ export function Pipeline({
               {triggerFields.map((field) => (
                 <span
                   key={field}
-                  className="rounded-md bg-amber-500/10 px-1.5 py-0.5 font-mono text-[11px] text-amber-200/90"
+                  className="rounded-md bg-tone-amber/12 px-1.5 py-0.5 font-mono text-[11px] text-tone-amber-fg"
                 >
                   {field}
                 </span>
@@ -115,8 +115,8 @@ export function Pipeline({
                     className={cn(
                       "flex items-center justify-center rounded-xl p-1.5",
                       f.pure
-                        ? "bg-emerald-500/15 text-emerald-400"
-                        : "bg-blue-500/15 text-blue-400",
+                        ? "bg-tone-emerald/15 text-tone-emerald-fg"
+                        : "bg-tone-blue/15 text-tone-blue-fg",
                     )}
                   >
                     {f.pure ? (
@@ -136,7 +136,7 @@ export function Pipeline({
                       </span>
                     )}
                     {needsConnection && (
-                      <span className="text-[11px] text-amber-300">
+                      <span className="text-[11px] text-tone-amber-fg">
                         ⚠ needs connection
                       </span>
                     )}
@@ -173,7 +173,7 @@ export function Pipeline({
                       <span className="w-5 shrink-0 text-muted-foreground/60">
                         out
                       </span>
-                      <span className="text-emerald-300/80">{o}</span>
+                      <span className="text-tone-emerald-fg">{o}</span>
                     </div>
                   ))}
                 </div>

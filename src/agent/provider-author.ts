@@ -2,6 +2,7 @@ import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
 import type { ProviderDraft } from "../providers/registry";
+import { trace, type AgentMeta } from "../observability";
 
 export const providerDraftZ = z.object({
   id: z.string().describe("lowercase short id, e.g. 'notion'"),
@@ -86,11 +87,13 @@ export async function repairProvider(
   error: string,
   callSite?: string,
   sampleInput?: string,
+  meta?: AgentMeta,
 ): Promise<{ draft: ProviderDraft; changeNote: string }> {
   const { output } = await generateText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-2.5-flash"),
     output: Output.object({ schema: providerRepairZ }),
     system: REPAIR_SYSTEM,
+    experimental_telemetry: trace("repair-provider", { ...meta, provider: draft.id }),
     prompt: [
       `Provider id: ${draft.id}`,
       `Service: ${draft.name}`,
@@ -119,11 +122,13 @@ export async function repairProvider(
 export async function authorProvider(
   service: string,
   docs?: string,
+  meta?: AgentMeta,
 ): Promise<ProviderDraft> {
   const { output } = await generateText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-2.5-flash"),
     output: Output.object({ schema: providerDraftZ }),
     system: SYSTEM,
+    experimental_telemetry: trace("author-provider", { ...meta, service }),
     prompt: [`Service: ${service}`, docs ? `API docs / notes: ${docs}` : ""].join(
       "\n",
     ),

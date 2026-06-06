@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { Registry } from "../providers/registry";
 import { authorProvider } from "./provider-author";
 import { authorInputForm } from "./form-author";
+import { trace, type AgentMeta } from "../observability";
 
 export const planZ = z.object({
   name: z
@@ -63,12 +64,16 @@ const PLAN_SYSTEM = [
   "Inputs NOT listed in deps are taken from the user's trigger input automatically by name. Use consistent field names across steps so they wire up.",
 ].join("\n");
 
-export async function planWorkflow(goal: string): Promise<Plan> {
+export async function planWorkflow(
+  goal: string,
+  meta?: AgentMeta,
+): Promise<Plan> {
   const { output } = await generateText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-2.5-flash"),
     output: Output.object({ schema: planZ }),
     system: PLAN_SYSTEM,
     prompt: goal,
+    experimental_telemetry: trace("plan-workflow", meta),
   });
   return output;
 }
@@ -96,12 +101,14 @@ const BODY_SYSTEM = [
 async function authorStepBody(
   step: Step,
   providerApiDoc: string | undefined,
+  meta?: AgentMeta,
 ): Promise<z.infer<typeof stepBodyZ>> {
   const upstream = step.deps.map((d) => d.input);
   const { output } = await generateText({
     model: google(process.env.GEMINI_MODEL ?? "gemini-2.5-flash"),
     output: Output.object({ schema: stepBodyZ }),
     system: BODY_SYSTEM,
+    experimental_telemetry: trace("author-step-body", { ...meta, step: step.id }),
     prompt: [
       `Step: ${step.intent}`,
       `Required output fields: ${step.outputs.join(", ") || "(none)"}`,
@@ -137,7 +144,9 @@ export async function designWorkflow(
   plan: Plan,
   goal = "",
   onProgress?: DesignProgress,
+  meta?: AgentMeta,
 ) {
+  const m: AgentMeta = { ...meta, spaceId };
   const providerIds = new Set(
     plan.steps.filter((s) => s.effectful && s.provider).map((s) => s.provider!),
   );
@@ -151,7 +160,7 @@ export async function designWorkflow(
         label: `Creating provider ${id}`,
         status: "active",
       });
-      const draft = await authorProvider(id);
+      const draft = await authorProvider(id, undefined, m);
       spec = registry.registerProviderFromDraft(spaceId, draft);
       await registry.persistProvider(spaceId, draft);
       onProgress?.({
@@ -174,6 +183,7 @@ export async function designWorkflow(
     const body = await authorStepBody(
       step,
       step.provider ? apiDocs[step.provider] : undefined,
+      m,
     );
     const usedInputs = extractInputs(body.bodySource);
     const depByInput = new Map(step.deps.map((d) => [d.input, d]));
@@ -232,7 +242,7 @@ export async function designWorkflow(
     label: "Building input form",
     status: "active",
   });
-  const inputForm = await authorInputForm(goal, [...triggerFields]);
+  const inputForm = await authorInputForm(goal, [...triggerFields], m);
   onProgress?.({
     kind: "form",
     id: "form",

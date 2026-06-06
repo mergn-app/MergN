@@ -1,6 +1,7 @@
 import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { funcDraftZ, type FuncDraft } from "./schemas";
+import { trace, type AgentMeta } from "../observability";
 import type { Registry } from "../providers/registry";
 import type { FuncDefinition, PortDef, Schema } from "../atoms/index";
 
@@ -32,6 +33,7 @@ export interface AuthoredFuncResult {
 export async function authorFunc(
   registry: Registry,
   spec: FuncSpec,
+  meta?: AgentMeta,
 ): Promise<AuthoredFuncResult> {
   const prov = spec.provider
     ? registry.getProvider(spec.spaceId, spec.provider)
@@ -44,6 +46,7 @@ export async function authorFunc(
     output: Output.object({ schema: funcDraftZ }),
     system: SYSTEM,
     prompt: [`Task: ${spec.intent}`, providerNote].join("\n"),
+    experimental_telemetry: trace("author-func", { ...meta, spaceId: spec.spaceId }),
   });
   return {
     def: toFuncDefinition(object),

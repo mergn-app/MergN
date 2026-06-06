@@ -72,11 +72,11 @@ function StorySkeleton() {
 }
 
 const TONE: Record<string, string> = {
-  trigger: "bg-amber-500/10 text-amber-200/90 ring-amber-500/20",
-  step: "bg-[#1b2433] text-[#a9c4ff] ring-[#2a3550]",
-  out: "bg-emerald-500/10 text-emerald-300/90 ring-emerald-500/20",
+  trigger: "bg-tone-amber/12 text-tone-amber-fg ring-tone-amber/30",
+  step: "bg-tone-blue/12 text-tone-blue-fg ring-tone-blue/30",
+  out: "bg-tone-emerald/12 text-tone-emerald-fg ring-tone-emerald/30",
   config: "bg-muted text-muted-foreground ring-border",
-  bad: "bg-rose-500/10 text-rose-300 ring-rose-500/25",
+  bad: "bg-tone-rose/12 text-tone-rose-fg ring-tone-rose/30",
 };
 
 function Tok({ children, tone }: { children: React.ReactNode; tone: string }) {
@@ -251,7 +251,7 @@ export function Story({
                   ))}
                   <span className="text-muted-foreground"> from </span>
                   <NumBadge n={n} />
-                  <span className="text-[#a9c4ff]">{g.title}</span>
+                  <span className="text-tone-blue-fg">{g.title}</span>
                 </span>,
               );
             if (configIns.length)
@@ -327,10 +327,10 @@ export function Story({
                       </span>
                     )}
                     {needsConnection && (
-                      <span className="text-amber-300">⚠ needs connection</span>
+                      <span className="text-tone-amber-fg">⚠ needs connection</span>
                     )}
                     {unbound.length > 0 && (
-                      <span className="text-rose-300">
+                      <span className="text-tone-rose-fg">
                         ⚠ missing{" "}
                         {unbound.map((r) => (
                           <Tok key={r.name} tone="bad">

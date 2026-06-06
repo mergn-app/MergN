@@ -64,8 +64,8 @@ export function FuncNode({ data, selected }: NodeProps) {
             className={cn(
               "flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl",
               d.pure
-                ? "bg-emerald-500/15 text-emerald-400"
-                : "bg-blue-500/15 text-blue-400",
+                ? "bg-tone-emerald/15 text-tone-emerald-fg"
+                : "bg-tone-blue/15 text-tone-blue-fg",
             )}
           >
             {d.pure ? (
@@ -92,12 +92,12 @@ export function FuncNode({ data, selected }: NodeProps) {
                   <PortDot
                     id={p.name}
                     type="target"
-                    tone={p.bound ? "!border-[#6ea8ff]" : "!border-rose-400"}
+                    tone={p.bound ? "!border-tone-blue" : "!border-tone-rose"}
                   />
                   <span
                     className={cn(
                       "truncate font-mono text-[11px]",
-                      p.bound ? "text-foreground/80" : "text-rose-300/90",
+                      p.bound ? "text-foreground/80" : "text-tone-rose-fg",
                     )}
                   >
                     {p.name}
@@ -108,10 +108,10 @@ export function FuncNode({ data, selected }: NodeProps) {
             <div className="flex flex-1 flex-col gap-0.5">
               {d.outputs.map((o) => (
                 <div key={o} className="flex h-6 items-center justify-end gap-1.5">
-                  <span className="truncate font-mono text-[11px] text-emerald-300/80">
+                  <span className="truncate font-mono text-[11px] text-tone-emerald-fg">
                     {o}
                   </span>
-                  <PortDot id={o} type="source" tone="!border-emerald-400" />
+                  <PortDot id={o} type="source" tone="!border-tone-emerald" />
                 </div>
               ))}
             </div>

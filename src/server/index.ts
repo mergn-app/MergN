@@ -1,3 +1,4 @@
+import { trace, flushTraces } from "../observability";
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
@@ -110,7 +111,12 @@ async function runSavedWorkflow(
   return run;
 }
 
-function makeTools(spaceId: string, writer: UIMessageStreamWriter) {
+function makeTools(
+  spaceId: string,
+  writer: UIMessageStreamWriter,
+  sessionId: string,
+) {
+  const meta = { spaceId, sessionId };
   return {
   design_workflow: tool({
     description:
@@ -132,7 +138,7 @@ function makeTools(spaceId: string, writer: UIMessageStreamWriter) {
       const emit = () =>
         writer.write({ type: "data-design", id: progressId, data: { items } });
       emit();
-      const plan = await planWorkflow(goal);
+      const plan = await planWorkflow(goal, meta);
       items[0].status = "done";
       emit();
       const result = await designWorkflow(registry, spaceId, plan, goal, (ev) => {
@@ -141,7 +147,7 @@ function makeTools(spaceId: string, writer: UIMessageStreamWriter) {
         if (found) found.status = ev.status;
         else items.push({ key, label: ev.label, status: ev.status });
         emit();
-      });
+      }, meta);
       for (const it of items) it.status = "done";
       emit();
       return result;
@@ -172,7 +178,7 @@ function makeTools(spaceId: string, writer: UIMessageStreamWriter) {
         .describe("optional API docs URL or notes to ground the client"),
     }),
     execute: async ({ service, docsUrl }) => {
-      const draft = await authorProvider(service, docsUrl);
+      const draft = await authorProvider(service, docsUrl, meta);
       registry.registerProviderFromDraft(spaceId, draft);
       await registry.persistProvider(spaceId, draft);
       return {
@@ -197,7 +203,7 @@ function makeTools(spaceId: string, writer: UIMessageStreamWriter) {
         .describe("provider id, if this step calls an external service"),
     }),
     execute: async ({ intent, provider }) => {
-      const r = await authorFunc(registry, { spaceId, intent, provider });
+      const r = await authorFunc(registry, { spaceId, intent, provider }, meta);
       return funcToWire(r.def, r.title, r.summary);
     },
   }),
@@ -217,7 +223,7 @@ function makeTools(spaceId: string, writer: UIMessageStreamWriter) {
         .describe("provider id if this step calls an external service"),
     }),
     execute: async ({ id, intent, provider }) => {
-      const r = await authorFunc(registry, { spaceId, intent, provider });
+      const r = await authorFunc(registry, { spaceId, intent, provider }, meta);
       return funcToWire({ ...r.def, id }, r.title, r.summary);
     },
   }),
@@ -271,6 +277,7 @@ function makeTools(spaceId: string, writer: UIMessageStreamWriter) {
         error,
         callSite,
         sampleInput,
+        meta,
       );
       registry.registerProviderFromDraft(spaceId, repaired);
       await registry.persistProvider(spaceId, repaired);
@@ -344,6 +351,8 @@ app.post("/api/chat", async (c) => {
         "This is what already exists. For edits, target steps by their [id] and reuse exact field names shown above. Use author_func/wire for small changes; only call design_workflow to build a brand-new workflow from scratch, never for an edit."
       : SYSTEM;
 
+  const sessionId = `chat-${randomUUID()}`;
+
   const stream = createUIMessageStream({
     execute: ({ writer }) => {
       const result = streamText({
@@ -351,9 +360,13 @@ app.post("/api/chat", async (c) => {
         system,
         messages: modelMessages,
         stopWhen: stepCountIs(20),
-        tools: makeTools(spaceId, writer),
+        tools: makeTools(spaceId, writer, sessionId),
         providerOptions: {
           google: { thinkingConfig: { includeThoughts: true } },
+        },
+        experimental_telemetry: trace("builder-chat", { spaceId, sessionId }),
+        onFinish: () => {
+          void flushTraces();
         },
       });
       writer.merge(
@@ -489,7 +502,9 @@ app.post("/api/hooks/:spaceId/:workflowId", async (c) => {
 
 app.post("/api/input-form", async (c) => {
   const body = await c.req.json<{ goal?: string; fields?: string[] }>();
-  const form = await authorInputForm(body.goal ?? "", body.fields ?? []);
+  const form = await authorInputForm(body.goal ?? "", body.fields ?? [], {
+    spaceId: c.get("spaceId"),
+  });
   return c.json(form);
 });
 
@@ -626,7 +641,13 @@ app.post("/api/providers/:id/repair", async (c) => {
   const body = await c.req.json<{ error?: string }>();
   const draft = await registry.getProviderDraft(spaceId, id);
   if (!draft) return c.json({ error: "provider not found" }, 404);
-  const { draft: repaired, changeNote } = await repairProvider(draft, body.error ?? "");
+  const { draft: repaired, changeNote } = await repairProvider(
+    draft,
+    body.error ?? "",
+    undefined,
+    undefined,
+    { spaceId },
+  );
   registry.registerProviderFromDraft(spaceId, repaired);
   await registry.persistProvider(spaceId, repaired);
   return c.json({ id: repaired.id, changeNote });
@@ -635,3 +656,10 @@ app.post("/api/providers/:id/repair", async (c) => {
 serve({ fetch: app.fetch, port: Number(process.env.PORT) || 8787 }, (info) => {
   console.log(`chat server on http://localhost:${info.port}`);
 });
+
+for (const signal of ["SIGTERM", "SIGINT"] as const) {
+  process.on(signal, async () => {
+    await flushTraces();
+    process.exit(0);
+  });
+}

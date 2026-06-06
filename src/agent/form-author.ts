@@ -1,6 +1,7 @@
 import { generateText, Output } from "ai";
 import { google } from "@ai-sdk/google";
 import { z } from "zod";
+import { trace, type AgentMeta } from "../observability";
 
 const controlZ = z.enum([
   "text",
@@ -45,6 +46,7 @@ const SYSTEM = [
 export async function authorInputForm(
   goal: string,
   fields: string[],
+  meta?: AgentMeta,
 ): Promise<InputForm> {
   if (fields.length === 0) return { fields: [] };
 
@@ -52,6 +54,7 @@ export async function authorInputForm(
     model: google(process.env.GEMINI_MODEL ?? "gemini-2.5-flash"),
     output: Output.object({ schema: inputFormZ }),
     system: SYSTEM,
+    experimental_telemetry: trace("author-input-form", meta),
     prompt: [
       `Goal: ${goal || "(not given)"}`,
       `Trigger fields: ${fields.join(", ")}`,

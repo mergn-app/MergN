@@ -21,6 +21,15 @@ integration nodes like n8n — the code is generated.
   workflows side panel, run panel, custom node cards, FuncDetail modal
   (CodeMirror + Prettier), token usage, TanStack Query.
 
+- **`src/observability.ts`** — Langfuse tracing for the AI layer via OpenTelemetry
+  (`@langfuse/otel` + `@opentelemetry/sdk-node`). `trace(functionId, meta)` builds
+  `experimental_telemetry` for every AI call (builder-chat, plan-workflow,
+  author-step-body, author-func, author-provider, author-input-form,
+  repair-provider). `spaceId`→userId, a per-chat `sessionId` groups a whole turn
+  (chat + all sub-author calls) into one Langfuse session. No-op unless
+  `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are set; flushed on chat finish +
+  SIGTERM/SIGINT. Runtime (RunLog/StepRecord) was already observable.
+
 End to end: describe in chat → nodes appear → save → run → real Slack message.
 
 ## Next steps (open)
