@@ -1,0 +1,49 @@
+name: workflow-builder
+
+services:
+  app:
+    build:
+      context: ../..
+    image: workflowv2:latest
+    ports:
+      - "127.0.0.1:8787:8787"
+    environment:
+      PORT: "8787"
+      WEB_DIR: ./web/dist
+      STORE_DRIVER: mongo
+      MONGO_URL: mongodb://mongo:27017
+      MONGO_DB: workflow
+      VAULT_DRIVER: s3
+      S3_BUCKET: ${S3_BUCKET:-workflow-secrets}
+      S3_REGION: garage
+      S3_ENDPOINT: http://host.docker.internal:3900
+      S3_FORCE_PATH_STYLE: "true"
+      AWS_ACCESS_KEY_ID: ${GARAGE_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${GARAGE_KEY_SECRET}
+      GOOGLE_GENERATIVE_AI_API_KEY: ${GOOGLE_GENERATIVE_AI_API_KEY}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      SLACK_TOKEN: ${SLACK_TOKEN:-}
+      APP_URL: https://builder.quollhq.com
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:-}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:-}
+      LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  mongo-data:

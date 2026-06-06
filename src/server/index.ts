@@ -1,5 +1,7 @@
 import { trace, flushTraces } from "../observability";
 import { serve } from "@hono/node-server";
+import { serveStatic } from "@hono/node-server/serve-static";
+import { existsSync } from "node:fs";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import {
@@ -21,8 +23,8 @@ import { createWorkflowStore } from "./store";
 import { createRunStore, type RunDoc } from "./runs";
 import { runWorkflow } from "./run";
 import { createRegistry, publicAuth } from "../providers/registry";
-import { FileStore, assertSpace } from "../store/docstore";
-import { DocVault } from "../store/vault";
+import { assertSpace } from "../store/docstore";
+import { createStorage } from "../store/factory";
 import { authorProvider, repairProvider } from "../agent/provider-author";
 import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
 import { authorInputForm } from "../agent/form-author";
@@ -64,8 +66,7 @@ function funcToWire(func: FuncDefinition, title: string, summary: string) {
   };
 }
 
-const store = new FileStore(join(process.cwd(), "data", "spaces"));
-const vault = new DocVault(store);
+const { store, vault } = createStorage();
 const registry = createRegistry(store);
 const oauth = createOAuth({ store, vault, registry });
 const connections = createConnections({ store, vault, oauth });
@@ -652,6 +653,13 @@ app.post("/api/providers/:id/repair", async (c) => {
   await registry.persistProvider(spaceId, repaired);
   return c.json({ id: repaired.id, changeNote });
 });
+
+const webDir = process.env.WEB_DIR ?? "./web/dist";
+if (existsSync(join(process.cwd(), webDir))) {
+  app.use("/*", serveStatic({ root: webDir }));
+  app.get("/*", serveStatic({ path: join(webDir, "index.html") }));
+  console.log(`serving web from ${webDir}`);
+}
 
 serve({ fetch: app.fetch, port: Number(process.env.PORT) || 8787 }, (info) => {
   console.log(`chat server on http://localhost:${info.port}`);

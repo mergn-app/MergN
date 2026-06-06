@@ -1,0 +1,11 @@
+node_modules
+web/node_modules
+dist
+web/dist
+data
+.env
+.env.local
+.git
+.DS_Store
+langfuse
+npm-debug.log*

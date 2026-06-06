@@ -1,0 +1,34 @@
+name: Deploy Workflow Builder
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: self-hosted
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build and deploy
+        env:
+          GARAGE_KEY_ID: ${{ secrets.GARAGE_KEY_ID }}
+          GARAGE_KEY_SECRET: ${{ secrets.GARAGE_KEY_SECRET }}
+          GOOGLE_GENERATIVE_AI_API_KEY: ${{ secrets.GOOGLE_GENERATIVE_AI_API_KEY }}
+          GEMINI_MODEL: ${{ secrets.GEMINI_MODEL }}
+          SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
+        run: docker compose -f deploy/flowbaker/docker-compose.yml up -d --build
+
+      - name: Prune dangling images
+        run: docker image prune -f
+
+      - name: Summary
+        run: docker ps --filter name=workflow-builder --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"

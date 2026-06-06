@@ -1,12 +1,11 @@
-import { join } from "node:path";
 import { authorFunc } from "./func-author";
 import { createRegistry } from "../providers/registry";
-import { FileStore } from "../store/docstore";
+import { createStore } from "../store/factory";
 
 async function main(): Promise<void> {
   console.log("Authoring func with AI...\n");
 
-  const registry = createRegistry(new FileStore(join(process.cwd(), "data", "spaces")));
+  const registry = createRegistry(createStore());
   const { def } = await authorFunc(registry, {
     spaceId: "default",
     intent:
