@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
-export type RightTab = "chat" | "node";
+export type RightTab = "chat" | "history" | "node";
 
 function TabButton({
   active,
@@ -31,11 +31,13 @@ export function RightPanel({
   active,
   onTab,
   chat,
+  history,
   node,
 }: {
   active: RightTab;
   onTab: (tab: RightTab) => void;
   chat: ReactNode;
+  history: ReactNode;
   node: ReactNode;
 }) {
   return (
@@ -44,12 +46,26 @@ export function RightPanel({
         <TabButton active={active === "chat"} onClick={() => onTab("chat")}>
           Chat
         </TabButton>
+        <TabButton
+          active={active === "history"}
+          onClick={() => onTab("history")}
+        >
+          History
+        </TabButton>
         <TabButton active={active === "node"} onClick={() => onTab("node")}>
           Node
         </TabButton>
       </div>
       <div className={cn("min-h-0 flex-1", active === "chat" ? "flex" : "hidden")}>
         {chat}
+      </div>
+      <div
+        className={cn(
+          "min-h-0 flex-1 overflow-hidden",
+          active === "history" ? "flex" : "hidden",
+        )}
+      >
+        {history}
       </div>
       <div
         className={cn(

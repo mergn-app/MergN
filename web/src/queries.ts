@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { UIMessage } from "ai";
 import type { AuthoredFunc, InputForm, TriggerConfig, Wire } from "./types";
 import { getSpace, spaceHeaders } from "./space";
 import { useAuth } from "./authContext";
@@ -253,6 +254,41 @@ export function useDeleteConnection() {
     mutationFn: (id: string) =>
       json<{ ok: boolean }>(`/api/connections/${id}`, { method: "DELETE" }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["connections"] }),
+  });
+}
+
+export interface ConversationMeta {
+  id: string;
+  title: string;
+  updatedAt: string;
+}
+
+export function useConversations() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["conversations", getSpace()],
+    queryFn: () => json<ConversationMeta[]>("/api/chat/conversations"),
+    enabled: !!user,
+  });
+}
+
+export function useConversation(id: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["conversation", getSpace(), id],
+    queryFn: () => json<UIMessage[]>(`/api/chat/conversations/${id}`),
+    enabled: !!user && !!id,
+  });
+}
+
+export function useDeleteConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      json<{ ok: boolean }>(`/api/chat/conversations/${id}`, {
+        method: "DELETE",
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
   });
 }
 

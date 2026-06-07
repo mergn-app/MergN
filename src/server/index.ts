@@ -9,6 +9,7 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
+  createIdGenerator,
   tool,
   stepCountIs,
   type UIMessage,
@@ -29,6 +30,7 @@ import { authorProvider, repairProvider } from "../agent/provider-author";
 import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
 import { authorInputForm } from "../agent/form-author";
 import { createConnections } from "./connections";
+import { createChatStore } from "./chat";
 import { resolveEgressHost } from "./egress";
 import { createOAuth } from "./oauth";
 import { auth, getSessionUser } from "./auth";
@@ -78,6 +80,7 @@ const connections = createConnections({ store, vault, oauth });
 const workflows = createWorkflowStore(store);
 const runs = createRunStore(store);
 const membership = createMembership(store);
+const chats = createChatStore(store);
 
 async function runSavedWorkflow(
   spaceId: string,
@@ -384,12 +387,44 @@ app.use("/api/*", async (c, next) => {
   await next();
 });
 
+app.get("/api/chat/conversations", async (c) => {
+  return c.json(
+    await chats.listConversations(c.get("spaceId"), c.get("userId")),
+  );
+});
+
+app.get("/api/chat/conversations/:id", async (c) => {
+  const doc = await chats.getConversation(
+    c.get("spaceId"),
+    c.get("userId"),
+    c.req.param("id"),
+  );
+  return c.json(doc?.messages ?? []);
+});
+
+app.delete("/api/chat/conversations/:id", async (c) => {
+  await chats.deleteConversation(
+    c.get("spaceId"),
+    c.get("userId"),
+    c.req.param("id"),
+  );
+  return c.json({ ok: true });
+});
+
 app.post("/api/chat", async (c) => {
   const spaceId = c.get("spaceId");
-  const { messages, workflowState } = await c.req.json<{
-    messages: UIMessage[];
+  const userId = c.get("userId");
+  const { message, conversationId, workflowState } = await c.req.json<{
+    message: UIMessage;
+    conversationId: string;
     workflowState?: string;
   }>();
+  if (!/^[A-Za-z0-9_-]+$/.test(conversationId ?? ""))
+    return c.json({ error: "bad conversation id" }, 400);
+  const previous =
+    (await chats.getConversation(spaceId, userId, conversationId))?.messages ??
+    [];
+  const messages = [...(previous as UIMessage[]), message];
   const modelMessages = await convertToModelMessages(messages);
 
   const system =
@@ -404,6 +439,8 @@ app.post("/api/chat", async (c) => {
   const sessionId = `chat-${randomUUID()}`;
 
   const stream = createUIMessageStream({
+    originalMessages: messages,
+    generateId: createIdGenerator({ prefix: "msg", size: 16 }),
     execute: ({ writer }) => {
       const result = streamText({
         model: google(process.env.GEMINI_MODEL ?? "gemini-2.5-flash"),
@@ -428,6 +465,9 @@ app.post("/api/chat", async (c) => {
               : undefined,
         }),
       );
+    },
+    onFinish: async ({ messages }) => {
+      await chats.saveConversation(spaceId, userId, conversationId, messages);
     },
     onError: (error) => {
       console.error("STREAM ERROR:", error);

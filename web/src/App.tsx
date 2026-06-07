@@ -23,12 +23,15 @@ import { RightPanel, type RightTab } from "./RightPanel";
 import { WorkflowsPanel } from "./WorkflowsPanel";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { ConnectionsPanel } from "./ConnectionsPanel";
+import { ChatHistory } from "./ChatHistory";
 import { RunPanel } from "./RunPanel";
 import {
   useSaveWorkflow,
   fetchWorkflow,
   generateInputForm,
   useConnections,
+  useConversations,
+  useDeleteConversation,
   type ConnectionMeta,
 } from "./queries";
 import type {
@@ -156,6 +159,7 @@ export function App({
     Record<string, Record<string, string>>
   >({});
   const [activeTab, setActiveTab] = useState<RightTab>("chat");
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [view, setView] = useState<"story" | "pipeline" | "graph">("story");
   const [bottomHeight, setBottomHeight] = useState(256);
   const [building, setBuilding] = useState(false);
@@ -185,7 +189,41 @@ export function App({
   const saveMutation = useSaveWorkflow();
   const { user, requireAuth, signOut } = useAuth();
   const { data: connections = NO_CONNECTIONS } = useConnections();
+  const conversationsQuery = useConversations();
+  const deleteConversation = useDeleteConversation();
   const selected = funcs.find((f) => f.id === selectedId) ?? null;
+
+  useEffect(() => {
+    if (conversationId !== null) return;
+    if (!user) {
+      setConversationId(crypto.randomUUID());
+      return;
+    }
+    if (!conversationsQuery.isFetched) return;
+    setConversationId(conversationsQuery.data?.[0]?.id ?? crypto.randomUUID());
+  }, [conversationId, user, conversationsQuery.isFetched, conversationsQuery.data]);
+
+  const newChat = useCallback(() => {
+    setConversationId(crypto.randomUUID());
+    setActiveTab("chat");
+  }, []);
+
+  const selectChat = useCallback((id: string) => {
+    setConversationId(id);
+    setActiveTab("chat");
+  }, []);
+
+  const removeChat = useCallback(
+    (id: string) => {
+      deleteConversation.mutate(id);
+      setConversationId((cur) => {
+        if (cur !== id) return cur;
+        const rest = (conversationsQuery.data ?? []).filter((c) => c.id !== id);
+        return rest[0]?.id ?? crypto.randomUUID();
+      });
+    },
+    [deleteConversation, conversationsQuery.data],
+  );
 
   const connectedProviders = useMemo(
     () => new Set(connections.map((c) => c.provider)),
@@ -650,13 +688,29 @@ export function App({
           active={activeTab}
           onTab={setActiveTab}
           chat={
-            <Chat
-              onOps={setOps}
-              onBuilding={setBuilding}
-              workflowState={workflowState}
-              onReady={(send) => {
-                sendChatRef.current = send;
-              }}
+            conversationId ? (
+              <Chat
+                conversationId={conversationId}
+                onNewChat={newChat}
+                onOps={setOps}
+                onBuilding={setBuilding}
+                workflowState={workflowState}
+                onReady={(send) => {
+                  sendChatRef.current = send;
+                }}
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center" />
+            )
+          }
+          history={
+            <ChatHistory
+              conversations={conversationsQuery.data ?? []}
+              isLoading={conversationsQuery.isLoading}
+              currentId={conversationId}
+              onSelect={selectChat}
+              onNew={newChat}
+              onDelete={removeChat}
             />
           }
           node={

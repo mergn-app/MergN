@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
+import { useQueryClient } from "@tanstack/react-query";
+import { DefaultChatTransport, type UIMessage } from "ai";
 import type { AuthoredFunc, InputForm, Wire, WorkflowOp } from "./types";
-import { Sparkles, ArrowUpRight, Brain, Loader2 } from "lucide-react";
+import { Sparkles, ArrowUpRight, Brain, Loader2, SquarePen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { spaceHeaders } from "./space";
 import { useAuth } from "./authContext";
-import { useConnections } from "./queries";
+import { useConnections, useConversation } from "./queries";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -168,20 +170,76 @@ function DesignProgress({ items }: { items: DesignItem[] }) {
   );
 }
 
-export function Chat({
-  onOps,
-  onBuilding,
-  workflowState,
-  onReady,
-}: {
+interface ChatProps {
+  conversationId: string;
+  onNewChat: () => void;
   onOps: (ops: WorkflowOp[]) => void;
   onBuilding?: (building: boolean) => void;
   workflowState?: string;
   onReady?: (send: (text: string) => void) => void;
-}) {
-  const { messages, sendMessage, status } = useChat();
+}
+
+export function Chat(props: ChatProps) {
+  const { data, isLoading } = useConversation(props.conversationId);
+  if (isLoading) {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/70" />
+      </div>
+    );
+  }
+  return (
+    <ChatThread
+      key={props.conversationId}
+      {...props}
+      initialMessages={data ?? []}
+    />
+  );
+}
+
+function ChatThread({
+  conversationId,
+  onNewChat,
+  onOps,
+  onBuilding,
+  workflowState,
+  onReady,
+  initialMessages,
+}: ChatProps & { initialMessages: UIMessage[] }) {
+  const stateRef = useRef("");
+  stateRef.current = workflowState ?? "";
+  const qc = useQueryClient();
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        prepareSendMessagesRequest({ messages, id }) {
+          return {
+            headers: spaceHeaders(),
+            body: {
+              message: messages[messages.length - 1],
+              conversationId: id,
+              workflowState: stateRef.current,
+            },
+          };
+        },
+      }),
+    [],
+  );
+
+  const { messages, sendMessage, status } = useChat({
+    id: conversationId,
+    messages: initialMessages,
+    transport,
+    onFinish: () => {
+      void qc.invalidateQueries({ queryKey: ["conversations"] });
+      void qc.invalidateQueries({ queryKey: ["conversation"] });
+    },
+  });
   const { requireAuth } = useAuth();
   const { data: conns = [] } = useConnections();
+  const initialIds = useRef(new Set(initialMessages.map((m) => m.id)));
   const [input, setInput] = useState("");
   const [connectProvider, setConnectProvider] = useState<string | null>(null);
   const handledConnects = useRef<Set<string>>(new Set());
@@ -202,15 +260,8 @@ export function Chat({
     });
   };
 
-  const stateRef = useRef("");
-  stateRef.current = workflowState ?? "";
-
   const send = useCallback(
-    (text: string) =>
-      sendMessage(
-        { text },
-        { headers: spaceHeaders(), body: { workflowState: stateRef.current } },
-      ),
+    (text: string) => void sendMessage({ text }),
     [sendMessage],
   );
 
@@ -225,6 +276,7 @@ export function Chat({
       typeof (o as AuthoredFunc).id === "string" &&
       Array.isArray((o as AuthoredFunc).inputs);
     messages.forEach((m) => {
+      if (initialIds.current.has(m.id)) return;
       (m.parts as ToolPart[]).forEach((part, i) => {
         if (part.state !== "output-available") return;
         const key = `${m.id}:${i}`;
@@ -349,10 +401,21 @@ export function Chat({
 
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="flex items-center px-3 py-1.5">
+      <div className="flex items-center gap-2 px-3 py-1.5">
         <span className="ml-auto rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
           {totalTokens.toLocaleString()} tokens
         </span>
+        {messages.length > 0 && (
+          <button
+            type="button"
+            title="New chat"
+            disabled={status === "streaming" || status === "submitted"}
+            onClick={onNewChat}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
+          >
+            <SquarePen className="size-3.5" />
+          </button>
+        )}
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
