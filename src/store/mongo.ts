@@ -26,7 +26,7 @@ export class MongoStore implements DocStore {
   private indexed = new Set<string>();
 
   constructor(url: string, dbName: string) {
-    this.client = new MongoClient(url);
+    this.client = new MongoClient(url, { ignoreUndefined: true });
     this.db = this.client.db(dbName);
   }
 

@@ -41,6 +41,19 @@ export interface ChatStore {
   ): Promise<void>;
 }
 
+function stripNulls<T>(value: T): T {
+  if (Array.isArray(value)) return value.map(stripNulls) as unknown as T;
+  if (value && typeof value === "object") {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (v === null) continue;
+      out[k] = stripNulls(v);
+    }
+    return out as unknown as T;
+  }
+  return value;
+}
+
 function deriveTitle(messages: unknown[]): string {
   for (const m of messages) {
     const msg = m as { role?: string; parts?: { type?: string; text?: string }[] };
@@ -67,7 +80,7 @@ export function createChatStore(store: DocStore): ChatStore {
       | ConversationDoc
       | null;
     if (!doc || doc.userId !== userId) return null;
-    return doc;
+    return { ...doc, messages: stripNulls(doc.messages) };
   }
 
   return {
