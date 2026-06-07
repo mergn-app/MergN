@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useConnections, type ConnectionMeta } from "./queries";
 import { ConnectionDialog } from "./ConnectionDialog";
 
@@ -31,9 +32,14 @@ export function ConnectionsPanel({ missing }: { missing: string[] }) {
       </div>
 
       <div className="min-h-0 flex-1 space-y-0.5 overflow-auto p-2">
-        {isLoading && (
-          <div className="px-2 py-1 text-xs text-muted-foreground">loading…</div>
-        )}
+        {isLoading &&
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2.5 px-2 py-2">
+              <Skeleton className="size-2 shrink-0 rounded-full" />
+              <Skeleton className="h-3 flex-1" />
+              <Skeleton className="h-2.5 w-12" />
+            </div>
+          ))}
         {!isLoading && rows.length === 0 && (
           <div className="px-2 py-6 text-center text-xs text-muted-foreground">
             No connections yet.

@@ -33,13 +33,43 @@ const Ctx = createContext<AuthContextValue>({
   signOut: () => {},
 });
 
+const CACHE_KEY = "auth.user";
+
+function readCachedUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeCachedUser(user: AuthUser | null) {
+  try {
+    if (user) localStorage.setItem(CACHE_KEY, JSON.stringify(user));
+    else localStorage.removeItem(CACHE_KEY);
+  } catch {
+    return;
+  }
+}
+
 export function useAuth(): AuthContextValue {
   return useContext(Ctx);
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { data: session, isPending } = useSession();
-  const user = (session?.user as AuthUser | undefined) ?? null;
+  const [cachedUser, setCachedUser] = useState<AuthUser | null>(readCachedUser);
+
+  const resolvedUser = (session?.user as AuthUser | undefined) ?? null;
+  const user = isPending ? cachedUser : resolvedUser;
+
+  useEffect(() => {
+    if (isPending) return;
+    writeCachedUser(resolvedUser);
+    setCachedUser(resolvedUser);
+  }, [isPending, resolvedUser]);
+
   const [open, setOpen] = useState(false);
   const pendingAction = useRef<(() => void) | null>(null);
   const prevUserId = useRef<string | null>(null);

@@ -1,5 +1,6 @@
 import { useWorkflows, useDeleteWorkflow } from "./queries";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Workflow, Trash2, Plus } from "lucide-react";
 
 export function WorkflowsPanel({
@@ -60,9 +61,16 @@ export function WorkflowsPanel({
       </div>
 
       <div className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
-        {isLoading && (
-          <div className="px-2 py-1 text-xs text-muted-foreground">loading…</div>
-        )}
+        {isLoading &&
+          Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-2.5 px-2 py-2">
+              <Skeleton className="size-8 shrink-0 rounded-lg" />
+              <div className="min-w-0 flex-1 space-y-1.5">
+                <Skeleton className="h-3 w-3/4" />
+                <Skeleton className="h-2.5 w-1/2" />
+              </div>
+            </div>
+          ))}
         {!isLoading && items.length === 0 && (
           <div className="px-2 py-6 text-center text-xs text-muted-foreground">
             No saved workflows yet.
