@@ -9,6 +9,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useSession, signOut } from "./auth";
 import { AuthForm } from "./AuthForm";
 
@@ -72,6 +73,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [isPending, resolvedUser]);
 
   const [open, setOpen] = useState(false);
+  const [closing, setClosing] = useState(false);
   const pendingAction = useRef<(() => void) | null>(null);
   const prevUserId = useRef<string | null>(null);
   const qc = useQueryClient();
@@ -81,7 +83,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const id = user?.id ?? null;
     if (id && id !== prevUserId.current) {
       qc.invalidateQueries();
-      setOpen(false);
+      setClosing(true);
       const action = pendingAction.current;
       pendingAction.current = null;
       if (action) action();
@@ -97,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (action?: () => void) => {
       if (user) return true;
       pendingAction.current = action ?? null;
+      setClosing(false);
       setOpen(true);
       return false;
     },
@@ -120,7 +123,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const close = () => {
     pendingAction.current = null;
+    setClosing(true);
+  };
+
+  const onOverlayAnimEnd = (e: React.AnimationEvent<HTMLDivElement>) => {
+    if (e.target !== e.currentTarget || !closing) return;
     setOpen(false);
+    setClosing(false);
   };
 
   return (
@@ -136,11 +145,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       {children}
       {open && (
         <div
-          className="fixed inset-0 z-100 flex items-center justify-center bg-background/70 p-4 backdrop-blur-sm"
+          className={cn(
+            "fixed inset-0 z-100 flex items-center justify-center bg-background/70 p-4 backdrop-blur-xs duration-200",
+            closing
+              ? "animate-out fade-out fill-mode-forwards"
+              : "animate-in fade-in",
+          )}
           onMouseDown={close}
+          onAnimationEnd={onOverlayAnimEnd}
         >
           <div
-            className="relative w-full max-w-sm rounded-2xl border border-border/50 bg-card p-6"
+            className={cn(
+              "relative w-full max-w-sm rounded-2xl border border-border/50 bg-card p-6 duration-200 ease-out",
+              closing
+                ? "animate-out fade-out zoom-out-95 slide-out-to-bottom-2 fill-mode-forwards"
+                : "animate-in fade-in zoom-in-95 slide-in-from-bottom-2",
+            )}
             onMouseDown={(e) => e.stopPropagation()}
           >
             <button

@@ -483,7 +483,7 @@ export function App({
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
       <div className="p-2 pb-0">
         <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-4 py-2">
-          <SpaceSwitcher />
+          {user && <SpaceSwitcher />}
           <Badge variant="secondary" className="ml-auto font-normal">
             {funcs.length} func
           </Badge>
