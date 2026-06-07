@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, type UIMessage } from "ai";
@@ -170,6 +170,104 @@ function DesignProgress({ items }: { items: DesignItem[] }) {
   );
 }
 
+const MessageItem = memo(function MessageItem({
+  message,
+}: {
+  message: UIMessage;
+}) {
+  const isUser = message.role === "user";
+  return (
+    <div
+      className={cn(
+        "flex min-w-0 max-w-full flex-col gap-1.5",
+        isUser ? "items-end" : "items-start",
+      )}
+    >
+      <div
+        className={cn(
+          isUser
+            ? "max-w-[85%] rounded-2xl rounded-br-md border border-border/60 bg-secondary px-3.5 py-2 text-[14px] leading-relaxed text-secondary-foreground wrap-anywhere"
+            : "w-full min-w-0 overflow-hidden text-foreground/90",
+        )}
+      >
+        {message.parts.map((part, i) => {
+          if (part.type === "text") {
+            return isUser ? (
+              <span key={i} className="whitespace-pre-wrap">
+                {part.text}
+              </span>
+            ) : (
+              <Markdown key={i}>{part.text}</Markdown>
+            );
+          }
+          if (part.type === "reasoning") {
+            const text = (part as { text?: string }).text ?? "";
+            if (!text.trim()) return null;
+            return (
+              <div
+                key={i}
+                className="my-1.5 w-full rounded-2xl border border-border/40 bg-muted/20 px-3.5 py-3"
+              >
+                <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground/70">
+                  <Brain className="size-3.5" />
+                  Thinking
+                </div>
+                <div className="text-muted-foreground">
+                  <Markdown className="text-[13px]">{text}</Markdown>
+                </div>
+              </div>
+            );
+          }
+          if (part.type === "data-design") {
+            const items = (part as { data?: { items?: DesignItem[] } }).data
+              ?.items;
+            if (!items?.length) return null;
+            return <DesignProgress key={i} items={items} />;
+          }
+          if (part.type === "tool-design_workflow") {
+            return null;
+          }
+          if (part.type.startsWith("tool-")) {
+            const p = part as ToolPart;
+            const o = p.output as
+              | { id?: string; from?: string; to?: string }
+              | undefined;
+            const label =
+              o?.id ?? (o?.from && o?.to ? `${o.from} → ${o.to}` : "");
+            const done = p.state === "output-available";
+            return (
+              <div
+                key={i}
+                className="my-1 flex w-fit max-w-full items-center gap-2 rounded-lg border border-border/50 bg-muted/40 px-2 py-1 font-mono text-[11px] text-muted-foreground"
+              >
+                <span
+                  className={cn(
+                    "size-1.5 shrink-0 rounded-full",
+                    done ? "bg-emerald-500" : "bg-amber-500 animate-pulse",
+                  )}
+                />
+                <span className="shrink-0">
+                  {part.type.replace("tool-", "")}
+                </span>
+                {label && (
+                  <span className="truncate text-foreground/70">{label}</span>
+                )}
+              </div>
+            );
+          }
+          return null;
+        })}
+      </div>
+      {!isUser && usageOf(message.metadata) && (
+        <div className="font-mono text-[10px] text-muted-foreground/60">
+          ↑{usageOf(message.metadata)?.inputTokens ?? 0} ↓
+          {usageOf(message.metadata)?.outputTokens ?? 0}
+        </div>
+      )}
+    </div>
+  );
+});
+
 interface ChatProps {
   conversationId: string;
   onNewChat: () => void;
@@ -232,6 +330,7 @@ function ChatThread({
     id: conversationId,
     messages: initialMessages,
     transport,
+    experimental_throttle: 50,
     onFinish: () => {
       void qc.invalidateQueries({ queryKey: ["conversations"] });
       void qc.invalidateQueries({ queryKey: ["conversation"] });
@@ -448,106 +547,9 @@ function ChatThread({
               </div>
             </div>
           )}
-          {messages.map((m) => {
-            const isUser = m.role === "user";
-            return (
-              <div
-                key={m.id}
-                className={cn(
-                  "flex min-w-0 max-w-full flex-col gap-1.5",
-                  isUser ? "items-end" : "items-start",
-                )}
-              >
-                <div
-                  className={cn(
-                    isUser
-                      ? "max-w-[85%] rounded-2xl rounded-br-md border border-border/60 bg-secondary px-3.5 py-2 text-[14px] leading-relaxed text-secondary-foreground wrap-anywhere"
-                      : "w-full min-w-0 overflow-hidden text-foreground/90",
-                  )}
-                >
-                  {m.parts.map((part, i) => {
-                    if (part.type === "text") {
-                      return isUser ? (
-                        <span key={i} className="whitespace-pre-wrap">
-                          {part.text}
-                        </span>
-                      ) : (
-                        <Markdown key={i}>{part.text}</Markdown>
-                      );
-                    }
-                    if (part.type === "reasoning") {
-                      const text = (part as { text?: string }).text ?? "";
-                      if (!text.trim()) return null;
-                      return (
-                        <div
-                          key={i}
-                          className="my-1.5 w-full rounded-2xl border border-border/40 bg-muted/20 px-3.5 py-3"
-                        >
-                          <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-muted-foreground/70">
-                            <Brain className="size-3.5" />
-                            Thinking
-                          </div>
-                          <div className="text-muted-foreground">
-                            <Markdown className="text-[13px]">{text}</Markdown>
-                          </div>
-                        </div>
-                      );
-                    }
-                    if (part.type === "data-design") {
-                      const items = (
-                        part as { data?: { items?: DesignItem[] } }
-                      ).data?.items;
-                      if (!items?.length) return null;
-                      return <DesignProgress key={i} items={items} />;
-                    }
-                    if (part.type === "tool-design_workflow") {
-                      return null;
-                    }
-                    if (part.type.startsWith("tool-")) {
-                      const p = part as ToolPart;
-                      const o = p.output as
-                        | { id?: string; from?: string; to?: string }
-                        | undefined;
-                      const label =
-                        o?.id ??
-                        (o?.from && o?.to ? `${o.from} → ${o.to}` : "");
-                      const done = p.state === "output-available";
-                      return (
-                        <div
-                          key={i}
-                          className="my-1 flex w-fit max-w-full items-center gap-2 rounded-lg border border-border/50 bg-muted/40 px-2 py-1 font-mono text-[11px] text-muted-foreground"
-                        >
-                          <span
-                            className={cn(
-                              "size-1.5 shrink-0 rounded-full",
-                              done
-                                ? "bg-emerald-500"
-                                : "bg-amber-500 animate-pulse",
-                            )}
-                          />
-                          <span className="shrink-0">
-                            {part.type.replace("tool-", "")}
-                          </span>
-                          {label && (
-                            <span className="truncate text-foreground/70">
-                              {label}
-                            </span>
-                          )}
-                        </div>
-                      );
-                    }
-                    return null;
-                  })}
-                </div>
-                {!isUser && usageOf(m.metadata) && (
-                  <div className="font-mono text-[10px] text-muted-foreground/60">
-                    ↑{usageOf(m.metadata)?.inputTokens ?? 0} ↓
-                    {usageOf(m.metadata)?.outputTokens ?? 0}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {messages.map((m) => (
+            <MessageItem key={m.id} message={m} />
+          ))}
           {(status === "streaming" || status === "submitted") && (
             <div className="flex items-center gap-2 px-1 text-xs text-muted-foreground">
               <Loader2 className="h-3 w-3 animate-spin text-muted-foreground/70" />

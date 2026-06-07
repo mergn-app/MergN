@@ -1,3 +1,4 @@
+import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -66,7 +67,7 @@ const components: Components = {
   ),
 };
 
-export function Markdown({
+export const Markdown = memo(function Markdown({
   children,
   className,
 }: {
@@ -85,4 +86,4 @@ export function Markdown({
       </ReactMarkdown>
     </div>
   );
-}
+});
