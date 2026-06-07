@@ -13,6 +13,7 @@ export interface SavedWorkflow {
   wires: unknown[];
   positions: Record<string, { x: number; y: number }>;
   config: Record<string, Record<string, string>>;
+  nodeConnections?: Record<string, Record<string, string>>;
   trigger?: TriggerConfig;
   inputForm?: unknown;
   createdAt: string;

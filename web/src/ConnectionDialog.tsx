@@ -110,7 +110,9 @@ export function ConnectionDialog({
   const { t, i18n } = useTranslation();
   const auth = useProviderAuth(provider);
   const isOAuth = auth.data?.type === "oauth2";
-  const oauthStatus = useOAuthStatus(provider, !!isOAuth && !connection);
+  const [adding, setAdding] = useState(false);
+  const creating = !connection || adding;
+  const oauthStatus = useOAuthStatus(provider, !!isOAuth && creating);
   const saveApp = useSaveOAuthApp(provider);
   const deleteApp = useDeleteOAuthApp(provider);
   const create = useCreateConnection();
@@ -235,7 +237,7 @@ export function ConnectionDialog({
           <span className="text-sm font-semibold">
             {auth.data?.name ?? provider}
           </span>
-          {connection ? (
+          {!creating ? (
             <Badge variant="secondary" className="gap-1">
               <span className="size-1.5 rounded-full bg-emerald-500" />
               {t("connections.connected")}
@@ -251,7 +253,7 @@ export function ConnectionDialog({
           </button>
         </div>
 
-        {connection ? (
+        {!creating ? (
           <div className="space-y-3 text-sm">
             <div className="space-y-1">
               <label className="text-xs font-medium">
@@ -297,6 +299,13 @@ export function ConnectionDialog({
             >
               {t("connectionDialog.disconnect")}
             </Button>
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              className="w-full text-center text-[11px] text-muted-foreground/70 hover:text-muted-foreground"
+            >
+              {t("connectionDialog.addAnother")}
+            </button>
           </div>
         ) : auth.isLoading ? (
           <div className="py-6 text-center text-xs text-muted-foreground">

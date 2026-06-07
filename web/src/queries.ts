@@ -18,6 +18,7 @@ export interface SavedWorkflow {
   wires: Wire[];
   positions: Record<string, { x: number; y: number }>;
   config: Record<string, Record<string, string>>;
+  nodeConnections?: Record<string, Record<string, string>>;
   trigger?: TriggerConfig;
   inputForm?: InputForm;
   createdAt: string;
@@ -31,6 +32,7 @@ export interface SaveInput {
   wires: Wire[];
   positions: Record<string, { x: number; y: number }>;
   config: Record<string, Record<string, string>>;
+  nodeConnections: Record<string, Record<string, string>>;
   trigger: TriggerConfig;
   inputForm: InputForm | null;
 }

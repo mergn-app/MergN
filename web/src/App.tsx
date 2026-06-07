@@ -160,6 +160,9 @@ export function App({
   const [configValues, setConfigValues] = useState<
     Record<string, Record<string, string>>
   >({});
+  const [nodeConnections, setNodeConnections] = useState<
+    Record<string, Record<string, string>>
+  >({});
   const [activeTab, setActiveTab] = useState<RightTab>("chat");
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [view, setView] = useState<"story" | "pipeline" | "graph">("story");
@@ -322,6 +325,18 @@ export function App({
     [],
   );
 
+  const onConnectionChange = useCallback(
+    (funcId: string, requirementName: string, connectionId: string) => {
+      setNodeConnections((prev) => {
+        const forNode = { ...(prev[funcId] ?? {}) };
+        if (connectionId) forNode[requirementName] = connectionId;
+        else delete forNode[requirementName];
+        return { ...prev, [funcId]: forNode };
+      });
+    },
+    [],
+  );
+
   const [ops, setOps] = useState<WorkflowOp[]>([]);
   const processedOps = useRef<Set<string>>(new Set());
 
@@ -436,6 +451,7 @@ export function App({
     setRunStatus({});
     setRunData({});
     setConfigValues({});
+    setNodeConnections({});
     positionsRef.current = {};
     setWorkflowId(null);
     setName("untitled");
@@ -454,6 +470,7 @@ export function App({
       wires,
       positions,
       config: configValues,
+      nodeConnections,
       trigger,
       inputForm,
     });
@@ -504,6 +521,7 @@ export function App({
     setWires(wf.wires ?? []);
     setFuncs(wf.funcs ?? []);
     setConfigValues(wf.config ?? {});
+    setNodeConnections(wf.nodeConnections ?? {});
     setWorkflowId(wf.id);
     setName(wf.name ?? "untitled");
     setTrigger(wf.trigger ?? { kind: "manual" });
@@ -678,6 +696,7 @@ export function App({
                   funcs={funcs}
                   wires={wires}
                   config={configValues}
+                  nodeConnections={nodeConnections}
                   workflowId={workflowId}
                   workflowName={name}
                   inputForm={inputForm}
@@ -727,9 +746,13 @@ export function App({
             <NodePanel
               func={selected}
               config={selected ? (configValues[selected.id] ?? {}) : {}}
+              connections={selected ? (nodeConnections[selected.id] ?? {}) : {}}
               run={selected ? runData[selected.id] : undefined}
               onConfigChange={(port, value) =>
                 selected && onConfigChange(selected.id, port, value)
+              }
+              onConnectionChange={(name, id) =>
+                selected && onConnectionChange(selected.id, name, id)
               }
             />
           }

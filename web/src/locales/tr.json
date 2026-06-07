@@ -83,7 +83,9 @@
     "connected": "bağlı",
     "connect": "bağlan",
     "disconnect": "bağlantıyı kes",
-    "needsConnection": "bağlantı gerekli"
+    "needsConnection": "bağlantı gerekli",
+    "addAccount": "Hesap ekle",
+    "useFirst": "İlk uygun"
   },
   "pipeline": {
     "describe": "Bir pipeline oluşturmak için sohbette bir otomasyon anlat.",
@@ -174,6 +176,7 @@
     "waitingAuth": "yetkilendirme bekleniyor…",
     "connectWith": "{{name}} ile bağlan",
     "useDifferentApp": "Farklı bir OAuth uygulaması kullan",
+    "addAnother": "Başka hesap ekle",
     "noOAuthApp": "{{name}} için yapılandırılmış bir OAuth uygulaması yok. Bir tane kaydet (yönlendirme URL'si {{url}}), sonra kimlik bilgilerini yapıştır.",
     "clientId": "Client ID",
     "clientSecret": "Client secret",

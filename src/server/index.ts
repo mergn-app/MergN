@@ -90,6 +90,7 @@ async function runSavedWorkflow(
     funcs: unknown[];
     wires: unknown[];
     config?: Record<string, Record<string, string>>;
+    nodeConnections?: Record<string, Record<string, string>>;
   },
   input: Record<string, unknown>,
   trigger: string,
@@ -102,6 +103,7 @@ async function runSavedWorkflow(
     wf.wires as Parameters<typeof runWorkflow>[2],
     input,
     wf.config ?? {},
+    wf.nodeConnections ?? {},
     (record) => {
       records.push(record);
     },
@@ -318,10 +320,11 @@ function makeTools(
   }),
   list_connections: tool({
     description:
-      "List the provider connections (credentials) the user has set up in this space. Returns metadata only — provider, account label, and when it was connected. It NEVER returns the secret value itself. Use this to answer questions like 'do I have a connection for X', or to check before telling the user whether a step can run.",
+      "List the provider connections (credentials) the user has set up in this space. A provider can have MORE THAN ONE connection (e.g. a work and a personal account); each is returned separately with its own id and account label. Returns metadata only — id, provider, account label, and when it was connected. It NEVER returns the secret value itself. Use this to answer questions like 'do I have a connection for X', to tell apart multiple accounts for the same provider, or to check before telling the user whether a step can run.",
     inputSchema: z.object({}),
     execute: async () =>
       (await connections.listConnections(spaceId)).map((cn) => ({
+        id: cn.id,
         provider: cn.provider,
         account: cn.account,
         connectedAt: cn.createdAt,
@@ -329,17 +332,28 @@ function makeTools(
   }),
   request_connection: tool({
     description:
-      "Open the secure connection setup dialog for a provider so the user can enter their own credentials. Use this when the user wants to connect a service, or when a workflow needs a provider that has no connection yet. NEVER ask the user to paste an API key, token, password, or any secret into the chat — always use this tool so the secret is entered in the secure dialog and stored encrypted; you never see it. Pass the provider id (e.g. 'slack', 'stripe').",
+      "Open the secure connection setup dialog for a provider so the user can enter their own credentials. Use this when the user wants to connect a service, when a workflow needs a provider that has no connection yet, or when the user wants to add ANOTHER account for a provider they already connected (a provider can hold multiple connections). NEVER ask the user to paste an API key, token, password, or any secret into the chat — always use this tool so the secret is entered in the secure dialog and stored encrypted; you never see it. Pass the provider id (e.g. 'slack', 'stripe'); optionally pass a label when adding an additional account.",
     inputSchema: z.object({
       provider: z
         .string()
         .describe("the provider id to connect, e.g. 'slack' or 'stripe'"),
+      account: z
+        .string()
+        .optional()
+        .describe(
+          "optional label for this connection, useful when adding an extra account for a provider, e.g. 'work' or 'personal'",
+        ),
     }),
-    execute: async ({ provider }) => {
-      const existing = (await connections.listConnections(spaceId)).find(
+    execute: async ({ provider, account }) => {
+      const existing = (await connections.listConnections(spaceId)).filter(
         (cn) => cn.provider === provider,
       );
-      return { provider, alreadyConnected: Boolean(existing) };
+      return {
+        provider,
+        account,
+        alreadyConnected: existing.length > 0,
+        connectionCount: existing.length,
+      };
     },
   }),
   };
@@ -496,6 +510,7 @@ app.put("/api/workflows/:id", async (c) => {
     wires?: unknown[];
     positions?: Record<string, { x: number; y: number }>;
     config?: Record<string, Record<string, string>>;
+    nodeConnections?: Record<string, Record<string, string>>;
     trigger?: { kind: "manual" | "webhook" | "schedule" | "poll" | "event" };
     inputForm?: unknown;
   }>();
@@ -506,6 +521,7 @@ app.put("/api/workflows/:id", async (c) => {
     wires: body.wires ?? [],
     positions: body.positions ?? {},
     config: body.config ?? {},
+    nodeConnections: body.nodeConnections ?? {},
     trigger: body.trigger ?? { kind: "manual" },
     inputForm: body.inputForm,
   });
@@ -524,6 +540,7 @@ app.post("/api/run", async (c) => {
     wires?: Parameters<typeof runWorkflow>[2];
     input?: Record<string, unknown>;
     config?: Record<string, Record<string, string>>;
+    nodeConnections?: Record<string, Record<string, string>>;
     workflowId?: string;
     workflowName?: string;
     runId?: string;
@@ -548,6 +565,7 @@ app.post("/api/run", async (c) => {
       body.wires ?? [],
       input,
       body.config ?? {},
+      body.nodeConnections ?? {},
       async (record) => {
         records.push(record);
         await stream.writeSSE({ data: JSON.stringify(record) });

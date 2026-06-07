@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import type { AuthoredFunc, RunStepData } from "./types";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ProviderConnection } from "./ProviderConnection";
+import { NodeConnection } from "./NodeConnection";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -60,13 +60,17 @@ const RUN_DOT: Record<string, string> = {
 export function NodePanel({
   func,
   config,
+  connections,
   run,
   onConfigChange,
+  onConnectionChange,
 }: {
   func: AuthoredFunc | null;
   config: Record<string, string>;
+  connections?: Record<string, string>;
   run?: RunStepData;
   onConfigChange: (port: string, value: string) => void;
+  onConnectionChange?: (requirementName: string, connectionId: string) => void;
 }) {
   const { t } = useTranslation();
   if (!func) {
@@ -249,7 +253,13 @@ export function NodePanel({
               ) : (
                 <div className="space-y-2">
                   {func.requires.map((r) => (
-                    <ProviderConnection key={r.name} provider={r.provider} />
+                    <NodeConnection
+                      key={r.name}
+                      provider={r.provider}
+                      requirementName={r.name}
+                      selectedId={connections?.[r.name]}
+                      onSelect={(name, id) => onConnectionChange?.(name, id)}
+                    />
                   ))}
                 </div>
               )}

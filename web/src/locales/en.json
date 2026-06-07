@@ -83,7 +83,9 @@
     "connected": "connected",
     "connect": "connect",
     "disconnect": "disconnect",
-    "needsConnection": "needs connection"
+    "needsConnection": "needs connection",
+    "addAccount": "Add account",
+    "useFirst": "First available"
   },
   "pipeline": {
     "describe": "Describe an automation in the chat to build a pipeline.",
@@ -174,6 +176,7 @@
     "waitingAuth": "waiting for authorization…",
     "connectWith": "Connect with {{name}}",
     "useDifferentApp": "Use a different OAuth app",
+    "addAnother": "Add another account",
     "noOAuthApp": "No OAuth app is configured for {{name}}. Register one (redirect URL {{url}}), then paste its credentials.",
     "clientId": "Client ID",
     "clientSecret": "Client secret",

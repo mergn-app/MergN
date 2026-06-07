@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { spaceHeaders } from "./space";
 import { useAuth } from "./authContext";
-import { useConnections, useConversation } from "./queries";
+import { useConversation } from "./queries";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -332,7 +332,6 @@ function ChatThread({
     },
   });
   const { requireAuth } = useAuth();
-  const { data: conns = [] } = useConnections();
   const initialIds = useRef(new Set(initialMessages.map((m) => m.id)));
   const [input, setInput] = useState("");
   const [connectProvider, setConnectProvider] = useState<string | null>(null);
@@ -594,7 +593,6 @@ function ChatThread({
       {connectProvider && (
         <ConnectionDialog
           provider={connectProvider}
-          connection={conns.find((c) => c.provider === connectProvider)}
           onClose={() => setConnectProvider(null)}
         />
       )}

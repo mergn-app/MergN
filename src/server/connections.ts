@@ -58,10 +58,15 @@ export interface Connections {
     patch: { account?: string },
   ): Promise<ConnectionMeta>;
   deleteConnection(spaceId: string, id: string): Promise<void>;
-  getAccessToken(spaceId: string, provider: string): Promise<string | null>;
+  getAccessToken(
+    spaceId: string,
+    provider: string,
+    connectionId?: string,
+  ): Promise<string | null>;
   getCredential(
     spaceId: string,
     provider: string,
+    connectionId?: string,
   ): Promise<Record<string, string> | null>;
 }
 
@@ -81,6 +86,20 @@ export function createConnections(deps: {
       .filter((c) => c.provider === provider)
       .sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     return matches[0] ?? null;
+  }
+
+  async function connectionFor(
+    spaceId: string,
+    provider: string,
+    connectionId?: string,
+  ): Promise<ConnectionDoc | null> {
+    if (connectionId) {
+      const doc = (await store.get(spaceId, COLLECTION, connectionId)) as unknown as
+        | ConnectionDoc
+        | null;
+      if (doc && doc.provider === provider) return doc;
+    }
+    return firstConnectionFor(spaceId, provider);
   }
 
   return {
@@ -147,14 +166,14 @@ export function createConnections(deps: {
       await store.remove(spaceId, COLLECTION, id);
     },
 
-    async getAccessToken(spaceId, provider) {
-      const conn = await firstConnectionFor(spaceId, provider);
+    async getAccessToken(spaceId, provider, connectionId) {
+      const conn = await connectionFor(spaceId, provider, connectionId);
       if (!conn) return null;
       return resolveToken(spaceId, provider, conn);
     },
 
-    async getCredential(spaceId, provider) {
-      const conn = await firstConnectionFor(spaceId, provider);
+    async getCredential(spaceId, provider, connectionId) {
+      const conn = await connectionFor(spaceId, provider, connectionId);
       if (!conn) return null;
 
       if (conn.kind === "apiKey") {

@@ -38,6 +38,7 @@ export function RunPanel({
   funcs,
   wires,
   config,
+  nodeConnections,
   workflowId,
   workflowName,
   inputForm,
@@ -53,6 +54,7 @@ export function RunPanel({
   funcs: AuthoredFunc[];
   wires: Wire[];
   config: Record<string, Record<string, string>>;
+  nodeConnections: Record<string, Record<string, string>>;
   workflowId: string | null;
   workflowName: string;
   inputForm: InputForm | null;
@@ -222,6 +224,7 @@ export function RunPanel({
       funcs,
       wires,
       config,
+      nodeConnections,
       input: parsed,
       workflowId: workflowId ?? undefined,
       workflowName,
@@ -237,6 +240,7 @@ export function RunPanel({
       funcs,
       wires,
       config,
+      nodeConnections,
       workflowId: workflowId ?? undefined,
       workflowName,
       runId: id,

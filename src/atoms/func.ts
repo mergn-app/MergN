@@ -68,5 +68,6 @@ export interface FuncNode {
   funcVersion: number;
   bindings: Record<string, Binding>;
   connections: Record<string, string>;
+  connectionIds?: Record<string, string>;
   dependsOn: string[];
 }

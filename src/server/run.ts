@@ -145,6 +145,7 @@ function toNode(
   f: RunFunc,
   wires: RunWire[],
   config: Record<string, string>,
+  nodeConnections: Record<string, string>,
 ): FuncNode {
   const bindings: Record<string, Binding> = {};
   for (const p of f.inputs) {
@@ -163,13 +164,20 @@ function toNode(
     };
   }
   const connections: Record<string, string> = {};
-  if (!f.pure) for (const r of f.requires) connections[r.name] = r.provider;
+  const connectionIds: Record<string, string> = {};
+  if (!f.pure)
+    for (const r of f.requires) {
+      connections[r.name] = r.provider;
+      const cid = nodeConnections[r.name];
+      if (cid) connectionIds[r.name] = cid;
+    }
   return {
     nodeId: f.id,
     funcId: f.id,
     funcVersion: f.version,
     bindings,
     connections,
+    connectionIds,
     dependsOn: [],
   };
 }
@@ -194,7 +202,8 @@ class CarrierConnectionsResolver implements ConnectionResolver {
     for (const [name, provider] of Object.entries(node.connections)) {
       const spec = registry.getProvider(spaceId, provider);
       if (!spec?.clientSource) continue;
-      let cred = await connections.getCredential(spaceId, provider);
+      const connId = node.connectionIds?.[name];
+      let cred = await connections.getCredential(spaceId, provider, connId);
       if (!cred && spec.env) {
         const envValue = process.env[spec.env];
         if (envValue !== undefined) cred = { value: envValue };
@@ -220,6 +229,7 @@ export async function runWorkflow(
   wires: RunWire[],
   input: Record<string, unknown>,
   config: Record<string, Record<string, string>> = {},
+  nodeConnections: Record<string, Record<string, string>> = {},
   onRecord?: (r: StepRecord) => Promise<void> | void,
   seed?: StepRecord[],
 ): Promise<StepRecord[]> {
@@ -227,7 +237,7 @@ export async function runWorkflow(
   const nodes: FuncNode[] = [];
   for (const f of funcs) {
     registry.register(toDef(f));
-    nodes.push(toNode(f, wires, config[f.id] ?? {}));
+    nodes.push(toNode(f, wires, config[f.id] ?? {}, nodeConnections[f.id] ?? {}));
   }
 
   const workflow: Workflow = { id: "run", nodes };
