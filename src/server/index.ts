@@ -12,6 +12,7 @@ import {
   createIdGenerator,
   tool,
   stepCountIs,
+  type ToolSet,
   type UIMessage,
   type UIMessageStreamWriter,
 } from "ai";
@@ -94,6 +95,71 @@ function leanFunc(f: {
     outputs: s?.properties ? Object.keys(s.properties) : (s?.required ?? []),
     requires: f.requires.map((r) => r.provider),
   };
+}
+
+const MAX_USER_MESSAGE_CHARS = 16000;
+const MAX_TOOL_RESULT_CHARS = 8000;
+
+function truncate(s: string, max: number): string {
+  return s.length <= max
+    ? s
+    : s.slice(0, max) +
+        `\n\n[truncated: ${s.length - max} more characters omitted]`;
+}
+
+function clampUserMessage(message: UIMessage): UIMessage {
+  if (!Array.isArray(message.parts)) return message;
+  let budget = MAX_USER_MESSAGE_CHARS;
+  let truncated = false;
+  const parts = message.parts.map((p) => {
+    if (p.type !== "text" || typeof p.text !== "string") return p;
+    if (p.text.length <= budget) {
+      budget -= p.text.length;
+      return p;
+    }
+    truncated = true;
+    const text = budget > 0 ? p.text.slice(0, budget) : "";
+    budget = 0;
+    return { ...p, text };
+  });
+  if (truncated) {
+    parts.push({
+      type: "text",
+      text: "\n\n[Note: your message was truncated because it exceeded the length limit.]",
+    } as (typeof parts)[number]);
+  }
+  return { ...message, parts };
+}
+
+function clampModelOutput(out: { type: string; value: unknown }): {
+  type: string;
+  value: unknown;
+} {
+  if (out.type === "text" && typeof out.value === "string") {
+    return { type: "text", value: truncate(out.value, MAX_TOOL_RESULT_CHARS) };
+  }
+  if (out.type === "json") {
+    const s = JSON.stringify(out.value ?? null);
+    if (s.length > MAX_TOOL_RESULT_CHARS) {
+      return { type: "text", value: truncate(s, MAX_TOOL_RESULT_CHARS) };
+    }
+  }
+  return out;
+}
+
+function withResultLimits(tools: ToolSet): ToolSet {
+  for (const t of Object.values(tools)) {
+    const prev = t.toModelOutput?.bind(t);
+    t.toModelOutput = (async (opts: { output: unknown }) => {
+      const base = prev
+        ? ((await prev(opts as never)) as { type: string; value: unknown })
+        : typeof opts.output === "string"
+          ? { type: "text", value: opts.output }
+          : { type: "json", value: opts.output ?? null };
+      return clampModelOutput(base);
+    }) as NonNullable<(typeof t)["toModelOutput"]>;
+  }
+  return tools;
 }
 
 const { store, vault } = createStorage();
@@ -487,13 +553,15 @@ app.delete("/api/chat/conversations/:id", async (c) => {
 app.post("/api/chat", async (c) => {
   const spaceId = c.get("spaceId");
   const userId = c.get("userId");
-  const { message, conversationId, workflowState } = await c.req.json<{
-    message: UIMessage;
-    conversationId: string;
-    workflowState?: string;
-  }>();
+  const { message: rawMessage, conversationId, workflowState } =
+    await c.req.json<{
+      message: UIMessage;
+      conversationId: string;
+      workflowState?: string;
+    }>();
   if (!/^[A-Za-z0-9_-]+$/.test(conversationId ?? ""))
     return c.json({ error: "bad conversation id" }, 400);
+  const message = clampUserMessage(rawMessage);
   const previous =
     (await chats.getConversation(spaceId, userId, conversationId))?.messages ??
     [];
@@ -520,7 +588,7 @@ app.post("/api/chat", async (c) => {
         system,
         messages: modelMessages,
         stopWhen: stepCountIs(20),
-        tools: makeTools(spaceId, writer, sessionId),
+        tools: withResultLimits(makeTools(spaceId, writer, sessionId)),
         providerOptions: {
           google: { thinkingConfig: { includeThoughts: true } },
         },
