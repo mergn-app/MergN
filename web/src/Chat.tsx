@@ -341,9 +341,7 @@ function ChatThread({
     [],
   );
 
-  const [chatError, setChatError] = useState<string | null>(
-    "You're sending messages a bit too fast. Please wait a moment and try again.",
-  );
+  const [chatError, setChatError] = useState<string | null>(null);
   const { messages, sendMessage, status } = useChat({
     id: conversationId,
     messages: initialMessages,
