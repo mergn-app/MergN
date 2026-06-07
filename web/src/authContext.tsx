@@ -7,6 +7,7 @@ import {
   useState,
 } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { useSession, signOut } from "./auth";
 import { AuthForm } from "./AuthForm";
@@ -74,6 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pendingAction = useRef<(() => void) | null>(null);
   const prevUserId = useRef<string | null>(null);
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   useEffect(() => {
     const id = user?.id ?? null;
@@ -85,10 +87,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (action) action();
     }
     if (!id && prevUserId.current) {
-      qc.invalidateQueries();
+      qc.clear();
+      void navigate({ to: "/", replace: true });
     }
     prevUserId.current = id;
-  }, [user, qc]);
+  }, [user, qc, navigate]);
 
   const requireAuth = useCallback(
     (action?: () => void) => {
@@ -110,6 +113,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const doSignOut = useCallback(() => {
+    writeCachedUser(null);
+    setCachedUser(null);
     void signOut();
   }, []);
 

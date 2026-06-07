@@ -4,11 +4,12 @@ import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { useSpaces, useCreateSpace } from "./queries";
 import { getSpace } from "./space";
 import { useAuth } from "./authContext";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export function SpaceSwitcher() {
   const current = getSpace();
   const navigate = useNavigate();
-  const { user, requireAuth } = useAuth();
+  const { user, pending, requireAuth } = useAuth();
   const { data: spaces = [] } = useSpaces();
   const createSpace = useCreateSpace();
   const [open, setOpen] = useState(false);
@@ -46,6 +47,8 @@ export function SpaceSwitcher() {
   const currentName =
     spaces.find((s) => s.id === current)?.name ??
     (user ? "Workspace" : "Sign in to start");
+
+  if (pending) return <Skeleton className="h-[30px] w-32 rounded-lg" />;
 
   return (
     <div ref={ref} className="relative">
