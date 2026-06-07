@@ -530,21 +530,23 @@ export function App({
       </div>
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
-        <div className="flex w-60 shrink-0 flex-col gap-2">
-          <div className="min-h-0 flex-1">
-            <WorkflowsPanel
-              currentId={workflowId}
-              onLoad={openWorkflow}
-              name={name}
-              onName={setName}
-              onSave={requestSave}
-              saving={saveMutation.isPending}
-              canSave={funcs.length > 0}
-              onNew={newWorkflow}
-            />
+        {user && (
+          <div className="flex w-60 shrink-0 flex-col gap-2">
+            <div className="min-h-0 flex-1">
+              <WorkflowsPanel
+                currentId={workflowId}
+                onLoad={openWorkflow}
+                name={name}
+                onName={setName}
+                onSave={requestSave}
+                saving={saveMutation.isPending}
+                canSave={funcs.length > 0}
+                onNew={newWorkflow}
+              />
+            </div>
+            <ConnectionsPanel missing={missingProviders} />
           </div>
-          <ConnectionsPanel missing={missingProviders} />
-        </div>
+        )}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/40 bg-card">
           <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
             <div className="flex rounded-lg border border-border/50 bg-muted p-0.5 text-xs">
