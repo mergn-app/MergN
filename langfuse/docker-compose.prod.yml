@@ -2,6 +2,9 @@ services:
   langfuse-worker:
     image: docker.io/langfuse/langfuse-worker:3
     restart: always
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     depends_on: &langfuse-depends-on
       postgres:
         condition: service_healthy
@@ -45,6 +48,9 @@ services:
   langfuse-web:
     image: docker.io/langfuse/langfuse:3
     restart: always
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     depends_on: *langfuse-depends-on
     ports:
       - "100.78.242.10:3200:3000"
@@ -62,7 +68,7 @@ services:
       LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
 
   clickhouse:
-    image: docker.io/clickhouse/clickhouse-server
+    image: docker.io/clickhouse/clickhouse-server:24.8
     restart: always
     user: "101:101"
     environment:
