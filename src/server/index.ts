@@ -21,7 +21,7 @@ import { z } from "zod";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { authorFunc } from "../agent/func-author";
-import { createWorkflowStore } from "./store";
+import { createWorkflowStore, type TriggerConfig, type WorkflowStore } from "./store";
 import { createRunStore, type RunDoc } from "./runs";
 import {
   createMemoryRateLimiter,
@@ -30,13 +30,18 @@ import {
 } from "./ratelimit";
 import { runWorkflow } from "./run";
 import { createRegistry, publicAuth } from "../providers/registry";
-import { assertSpace } from "../store/docstore";
+import { assertSpace, type DocStore } from "../store/docstore";
 import { createStorage } from "../store/factory";
 import { authorProvider, repairProvider } from "../agent/provider-author";
 import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
 import { authorInputForm } from "../agent/form-author";
 import { createConnections } from "./connections";
 import { createChatStore } from "./chat";
+import { connectNats, initSchedulerStream, type NatsCtx } from "./nats";
+import { createScheduler, type Scheduler } from "./scheduler";
+import { createSchedulerConsumer } from "./scheduler-consumer";
+import { createScheduleStore, type ScheduleStore } from "../store/schedules";
+import { createPollRunner } from "./poll-runner";
 import { resolveEgressHost } from "./egress";
 import { createOAuth } from "./oauth";
 import { auth, getSessionUser } from "./auth";
@@ -192,6 +197,7 @@ async function runSavedWorkflow(
   },
   input: Record<string, unknown>,
   trigger: string,
+  runId?: string,
 ): Promise<RunDoc> {
   const startedAt = new Date().toISOString();
   const records: StepRecord[] = [];
@@ -207,7 +213,7 @@ async function runSavedWorkflow(
     },
   );
   const run: RunDoc = {
-    id: randomUUID(),
+    id: runId ?? randomUUID(),
     workflowId: wf.id,
     workflowName: wf.name,
     trigger,
@@ -219,6 +225,84 @@ async function runSavedWorkflow(
   };
   await runs.saveRun(spaceId, run);
   return run;
+}
+
+async function recoverSchedules(
+  sched: Scheduler,
+  scheduleStore: ScheduleStore,
+  workflowStore: WorkflowStore,
+  docStore: DocStore,
+): Promise<number> {
+  let count = 0;
+  const spaceIds = await docStore.spaces();
+  for (const spaceId of spaceIds) {
+    const metas = await workflowStore.listWorkflows(spaceId);
+    const live = new Set(metas.map((m) => m.id));
+    for (const meta of metas) {
+      const wf = await workflowStore.getWorkflow(spaceId, meta.id);
+      if (!wf) continue;
+      try {
+        await sched.reconcile(spaceId, wf, { force: true });
+        if (wf.trigger?.kind === "schedule" || wf.trigger?.kind === "poll") count++;
+      } catch (e) {
+        console.error("recovery reconcile failed", spaceId, meta.id, e);
+      }
+    }
+    const jobs = await scheduleStore.listBySpace(spaceId);
+    for (const job of jobs) {
+      if (live.has(job.workflowId)) continue;
+      try {
+        await sched.cancelByWorkflow(spaceId, job.workflowId);
+      } catch (e) {
+        console.error("recovery cancel failed", spaceId, job.workflowId, e);
+      }
+    }
+  }
+  return count;
+}
+
+const scheduleStore = createScheduleStore(store);
+const pollRunner = createPollRunner({ registry, connections });
+
+const SCHEDULER_STREAM = process.env.WF_SCHEDULER_STREAM ?? "WF_SCHEDULER";
+const SCHEDULER_SUBJECT_PREFIX = "wf.scheduled";
+
+let nats: NatsCtx | null = null;
+try {
+  nats = await connectNats(process.env.NATS_URL ?? "");
+} catch (e) {
+  console.error("nats connect failed; scheduler disabled", e);
+}
+const scheduler = nats
+  ? createScheduler({ nats, scheduleStore, subjectPrefix: SCHEDULER_SUBJECT_PREFIX })
+  : null;
+
+let schedulerConsumer: { start(): Promise<void>; stop(): void } | null = null;
+if (nats) {
+  await initSchedulerStream(
+    nats,
+    SCHEDULER_STREAM,
+    SCHEDULER_SUBJECT_PREFIX,
+    Number(process.env.WF_SCHEDULER_REPLICAS) || 1,
+  );
+  schedulerConsumer = createSchedulerConsumer({
+    nats,
+    streamName: SCHEDULER_STREAM,
+    filterSubject: `${SCHEDULER_SUBJECT_PREFIX}.fired.>`,
+    durableName: "wf-scheduler-fire",
+    scheduleStore,
+    pollRunner,
+    workflows,
+    runSavedWorkflow,
+  });
+  await schedulerConsumer.start();
+  console.log("scheduler started");
+
+  void recoverSchedules(scheduler!, scheduleStore, workflows, store)
+    .then((n) => console.log(`scheduler recovery: reconciled ${n} scheduling workflow(s)`))
+    .catch((e) => console.error("scheduler recovery failed", e));
+} else {
+  console.log("scheduler disabled (no NATS_URL)");
 }
 
 function makeTools(
@@ -668,7 +752,7 @@ app.put("/api/workflows/:id", async (c) => {
     positions?: Record<string, { x: number; y: number }>;
     config?: Record<string, Record<string, string>>;
     nodeConnections?: Record<string, Record<string, string>>;
-    trigger?: { kind: "manual" | "webhook" | "schedule" | "poll" | "event" };
+    trigger?: TriggerConfig;
     inputForm?: unknown;
   }>();
   const wf = await workflows.saveWorkflow(c.get("spaceId"), {
@@ -682,11 +766,27 @@ app.put("/api/workflows/:id", async (c) => {
     trigger: body.trigger ?? { kind: "manual" },
     inputForm: body.inputForm,
   });
+  if (scheduler) {
+    try {
+      await scheduler.reconcile(c.get("spaceId"), wf);
+    } catch (e) {
+      console.error("schedule reconcile failed", e);
+    }
+  }
   return c.json(wf);
 });
 
 app.delete("/api/workflows/:id", async (c) => {
-  await workflows.deleteWorkflow(c.get("spaceId"), c.req.param("id"));
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  if (scheduler) {
+    try {
+      await scheduler.cancelByWorkflow(spaceId, id);
+    } catch (e) {
+      console.error("schedule cancel failed", e);
+    }
+  }
+  await workflows.deleteWorkflow(spaceId, id);
   return c.json({ ok: true });
 });
 
@@ -942,6 +1042,8 @@ serve({ fetch: app.fetch, port: Number(process.env.PORT) || 8787 }, (info) => {
 
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.on(signal, async () => {
+    schedulerConsumer?.stop();
+    if (nats) await nats.nc.close();
     await flushTraces();
     process.exit(0);
   });

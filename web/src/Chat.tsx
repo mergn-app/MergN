@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import type { AuthoredFunc, InputForm, Wire, WorkflowOp } from "./types";
+import type { AuthoredFunc, InputForm, TriggerConfig, Wire, WorkflowOp } from "./types";
 import { Sparkles, ArrowUpRight, Brain, Loader2, SquarePen, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
@@ -403,7 +403,7 @@ function ChatThread({
               name?: string;
               funcs?: AuthoredFunc[];
               wires?: Wire[];
-              trigger?: { kind: "manual" | "webhook" };
+              trigger?: TriggerConfig;
               inputForm?: InputForm;
             };
             if (dw.name)

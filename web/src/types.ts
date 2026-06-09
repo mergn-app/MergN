@@ -7,8 +7,32 @@ export interface Wire {
 
 export type TriggerKind = "manual" | "webhook" | "schedule" | "poll" | "event";
 
+export type IntervalUnit = "second" | "minute" | "hour" | "day";
+
+export interface ScheduleTriggerConfig {
+  mode: "cron" | "interval";
+  cron?: string;
+  intervalValue?: number;
+  intervalUnit?: IntervalUnit;
+  timezone?: string;
+}
+
+export interface PollTriggerConfig {
+  provider: string;
+  source?: string;
+  dependencies?: string[];
+  paramNames?: string[];
+  intervalValue: number;
+  intervalUnit: IntervalUnit;
+  connection?: string;
+  params?: Record<string, unknown>;
+}
+
 export interface TriggerConfig {
   kind: TriggerKind;
+  enabled?: boolean;
+  schedule?: ScheduleTriggerConfig;
+  poll?: PollTriggerConfig;
 }
 
 export type FormControl =

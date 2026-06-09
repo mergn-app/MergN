@@ -16,6 +16,7 @@ services:
       S3_FORCE_PATH_STYLE: "true"
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-minio12345}
+      NATS_URL: nats://nats:4222
     env_file:
       - .env
     depends_on:
@@ -23,10 +24,23 @@ services:
         condition: service_healthy
       createbuckets:
         condition: service_completed_successfully
+      nats:
+        condition: service_started
+    restart: unless-stopped
+
+  nats:
+    image: nats:2.14-alpine
+    command: ["-js", "-sd", "/data"]
+    ports:
+      - "${NATS_PORT:-4222}:4222"
+    volumes:
+      - nats-data:/data
     restart: unless-stopped
 
   mongo:
     image: mongo:7
+    ports:
+      - "27018:27017"
     volumes:
       - mongo-data:/data/db
     healthcheck:
@@ -59,3 +73,4 @@ services:
 volumes:
   mongo-data:
   minio-data:
+  nats-data:

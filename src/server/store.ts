@@ -2,8 +2,32 @@ import type { DocStore } from "../store/docstore";
 
 const COLLECTION = "workflows";
 
+export type IntervalUnit = "second" | "minute" | "hour" | "day";
+
+export interface ScheduleTriggerConfig {
+  mode: "cron" | "interval";
+  cron?: string;
+  intervalValue?: number;
+  intervalUnit?: IntervalUnit;
+  timezone?: string;
+}
+
+export interface PollTriggerConfig {
+  provider: string;
+  source?: string;
+  dependencies?: string[];
+  paramNames?: string[];
+  intervalValue: number;
+  intervalUnit: IntervalUnit;
+  connection?: string;
+  params?: Record<string, unknown>;
+}
+
 export interface TriggerConfig {
   kind: "manual" | "webhook" | "schedule" | "poll" | "event";
+  enabled?: boolean;
+  schedule?: ScheduleTriggerConfig;
+  poll?: PollTriggerConfig;
 }
 
 export interface SavedWorkflow {

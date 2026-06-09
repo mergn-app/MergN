@@ -190,6 +190,40 @@ export interface RemoteProviderCarrier {
   dependencies?: string[];
 }
 
+export function createRuntime(): Runtime {
+  const isRemote = process.env.CODE_RUNTIME === "remote";
+  if (process.env.NODE_ENV === "production" && !isRemote) {
+    throw new Error(
+      "refusing to execute code in-process in production: set CODE_RUNTIME=remote (sandboxed execution required)",
+    );
+  }
+  return isRemote ? new RemoteSandboxRuntime() : new LocalRuntime();
+}
+
+export async function buildProviderCarrier(
+  deps: RunDeps,
+  provider: string,
+  connectionId?: string,
+): Promise<RemoteProviderCarrier | null> {
+  const { spaceId, registry, connections } = deps;
+  const spec = registry.getProvider(spaceId, provider);
+  if (!spec?.clientSource) return null;
+  let cred = await connections.getCredential(spaceId, provider, connectionId);
+  if (!cred && spec.env) {
+    const envValue = process.env[spec.env];
+    if (envValue !== undefined) cred = { value: envValue };
+  }
+  const eg = resolveEgressHost(spec.sandbox, cred ?? undefined);
+  if (eg.error) throw new Error(`connection ${provider}: ${eg.error}`);
+  return {
+    __remoteProvider: true,
+    clientSource: spec.clientSource,
+    cred: cred ?? undefined,
+    egressDomain: eg.host,
+    dependencies: spec.dependencies ?? [],
+  };
+}
+
 // Resolves each declared connection to a carrier (clientSource + cred + egressDomain
 // + dependencies). The cred is resolved host-side (stored connection or env). Both runtimes
 // consume carriers: LocalRuntime builds the client on the host, RemoteSandboxRuntime
@@ -197,27 +231,14 @@ export interface RemoteProviderCarrier {
 class CarrierConnectionsResolver implements ConnectionResolver {
   constructor(private deps: RunDeps) {}
   async inject(node: FuncNode): Promise<Record<string, ProviderClient>> {
-    const { spaceId, registry, connections } = this.deps;
     const out: Record<string, ProviderClient> = {};
     for (const [name, provider] of Object.entries(node.connections)) {
-      const spec = registry.getProvider(spaceId, provider);
-      if (!spec?.clientSource) continue;
-      const connId = node.connectionIds?.[name];
-      let cred = await connections.getCredential(spaceId, provider, connId);
-      if (!cred && spec.env) {
-        const envValue = process.env[spec.env];
-        if (envValue !== undefined) cred = { value: envValue };
-      }
-      const eg = resolveEgressHost(spec.sandbox, cred ?? undefined);
-      if (eg.error) throw new Error(`connection ${provider}: ${eg.error}`);
-      const carrier: RemoteProviderCarrier = {
-        __remoteProvider: true,
-        clientSource: spec.clientSource,
-        cred: cred ?? undefined,
-        egressDomain: eg.host,
-        dependencies: spec.dependencies ?? [],
-      };
-      out[name] = carrier;
+      const carrier = await buildProviderCarrier(
+        this.deps,
+        provider,
+        node.connectionIds?.[name],
+      );
+      if (carrier) out[name] = carrier;
     }
     return out;
   }
@@ -245,15 +266,7 @@ export async function runWorkflow(
   const log = new NotifyingRunLog(onRecord);
   const scheduler = new Scheduler(workflow, log, queue);
 
-  const isRemote = process.env.CODE_RUNTIME === "remote";
-  if (process.env.NODE_ENV === "production" && !isRemote) {
-    throw new Error(
-      "refusing to execute workflow code in-process in production: set CODE_RUNTIME=remote (sandboxed execution required)",
-    );
-  }
-  const runtime: Runtime = isRemote
-    ? new RemoteSandboxRuntime()
-    : new LocalRuntime();
+  const runtime = createRuntime();
   const resolver: ConnectionResolver = new CarrierConnectionsResolver(deps);
 
   const worker = new Worker(
