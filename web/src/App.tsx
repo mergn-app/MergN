@@ -34,7 +34,11 @@ import {
   useConnections,
   useConversations,
   useDeleteConversation,
+  getWorkflowStatus,
+  pauseWorkflow,
+  resumeWorkflow,
   type ConnectionMeta,
+  type ActivationState,
 } from "./queries";
 import type {
   AuthoredFunc,
@@ -137,6 +141,9 @@ export function App({
     kind: "manual",
   });
   const [triggerOpen, setTriggerOpen] = useState(false);
+  const [activation, setActivation] = useState<ActivationState | "loading">("none");
+  const [actBusy, setActBusy] = useState(false);
+  const [statusVersion, setStatusVersion] = useState(0);
   const [inputForm, setInputForm] = useState<InputForm | null>(null);
   const [formSyncing, setFormSyncing] = useState(false);
   const [autoSave, setAutoSave] = useState(false);
@@ -288,6 +295,42 @@ export function App({
     setActiveTab("node");
   }, []);
 
+  const scheduling = trigger.kind === "schedule" || trigger.kind === "poll";
+
+  useEffect(() => {
+    if (!workflowId || !scheduling) {
+      setActivation("none");
+      return;
+    }
+    let cancelled = false;
+    getWorkflowStatus(workflowId)
+      .then((s) => !cancelled && setActivation(s.state))
+      .catch(() => !cancelled && setActivation("none"));
+    return () => {
+      cancelled = true;
+    };
+  }, [workflowId, scheduling, statusVersion]);
+
+  const toggleActivation = async () => {
+    if (!workflowId || actBusy) return;
+    setActBusy(true);
+    try {
+      if (activation === "active") {
+        await pauseWorkflow(workflowId);
+        setActivation("paused");
+      } else {
+        await save();
+        await resumeWorkflow(workflowId);
+        setActivation("active");
+      }
+    } catch {
+      setActivation(activation);
+    } finally {
+      setStatusVersion((v) => v + 1);
+      setActBusy(false);
+    }
+  };
+
   const onRepair = useCallback(
     (
       provider: string,
@@ -413,7 +456,13 @@ export function App({
         position:
           prevPos.get("trigger") ??
           positionsRef.current["trigger"] ?? { x: 40, y: 160 },
-        data: { fields: triggerFields, kind: trigger.kind },
+        data: {
+          fields: triggerFields,
+          kind: trigger.kind,
+          activation,
+          busy: actBusy,
+          onToggle: toggleActivation,
+        },
       };
       return [triggerNode, ...funcNodes];
     });
@@ -424,7 +473,9 @@ export function App({
     runStatus,
     connectedProviders,
     triggerFields,
-    trigger.kind,
+    trigger,
+    activation,
+    actBusy,
     setNodes,
   ]);
 
@@ -476,6 +527,7 @@ export function App({
     });
     setWorkflowId(id);
     setSavedTrigger(trigger);
+    setStatusVersion((v) => v + 1);
     if (spaceId) {
       void navigate({
         to: "/s/$spaceId/w/$workflowId",
@@ -764,6 +816,9 @@ export function App({
           onChange={setTrigger}
           workflowId={workflowId}
           dirty={trigger.kind !== savedTrigger.kind}
+          activation={activation}
+          busy={actBusy}
+          onToggleActivation={toggleActivation}
           onClose={() => setTriggerOpen(false)}
         />
       )}

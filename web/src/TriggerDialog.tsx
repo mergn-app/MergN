@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
+import type { ActivationState } from "./queries";
 import {
   Bell,
   Check,
@@ -82,16 +83,19 @@ function CopyChip({ value }: { value: string }) {
 function EnabledToggle({
   enabled,
   onToggle,
+  busy,
 }: {
   enabled: boolean;
   onToggle: (v: boolean) => void;
+  busy?: boolean;
 }) {
   return (
     <button
       type="button"
+      disabled={busy}
       onClick={() => onToggle(!enabled)}
       className={cn(
-        "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12px] transition-colors",
+        "flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[12px] transition-colors disabled:opacity-50",
         enabled
           ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
           : "border-border/60 bg-background-subtle text-muted-foreground",
@@ -249,12 +253,18 @@ export function TriggerDialog({
   onChange,
   workflowId,
   dirty,
+  activation,
+  busy,
+  onToggleActivation,
   onClose,
 }: {
   trigger: TriggerConfig;
   onChange: (t: TriggerConfig) => void;
   workflowId: string | null;
   dirty: boolean;
+  activation: ActivationState | "loading";
+  busy: boolean;
+  onToggleActivation: () => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -362,10 +372,17 @@ export function TriggerDialog({
               <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
                 {trigger.kind === "schedule" ? "Schedule" : "Polling"}
               </div>
-              <EnabledToggle
-                enabled={trigger.enabled !== false}
-                onToggle={(enabled) => onChange({ ...trigger, enabled })}
-              />
+              {activation === "loading" ? (
+                <span className="text-[11px] text-muted-foreground">…</span>
+              ) : activation === "none" ? (
+                <span className="text-[11px] text-amber-300/90">Save to activate</span>
+              ) : (
+                <EnabledToggle
+                  enabled={activation === "active"}
+                  onToggle={onToggleActivation}
+                  busy={busy}
+                />
+              )}
             </div>
 
             {trigger.kind === "schedule" ? (

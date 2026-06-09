@@ -3,7 +3,7 @@ import type { JsMsg } from "@nats-io/jetstream";
 import type { NatsCtx } from "./nats";
 import type { ScheduleStore } from "../store/schedules";
 import type { PollRunner } from "./poll-runner";
-import type { WorkflowStore } from "./store";
+import type { SavedWorkflow, WorkflowStore } from "./store";
 
 export type RunSavedWorkflow = (
   spaceId: string,
@@ -57,6 +57,58 @@ function formDefaults(inputForm: unknown): Record<string, unknown> {
   return out;
 }
 
+export interface FireDeps {
+  pollRunner: PollRunner;
+  scheduleStore: ScheduleStore;
+  runSavedWorkflow: RunSavedWorkflow;
+}
+
+export async function fireWorkflow(
+  deps: FireDeps,
+  spaceId: string,
+  wf: SavedWorkflow,
+  jobId: string,
+  triggerType: "schedule" | "poll",
+  cursor: string,
+): Promise<void> {
+  if (triggerType === "schedule") {
+    await deps.runSavedWorkflow(
+      spaceId,
+      wf,
+      { timestamp: new Date().toISOString(), ...formDefaults(wf.inputForm) },
+      "schedule",
+    );
+    return;
+  }
+
+  const poll = wf.trigger?.poll;
+  if (!poll?.source) return;
+
+  const result = await deps.pollRunner.run(
+    spaceId,
+    {
+      source: poll.source,
+      dependencies: poll.dependencies,
+      provider: poll.provider,
+      connection: poll.connection,
+      params: poll.params,
+    },
+    cursor,
+  );
+
+  for (const item of result.items) {
+    const itemHash = createHash("sha1")
+      .update(JSON.stringify(item))
+      .digest("hex")
+      .slice(0, 16);
+    await deps.runSavedWorkflow(spaceId, wf, item, "poll", `poll-${jobId}-${itemHash}`);
+  }
+
+  if (result.cursor && result.cursor !== cursor) {
+    await deps.scheduleStore.updateCursor(spaceId, jobId, result.cursor);
+  }
+}
+
 export function createSchedulerConsumer(deps: SchedulerConsumerDeps): SchedulerConsumer {
   const {
     nats,
@@ -85,47 +137,14 @@ export function createSchedulerConsumer(deps: SchedulerConsumerDeps): SchedulerC
       return;
     }
 
-    if (job.triggerType === "schedule") {
-      await runSavedWorkflow(
-        payload.spaceId,
-        wf,
-        { timestamp: new Date().toISOString(), ...formDefaults(wf.inputForm) },
-        "schedule",
-      );
-      msg.ack();
-      return;
-    }
-
-    const poll = wf.trigger?.poll;
-    if (!poll?.source) {
-      msg.ack();
-      return;
-    }
-
-    const result = await pollRunner.run(
+    await fireWorkflow(
+      { pollRunner, scheduleStore, runSavedWorkflow },
       payload.spaceId,
-      {
-        source: poll.source,
-        dependencies: poll.dependencies,
-        provider: poll.provider,
-        connection: poll.connection,
-        params: poll.params,
-      },
+      wf,
+      job.jobId,
+      job.triggerType,
       job.cursor,
     );
-
-    for (const item of result.items) {
-      const itemHash = createHash("sha1")
-        .update(JSON.stringify(item))
-        .digest("hex")
-        .slice(0, 16);
-      const runId = `poll-${job.jobId}-${itemHash}`;
-      await runSavedWorkflow(payload.spaceId, wf, item, "poll", runId);
-    }
-
-    if (result.cursor && result.cursor !== job.cursor) {
-      await scheduleStore.updateCursor(payload.spaceId, job.jobId, result.cursor);
-    }
     msg.ack();
   }
 

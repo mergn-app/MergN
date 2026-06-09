@@ -1,15 +1,22 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
 import { Zap } from "lucide-react";
+import { cn } from "@/lib/utils";
+import type { ActivationState } from "./queries";
 
 interface TriggerNodeData {
   fields: string[];
   kind?: string;
+  activation?: ActivationState | "loading";
+  busy?: boolean;
+  onToggle?: () => void;
 }
 
 export function TriggerNode({ data }: NodeProps) {
   const { t } = useTranslation();
   const d = data as unknown as TriggerNodeData;
+  const showToggle =
+    (d.activation === "active" || d.activation === "paused") && !!d.onToggle;
   return (
     <div className="w-56 rounded-3xl border border-tone-amber/40 bg-tone-amber/5 p-1">
       <div className="overflow-hidden rounded-[1.2rem] bg-background ring-1 ring-tone-amber/20">
@@ -25,6 +32,32 @@ export function TriggerNode({ data }: NodeProps) {
               {t(`trigger.kind.${d.kind ?? "manual"}`)}
             </p>
           </div>
+          {showToggle && (
+            <button
+              type="button"
+              disabled={d.busy}
+              onClick={(e) => {
+                e.stopPropagation();
+                d.onToggle?.();
+              }}
+              className={cn(
+                "flex h-fit items-center gap-1.5 self-center rounded-lg border px-2 py-1 text-[11px] transition-colors disabled:opacity-50",
+                d.activation === "active"
+                  ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                  : "border-border/60 bg-background-subtle text-muted-foreground",
+              )}
+            >
+              <span
+                className={cn(
+                  "size-2 rounded-full",
+                  d.activation === "active"
+                    ? "bg-emerald-400"
+                    : "bg-muted-foreground/50",
+                )}
+              />
+              {d.activation === "active" ? "Active" : "Paused"}
+            </button>
+          )}
         </div>
 
         {d.fields.length > 0 && (

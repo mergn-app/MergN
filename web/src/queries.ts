@@ -57,6 +57,20 @@ async function json<T>(url: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+export type ActivationState = "active" | "paused" | "none";
+
+export function getWorkflowStatus(id: string): Promise<{ state: ActivationState }> {
+  return json(`/api/workflows/${id}/status`);
+}
+
+export function pauseWorkflow(id: string): Promise<{ ok: boolean }> {
+  return json(`/api/workflows/${id}/pause`, { method: "POST" });
+}
+
+export function resumeWorkflow(id: string): Promise<{ ok: boolean }> {
+  return json(`/api/workflows/${id}/resume`, { method: "POST" });
+}
+
 export function useWorkflows() {
   const { user } = useAuth();
   return useQuery({

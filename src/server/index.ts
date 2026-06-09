@@ -38,8 +38,8 @@ import { authorInputForm } from "../agent/form-author";
 import { createConnections } from "./connections";
 import { createChatStore } from "./chat";
 import { connectNats, initSchedulerStream, type NatsCtx } from "./nats";
-import { createScheduler, type Scheduler } from "./scheduler";
-import { createSchedulerConsumer } from "./scheduler-consumer";
+import { createScheduler, missingRequiredParams, type Scheduler } from "./scheduler";
+import { createSchedulerConsumer, fireWorkflow } from "./scheduler-consumer";
 import { createScheduleStore, type ScheduleStore } from "../store/schedules";
 import { createPollRunner } from "./poll-runner";
 import { resolveEgressHost } from "./egress";
@@ -788,6 +788,46 @@ app.delete("/api/workflows/:id", async (c) => {
   }
   await workflows.deleteWorkflow(spaceId, id);
   return c.json({ ok: true });
+});
+
+app.get("/api/workflows/:id/status", async (c) => {
+  if (!scheduler) return c.json({ state: "none" });
+  return c.json(await scheduler.status(c.get("spaceId"), c.req.param("id")));
+});
+
+app.post("/api/workflows/:id/pause", async (c) => {
+  if (!scheduler) return c.json({ error: "scheduler disabled" }, 503);
+  await scheduler.pause(c.get("spaceId"), c.req.param("id"));
+  return c.json({ ok: true, state: "paused" });
+});
+
+app.post("/api/workflows/:id/resume", async (c) => {
+  if (!scheduler) return c.json({ error: "scheduler disabled" }, 503);
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const wf = await workflows.getWorkflow(spaceId, id);
+  if (wf?.trigger?.kind === "poll" && missingRequiredParams(wf.trigger.poll)) {
+    return c.json({ error: "missing required parameters", state: "paused" }, 400);
+  }
+  await scheduler.resume(spaceId, id);
+  if (wf && wf.trigger?.kind === "poll") {
+    const job = (await scheduleStore.findByWorkflow(spaceId, id))[0];
+    if (job) {
+      try {
+        await fireWorkflow(
+          { pollRunner, scheduleStore, runSavedWorkflow },
+          spaceId,
+          wf,
+          job.jobId,
+          "poll",
+          job.cursor,
+        );
+      } catch (e) {
+        console.error("resume seed poll failed", e);
+      }
+    }
+  }
+  return c.json({ ok: true, state: "active" });
 });
 
 app.post("/api/run", async (c) => {
