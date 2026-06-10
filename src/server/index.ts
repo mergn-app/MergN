@@ -1009,6 +1009,22 @@ app.get("/api/providers/:id/auth", async (c) => {
   return c.json(publicAuth(spec));
 });
 
+app.get("/api/providers/:id/source", async (c) => {
+  const spec = registry.getProvider(c.get("spaceId"), c.req.param("id"));
+  if (!spec) return c.json({ error: "provider not found" }, 404);
+  return c.json({
+    id: spec.id,
+    name: spec.name,
+    clientSource: spec.clientSource ?? "",
+    dependencies: spec.dependencies ?? [],
+    aiWritten: spec.aiWritten ?? false,
+    credentialFields: (spec.credential?.fields ?? []).map((f) => ({
+      name: f.name,
+      label: f.label,
+    })),
+  });
+});
+
 app.get("/api/providers/:id/oauth-config", async (c) => {
   return c.json(await oauth.oauthStatus(c.get("spaceId"), c.req.param("id")));
 });

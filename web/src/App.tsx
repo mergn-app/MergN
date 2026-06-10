@@ -772,7 +772,7 @@ export function App({
                 onNew={newWorkflow}
               />
             </div>
-            <ConnectionsPanel missing={missingProviders} />
+            <ConnectionsPanel missing={missingProviders} theme={theme} />
           </div>
         )}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/40 bg-card">

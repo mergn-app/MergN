@@ -88,6 +88,8 @@
     "empty": "No connections yet.",
     "connected": "connected",
     "connect": "connect",
+    "viewCode": "View client code",
+    "noCode": "No client code for this provider.",
     "disconnect": "disconnect",
     "needsConnection": "needs connection",
     "addAccount": "Add account",

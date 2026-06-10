@@ -114,6 +114,19 @@ export function fetchWorkflow(id: string): Promise<SavedWorkflow> {
   return json<SavedWorkflow>(`/api/workflows/${id}`);
 }
 
+export interface ProviderSource {
+  id: string;
+  name: string;
+  clientSource: string;
+  dependencies: string[];
+  aiWritten: boolean;
+  credentialFields: { name: string; label: string }[];
+}
+
+export function fetchProviderSource(id: string): Promise<ProviderSource> {
+  return json<ProviderSource>(`/api/providers/${id}/source`);
+}
+
 export interface SpaceMeta {
   id: string;
   name: string;

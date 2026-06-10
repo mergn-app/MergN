@@ -88,6 +88,8 @@
     "empty": "Henüz bağlantı yok.",
     "connected": "bağlı",
     "connect": "bağlan",
+    "viewCode": "İstemci kodunu gör",
+    "noCode": "Bu sağlayıcının istemci kodu yok.",
     "disconnect": "bağlantıyı kes",
     "needsConnection": "bağlantı gerekli",
     "addAccount": "Hesap ekle",
