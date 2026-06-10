@@ -39,7 +39,11 @@ export const planZ = z.object({
         .positive()
         .optional()
         .describe("the count when mode is 'interval', e.g. 15"),
-      intervalUnit: z.enum(["second", "minute", "hour", "day"]).optional(),
+      intervalUnit: z
+        .enum(["second", "minute", "hour", "day"])
+        .describe(
+          "the unit when mode is 'interval' — ALWAYS set it (second/minute/hour/day) to match the user's wording. For cron mode it is ignored; just use 'minute'.",
+        ),
     })
     .optional()
     .describe(
@@ -105,7 +109,7 @@ const PLAN_SYSTEM = [
   "A workflow has a built-in 'trigger' node (the run-time input) and typed steps wired together. A step input comes EITHER from a trigger field OR from an upstream step's output.",
   "Give the workflow a short human name (3-6 words) that says what it does.",
   "Pick triggerKind: 'webhook' if the goal reacts to an external event/HTTP call ('when a payment succeeds', 'on a new issue'); 'schedule' if it should run on a timer or at specific times ('every 15 seconds', 'every 5 minutes', 'daily at 9am', 'her gün', 'her X dakikada bir', 'periodically'); otherwise 'manual'.",
-  "When triggerKind is 'schedule', ALSO fill `schedule`: for 'every N <unit>' use mode 'interval' with intervalValue=N and intervalUnit (second|minute|hour|day); for specific clock times use mode 'cron' with a 5-field cron in the user's LOCAL wall-clock time and set `timezone` to the IANA zone when they name one — do NOT convert the time to UTC yourself. Examples: 'every day at 9am' => cron '0 9 * * *'; 'her cuma 19:21 Türkiye saati' => cron '21 19 * * 5', timezone 'Europe/Istanbul'.",
+  "When triggerKind is 'schedule', ALSO fill `schedule`: for 'every N <unit>' use mode 'interval' with intervalValue=N AND ALWAYS intervalUnit — match the user's wording exactly: saniye/seconds=second, dakika/minutes=minute, saat/hours=hour, gün/days=day (e.g. '30 saniyede bir' => intervalValue=30, intervalUnit='second'). Never omit intervalUnit for interval mode. For specific clock times use mode 'cron' with a 5-field cron in the user's LOCAL wall-clock time and set `timezone` to the IANA zone when they name one — do NOT convert the time to UTC yourself. Examples: 'every day at 9am' => cron '0 9 * * *'; 'her cuma 19:21 Türkiye saati' => cron '21 19 * * 5', timezone 'Europe/Istanbul'.",
   "Use triggerKind 'poll' when the goal is to WATCH a service for NEW items and act on each ('when a new Discord message arrives', 'watch a channel for new messages', 'new emails'). Such services CANNOT webhook here. Fill `poll` (provider, a clear intent of what counts as new, intervalValue+intervalUnit). The steps then receive EACH new item as the trigger input — make the steps read that item's fields (e.g. input.content). Do NOT add a step that 'lists' or 'fetches' messages; the poll itself fetches new items.",
   "For each step give: id (snake_case, e.g. create_customer), title, summary, effectful (true if it calls an external service), provider (for effectful steps, e.g. 'stripe','slack'), a DETAILED intent (say exactly what values the step needs and what it returns — e.g. a Slack message needs a channel and the text), outputs (its output field names), and deps (ONLY the inputs that come from an UPSTREAM step's output: input name, fromStep id, fromOutput field).",
   "Inputs NOT listed in deps are taken from the user's trigger input automatically by name. Use consistent field names across steps so they wire up.",

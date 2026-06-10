@@ -88,15 +88,15 @@ function paramsFromTrigger(
         timezone: cfg.timezone,
       };
     }
-    if (cfg.intervalValue === undefined || !cfg.intervalUnit) {
-      throw new Error("schedule interval trigger missing interval");
+    if (cfg.intervalValue === undefined) {
+      throw new Error("schedule interval trigger missing interval value");
     }
     return {
       spaceId,
       workflowId,
       triggerId: TRIGGER_ID,
       triggerType: "schedule",
-      spec: `@every ${intervalToSeconds(cfg.intervalValue, cfg.intervalUnit)}s`,
+      spec: `@every ${intervalToSeconds(cfg.intervalValue, cfg.intervalUnit ?? "second")}s`,
     };
   }
 

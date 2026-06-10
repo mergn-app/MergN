@@ -88,7 +88,6 @@
     "empty": "Henüz bağlantı yok.",
     "connected": "bağlı",
     "connect": "bağlan",
-    "viewCode": "İstemci kodunu gör",
     "noCode": "Bu sağlayıcının istemci kodu yok.",
     "disconnect": "bağlantıyı kes",
     "needsConnection": "bağlantı gerekli",
@@ -151,8 +150,10 @@
       "input": "girdi",
       "state": "durum",
       "runs": "çalıştırmalar",
-      "code": "kod"
-    }
+      "code": "kod",
+      "provider": "sağlayıcı"
+    },
+    "noProviders": "Bu workflow sağlayıcı kullanmıyor."
   },
   "node": {
     "selectStep": "Detaylarını, ayarlarını ve üretilen kodu görmek için bir adım seç.",
@@ -200,6 +201,9 @@
   "trigger": {
     "title": "Tetikleyici",
     "subtitle": "bu akış nasıl başlar",
+    "nextRun": "Sonraki",
+    "ran": "Çalıştı",
+    "cronEveryDay": "Her gün {{time}}",
     "endpoint": "Uç nokta",
     "webhookInfo": "Buraya bir POST gönder; JSON gövdesi tetikleyici çıktısı olur.",
     "saveFirst": "Webhook URL'sini almak için önce akışı kaydet.",

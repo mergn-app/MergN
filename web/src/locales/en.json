@@ -88,7 +88,6 @@
     "empty": "No connections yet.",
     "connected": "connected",
     "connect": "connect",
-    "viewCode": "View client code",
     "noCode": "No client code for this provider.",
     "disconnect": "disconnect",
     "needsConnection": "needs connection",
@@ -151,8 +150,10 @@
       "input": "input",
       "state": "state",
       "runs": "runs",
-      "code": "code"
-    }
+      "code": "code",
+      "provider": "provider"
+    },
+    "noProviders": "This workflow uses no providers."
   },
   "node": {
     "selectStep": "Select a step to see its details, settings, and generated code.",
@@ -200,6 +201,9 @@
   "trigger": {
     "title": "Trigger",
     "subtitle": "how this workflow starts",
+    "nextRun": "Next run",
+    "ran": "Ran",
+    "cronEveryDay": "Every day {{time}}",
     "endpoint": "Endpoint",
     "webhookInfo": "Send a POST here; the JSON body becomes the trigger output.",
     "saveFirst": "Save the workflow first to get its webhook URL.",

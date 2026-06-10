@@ -16,7 +16,13 @@ import {
 } from "@/components/ui/select";
 import { spaceHeaders } from "./space";
 import { useAuth } from "./authContext";
-import { useRuns, fetchRun, generateInputForm } from "./queries";
+import {
+  useRuns,
+  fetchRun,
+  generateInputForm,
+  fetchProviderSource,
+  type ProviderSource,
+} from "./queries";
 import { CodeBlock } from "./CodeBlock";
 
 interface RunRecord {
@@ -111,8 +117,13 @@ export function RunPanel({
   const [error, setError] = useState<string | null>(null);
   const [loadingRun, setLoadingRun] = useState<string | null>(null);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
-  const [tab, setTab] = useState<"input" | "state" | "runs" | "code">("input");
+  const [tab, setTab] = useState<
+    "input" | "state" | "runs" | "code" | "provider"
+  >("input");
   const [nodeView, setNodeView] = useState<string>("");
+  const [provView, setProvView] = useState<string>("");
+  const [provSource, setProvSource] = useState<ProviderSource | null>(null);
+  const [provLoading, setProvLoading] = useState(false);
   const [formValues, setFormValues] = useState<Record<string, unknown>>(() => ({
     ...variables,
   }));
@@ -194,6 +205,27 @@ export function RunPanel({
   };
 
   const useForm = !!inputForm && inputForm.fields.length > 0;
+
+  const providers = [
+    ...new Set(funcs.flatMap((f) => f.requires.map((r) => r.provider))),
+  ];
+  const activeProv =
+    provView && providers.includes(provView) ? provView : (providers[0] ?? "");
+  useEffect(() => {
+    if (!activeProv) {
+      setProvSource(null);
+      return;
+    }
+    let cancelled = false;
+    setProvLoading(true);
+    fetchProviderSource(activeProv)
+      .then((d) => !cancelled && setProvSource(d))
+      .catch(() => !cancelled && setProvSource(null))
+      .finally(() => !cancelled && setProvLoading(false));
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProv]);
 
 
   const formNames = new Set((inputForm?.fields ?? []).map((f) => f.name));
@@ -408,7 +440,8 @@ export function RunPanel({
         )}
 
         <div className="flex rounded-lg border border-border/50 bg-muted/50 p-0.5 text-xs">
-          {(["input", "state", "runs", "code"] as const).map((tabKey) => (
+          {(["input", "state", "runs", "code", "provider"] as const).map(
+            (tabKey) => (
             <button
               key={tabKey}
               onClick={() => setTab(tabKey)}
@@ -810,6 +843,76 @@ export function RunPanel({
                   wrap={false}
                   fill
                 />
+              </div>
+            </>
+          )}
+        </div>
+      ) : tab === "provider" ? (
+        <div className="flex min-h-0 flex-1 flex-col px-3 pb-3">
+          {providers.length === 0 ? (
+            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+              {t("run.noProviders")}
+            </div>
+          ) : (
+            <>
+              <div className="mb-2 flex items-center gap-2">
+                <Select value={activeProv} onValueChange={setProvView}>
+                  <SelectTrigger
+                    size="sm"
+                    className="h-7 w-auto min-w-[150px] bg-background text-xs"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {providers.map((p) => (
+                      <SelectItem key={p} value={p}>
+                        {p}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {provSource?.clientSource && (
+                  <button
+                    onClick={() =>
+                      navigator.clipboard?.writeText(provSource.clientSource)
+                    }
+                    className="ml-auto rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                  >
+                    {t("run.copy")}
+                  </button>
+                )}
+              </div>
+              {provSource?.credentialFields.length ? (
+                <div className="mb-2 flex flex-wrap gap-1.5">
+                  {provSource.credentialFields.map((f) => (
+                    <span
+                      key={f.name}
+                      title={f.label}
+                      className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                    >
+                      cred.{f.name}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
+              <div className="min-h-0 flex-1">
+                {provLoading ? (
+                  <div className="flex h-full items-center justify-center">
+                    <Loader2 className="h-4 w-4 animate-spin text-muted-foreground/70" />
+                  </div>
+                ) : provSource?.clientSource ? (
+                  <CodeBlock
+                    source={provSource.clientSource}
+                    name={activeProv}
+                    theme={theme}
+                    wrap={false}
+                    fill
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                    {t("connections.noCode")}
+                  </div>
+                )}
               </div>
             </>
           )}

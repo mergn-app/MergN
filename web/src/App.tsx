@@ -25,10 +25,12 @@ import { WorkflowsPanel } from "./WorkflowsPanel";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { ConnectionsPanel } from "./ConnectionsPanel";
+import { triggerIntervalMs } from "./schedule-display";
 import { ChatHistory } from "./ChatHistory";
 import { RunPanel } from "./RunPanel";
 import {
   useSaveWorkflow,
+  useRunStream,
   fetchWorkflow,
   generateInputForm,
   useConnections,
@@ -341,6 +343,23 @@ export function App({
 
   const scheduling = trigger.kind === "schedule" || trigger.kind === "poll";
 
+  const [fireAnchor, setFireAnchor] = useState<number | null>(null);
+  const [firePulse, setFirePulse] = useState(0);
+  useRunStream(workflowId, trigger.kind !== "manual", () => {
+    setFireAnchor(Date.now());
+    setFirePulse((p) => p + 1);
+  });
+  useEffect(() => {
+    setFireAnchor(scheduling && activation === "active" ? Date.now() : null);
+  }, [scheduling, activation, workflowId]);
+  const [justFired, setJustFired] = useState(false);
+  useEffect(() => {
+    if (firePulse === 0) return;
+    setJustFired(true);
+    const tm = setTimeout(() => setJustFired(false), 1500);
+    return () => clearTimeout(tm);
+  }, [firePulse]);
+
   useEffect(() => {
     if (!workflowId || !scheduling) {
       setActivation("none");
@@ -546,6 +565,21 @@ export function App({
           activation,
           busy: actBusy,
           onToggle: toggleActivation,
+          nextFireAt:
+            scheduling && activation === "active" && fireAnchor != null
+              ? (() => {
+                  const ms = triggerIntervalMs(trigger);
+                  return ms ? fireAnchor + ms : undefined;
+                })()
+              : undefined,
+          cron:
+            scheduling &&
+            activation === "active" &&
+            trigger.kind === "schedule" &&
+            trigger.schedule?.mode === "cron"
+              ? trigger.schedule.cron
+              : undefined,
+          fired: scheduling && activation === "active" && justFired,
         },
       };
       return [triggerNode, ...funcNodes];
@@ -560,6 +594,9 @@ export function App({
     trigger,
     activation,
     actBusy,
+    scheduling,
+    fireAnchor,
+    justFired,
     setNodes,
   ]);
 
@@ -772,7 +809,7 @@ export function App({
                 onNew={newWorkflow}
               />
             </div>
-            <ConnectionsPanel missing={missingProviders} theme={theme} />
+            <ConnectionsPanel missing={missingProviders} />
           </div>
         )}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/40 bg-card">

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import type { UIMessage } from "ai";
 import type { AuthoredFunc, InputForm, TriggerConfig, Wire } from "./types";
 import { getSpace, spaceHeaders } from "./space";
@@ -115,11 +116,7 @@ export function fetchWorkflow(id: string): Promise<SavedWorkflow> {
 }
 
 export interface ProviderSource {
-  id: string;
-  name: string;
   clientSource: string;
-  dependencies: string[];
-  aiWritten: boolean;
   credentialFields: { name: string; label: string }[];
 }
 
@@ -358,6 +355,43 @@ export interface RunDoc {
   records: RunRecord[];
   startedAt: string;
   finishedAt: string;
+}
+
+export function useRunStream(
+  workflowId: string | null,
+  enabled: boolean,
+  onEvent?: () => void,
+) {
+  const qc = useQueryClient();
+  const { user } = useAuth();
+  const cb = useRef(onEvent);
+  cb.current = onEvent;
+  useEffect(() => {
+    if (!workflowId || !user || !enabled) return;
+    const ctrl = new AbortController();
+    void (async () => {
+      try {
+        const res = await fetch(
+          `/api/runs/stream?workflow=${encodeURIComponent(workflowId)}`,
+          { headers: spaceHeaders(), signal: ctrl.signal },
+        );
+        if (!res.body) return;
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          if (decoder.decode(value).includes('"id"')) {
+            qc.invalidateQueries({ queryKey: ["runs", workflowId] });
+            cb.current?.();
+          }
+        }
+      } catch {
+        void 0;
+      }
+    })();
+    return () => ctrl.abort();
+  }, [workflowId, user, enabled, qc]);
 }
 
 export function useRuns(workflowId: string | null) {

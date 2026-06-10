@@ -29,6 +29,7 @@ import {
   type RateLimitRule,
 } from "./ratelimit";
 import { runWorkflow } from "./run";
+import { emitRun, onRun } from "./run-events";
 import { createRegistry, publicAuth } from "../providers/registry";
 import { assertSpace, type DocStore } from "../store/docstore";
 import { createStorage } from "../store/factory";
@@ -226,6 +227,12 @@ async function runSavedWorkflow(
     finishedAt: new Date().toISOString(),
   };
   await runs.saveRun(spaceId, run);
+  emitRun(spaceId, {
+    id: run.id,
+    workflowId: run.workflowId,
+    status: run.status,
+    trigger: run.trigger,
+  });
   return run;
 }
 
@@ -885,16 +892,25 @@ app.post("/api/run", async (c) => {
     );
     await stream.writeSSE({ data: "[DONE]" });
     if (body.workflowId) {
+      const status = records.some((r) => r.status === "failed")
+        ? "failed"
+        : "done";
       await runs.saveRun(spaceId, {
         id: runDocId,
         workflowId: body.workflowId,
         workflowName: body.workflowName ?? "untitled",
         trigger: body.resumeRunId ? "resume" : "manual",
-        status: records.some((r) => r.status === "failed") ? "failed" : "done",
+        status,
         input,
         records,
         startedAt,
         finishedAt: new Date().toISOString(),
+      });
+      emitRun(spaceId, {
+        id: runDocId,
+        workflowId: body.workflowId,
+        status,
+        trigger: body.resumeRunId ? "resume" : "manual",
       });
     }
   });
@@ -937,6 +953,27 @@ app.post("/api/input-form", async (c) => {
 app.get("/api/runs", async (c) => {
   const workflowId = c.req.query("workflow") || undefined;
   return c.json(await runs.listRuns(c.get("spaceId"), workflowId));
+});
+
+app.get("/api/runs/stream", async (c) => {
+  const spaceId = c.get("spaceId");
+  const workflowId = c.req.query("workflow");
+  if (!workflowId) return c.json({ error: "workflow required" }, 400);
+  return streamSSE(c, async (stream) => {
+    const off = onRun(spaceId, workflowId, (event) => {
+      void stream.writeSSE({ data: JSON.stringify(event) });
+    });
+    const ping = setInterval(() => {
+      void stream.writeSSE({ data: '{"type":"ping"}' });
+    }, 25000);
+    await new Promise<void>((resolve) => {
+      stream.onAbort(() => {
+        off();
+        clearInterval(ping);
+        resolve();
+      });
+    });
+  });
 });
 
 app.get("/api/runs/:id", async (c) => {
@@ -1013,11 +1050,7 @@ app.get("/api/providers/:id/source", async (c) => {
   const spec = registry.getProvider(c.get("spaceId"), c.req.param("id"));
   if (!spec) return c.json({ error: "provider not found" }, 404);
   return c.json({
-    id: spec.id,
-    name: spec.name,
     clientSource: spec.clientSource ?? "",
-    dependencies: spec.dependencies ?? [],
-    aiWritten: spec.aiWritten ?? false,
     credentialFields: (spec.credential?.fields ?? []).map((f) => ({
       name: f.name,
       label: f.label,
