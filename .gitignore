@@ -7,3 +7,4 @@ coverage/
 data/
 .DS_Store
 deploy/flowbaker/
+docker-compose.prod.yml

@@ -34,7 +34,9 @@ jobs:
           LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
           LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
-        run: docker compose -f /opt/workflow-builder/docker-compose.yml up -d --build
+        run: |
+          cp /opt/workflow-builder/docker-compose.yml docker-compose.prod.yml
+          docker compose -f docker-compose.prod.yml up -d --build
 
       - name: Prune dangling images
         run: docker image prune -f
