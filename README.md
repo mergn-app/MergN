@@ -81,7 +81,7 @@ and set in `.env`: `NATS_URL=nats://localhost:4222`
 docker run -d --name mergn-mongo -p 27017:27017 mongo:7
 ```
 
-`.env`: `STORE_DRIVER=mongo` and `MONGO_URL=mongodb://localhost:27017`
+and set in `.env`: `STORE_DRIVER=mongo` and `MONGO_URL=mongodb://localhost:27017`
 
 ## Start Native (in separated two terminals):
 
