@@ -417,6 +417,21 @@ export function saveLlmSettings(body: {
   });
 }
 
+export interface LlmProbe {
+  provider: string;
+  model: string;
+  local: boolean;
+  structured: boolean;
+  accurate: boolean;
+  latencyMs: number;
+  error?: string;
+  weak: boolean;
+}
+
+export function probeLlm(): Promise<LlmProbe> {
+  return json<LlmProbe>("/api/settings/llm/probe", { method: "POST" });
+}
+
 export function useLlmSettings() {
   const { user } = useAuth();
   return useQuery({

@@ -1,10 +1,10 @@
-import { generateText, Output } from "ai";
-import { getModel } from "./model";
 import { z } from "zod";
+import { genObject } from "./generate";
 import type { Registry } from "../providers/registry";
 import { authorProvider } from "./provider-author";
 import { authorInputForm } from "./form-author";
 import { authorPollSource } from "./poll-author";
+import { reconcileWiring } from "./wiring-repair";
 import { trace, type AgentMeta } from "../observability";
 
 export const planZ = z.object({
@@ -124,14 +124,12 @@ export async function planWorkflow(
   goal: string,
   meta?: AgentMeta,
 ): Promise<Plan> {
-  const { output } = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: planZ }),
+  return genObject({
+    schema: planZ,
     system: PLAN_SYSTEM,
     prompt: goal,
-    experimental_telemetry: trace("plan-workflow", meta),
+    telemetry: trace("plan-workflow", meta),
   });
-  return output;
 }
 
 const stepBodyZ = z.object({
@@ -173,11 +171,10 @@ async function authorStepBody(
   triggerHint?: string,
 ): Promise<z.infer<typeof stepBodyZ>> {
   const upstream = step.deps.map((d) => d.input);
-  const { output } = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: stepBodyZ }),
+  return genObject({
+    schema: stepBodyZ,
     system: BODY_SYSTEM,
-    experimental_telemetry: trace("author-step-body", { ...meta, step: step.id }),
+    telemetry: trace("author-step-body", { ...meta, step: step.id }),
     prompt: [
       `Step: ${step.intent}`,
       `Required output fields: ${step.outputs.join(", ") || "(none)"}`,
@@ -192,7 +189,57 @@ async function authorStepBody(
       .filter(Boolean)
       .join("\n\n"),
   });
-  return output;
+}
+
+function splitTopLevel(s: string): string[] {
+  const out: string[] = [];
+  let depth = 0;
+  let cur = "";
+  for (const ch of s) {
+    if (ch === "{" || ch === "[" || ch === "(") depth++;
+    else if (ch === "}" || ch === "]" || ch === ")") depth--;
+    if (ch === "," && depth === 0) {
+      out.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  if (cur.trim()) out.push(cur);
+  return out;
+}
+
+// Derives the output field names a step actually returns by reading the top-level
+// keys of its `return { ... }` object(s). The planner's declared `step.outputs`
+// is unreliable on weak models (often empty), so the real return shape — which is
+// what downstream steps read and what the wiring repair must bridge from — is
+// extracted from the authored body instead.
+function extractOutputs(src: string): string[] {
+  const keys = new Set<string>();
+  const re = /\breturn\b/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(src))) {
+    let j = m.index + 6;
+    while (j < src.length && /\s/.test(src[j])) j++;
+    if (src[j] !== "{") continue;
+    let depth = 0;
+    let k = j;
+    for (; k < src.length; k++) {
+      if (src[k] === "{") depth++;
+      else if (src[k] === "}") {
+        depth--;
+        if (depth === 0) {
+          k++;
+          break;
+        }
+      }
+    }
+    const inner = src.slice(j + 1, k - 1);
+    for (const part of splitTopLevel(inner)) {
+      const raw = part.split(":")[0].trim().replace(/^\.\.\./, "").trim();
+      const km = raw.match(/^["'`]?([A-Za-z_$][\w$]*)["'`]?$/);
+      if (km) keys.add(km[1]);
+    }
+  }
+  return [...keys];
 }
 
 function extractInputs(src: string): string[] {
@@ -213,7 +260,7 @@ function extractInputs(src: string): string[] {
 }
 
 export type DesignProgress = (ev: {
-  kind: "provider" | "step" | "form" | "poll";
+  kind: "provider" | "step" | "form" | "poll" | "wire";
   id: string;
   label: string;
   status: "active" | "done";
@@ -301,6 +348,11 @@ export async function designWorkflow(
       triggerHint,
     );
     const usedInputs = extractInputs(body.bodySource);
+    // Trust the body's real return shape over the planner's declared outputs,
+    // unioning both so a planner-declared field that the body forgot still shows.
+    const stepOutputs = [
+      ...new Set([...step.outputs, ...extractOutputs(body.bodySource)]),
+    ];
     const arrayInputs = new Set(body.arrayInputs ?? []);
     const depByInput = new Map(step.deps.map((d) => [d.input, d]));
 
@@ -336,9 +388,9 @@ export async function designWorkflow(
       outputSchema: {
         type: "object",
         properties: Object.fromEntries(
-          step.outputs.map((o) => [o, { type: "string" as const }]),
+          stepOutputs.map((o) => [o, { type: "string" as const }]),
         ),
-        required: step.outputs,
+        required: stepOutputs,
       },
       bodySource: body.bodySource,
       dependencies: body.dependencies ?? [],
@@ -354,7 +406,21 @@ export async function designWorkflow(
     onProgress?.({ kind: "step", id: step.id, label: stepLabel, status: "done" });
   }
 
-  const variableFields = [...variableFieldSet];
+  // Deterministically detect step inputs the planner left unconnected (and
+  // outputs left dangling), then let a focused LLM bridge them. The planner's
+  // per-step `deps` are unreliable on weak models; this repair pass works from
+  // the actual built graph so wiring no longer depends on the planner getting
+  // every dependency right. Applied wires + recomputed form fields come back.
+  onProgress?.({ kind: "wire", id: "wire", label: "Checking connections", status: "active" });
+  const recon = await reconcileWiring(funcs, wires, eventFields, m);
+  wires.length = 0;
+  wires.push(...recon.wires);
+  if (recon.added.length) {
+    console.log("[wiring-repair]", recon.diagnostics.join("; "));
+  }
+  onProgress?.({ kind: "wire", id: "wire", label: "Checking connections", status: "done" });
+
+  const variableFields = recon.variableFields;
 
   let inputForm = null;
   if (variableFields.length > 0) {

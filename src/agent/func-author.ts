@@ -1,5 +1,4 @@
-import { generateText, Output } from "ai";
-import { getModel } from "./model";
+import { genObject } from "./generate";
 import { funcDraftZ, type FuncDraft } from "./schemas";
 import { trace, type AgentMeta } from "../observability";
 import type { Registry } from "../providers/registry";
@@ -43,12 +42,11 @@ export async function authorFunc(
   const providerNote = prov
     ? `This step uses the '${prov.id}' provider (scopes: ${prov.scopes.join(", ") || "none"}). Connection API: ${prov.apiDoc}`
     : "";
-  const { output: object } = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: funcDraftZ }),
+  const object = await genObject({
+    schema: funcDraftZ,
     system: SYSTEM,
     prompt: [`Task: ${spec.intent}`, providerNote].join("\n"),
-    experimental_telemetry: trace("author-func", { ...meta, spaceId: spec.spaceId }),
+    telemetry: trace("author-func", { ...meta, spaceId: spec.spaceId }),
   });
   return {
     def: toFuncDefinition(object),

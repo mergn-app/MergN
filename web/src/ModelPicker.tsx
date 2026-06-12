@@ -10,7 +10,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useLlmSettings, saveLlmSettings, type LlmSettings } from "./queries";
+import {
+  useLlmSettings,
+  saveLlmSettings,
+  probeLlm,
+  type LlmSettings,
+  type LlmProbe,
+} from "./queries";
 
 const PROVIDERS = [
   { value: "google", label: "Google (Gemini)" },
@@ -28,10 +34,12 @@ const MODEL_PLACEHOLDER: Record<string, string> = {
 
 function LlmForm({
   current,
-  onSaved,
+  onRefresh,
+  onClose,
 }: {
   current: LlmSettings;
-  onSaved: () => void;
+  onRefresh: () => void;
+  onClose: () => void;
 }) {
   const { t } = useTranslation();
   const [provider, setProvider] = useState(current.provider || "google");
@@ -39,6 +47,8 @@ function LlmForm({
   const [baseURL, setBaseURL] = useState(current.baseURL || "");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
+  const [probing, setProbing] = useState(false);
+  const [probe, setProbe] = useState<LlmProbe | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const isLocal = provider === "local";
@@ -48,6 +58,7 @@ function LlmForm({
   const save = async () => {
     setSaving(true);
     setError(null);
+    setProbe(null);
     try {
       await saveLlmSettings({
         provider,
@@ -55,11 +66,23 @@ function LlmForm({
         baseURL: baseURL || undefined,
         apiKey: apiKey || undefined,
       });
-      onSaved();
+      onRefresh();
+      // verify the freshly-saved model can actually do structured output
+      setSaving(false);
+      setProbing(true);
+      const result = await probeLlm().catch(() => null);
+      setProbing(false);
+      if (result) {
+        setProbe(result);
+        // happy path (capable model): close shortly; weak model: stay open with the warning
+        if (!result.weak) setTimeout(onClose, 900);
+      } else {
+        onClose();
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-    } finally {
       setSaving(false);
+      setProbing(false);
     }
   };
 
@@ -107,12 +130,41 @@ function LlmForm({
       <button
         type="button"
         onClick={save}
-        disabled={saving}
+        disabled={saving || probing}
         className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-2 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
       >
-        {saving && <Loader2 className="size-3 animate-spin" />}
-        {t("common.save")}
+        {(saving || probing) && <Loader2 className="size-3 animate-spin" />}
+        {probing ? "Model test ediliyor…" : t("common.save")}
       </button>
+
+      {probe?.weak && probe.local && (
+        <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
+          <p className="font-medium">⚠ Bu model builder için zayıf görünüyor</p>
+          <p className="text-amber-200/80">
+            {probe.structured
+              ? "Yapılandırılmış çıktıyı üretti ama yanlış (talimatı tam izleyemedi)."
+              : "Gerekli JSON şemasını üretemedi."}{" "}
+            Builder her adımı şema-zorlamalı üretir; küçük/yerel modeller çoğu zaman
+            bunu yapamaz. Daha güçlü bir model önerilir: <b>Llama 3.1 70B</b> /{" "}
+            <b>Qwen 2.5 32B+</b> ya da bir bulut modeli (Gemini / GPT-4o / Claude).
+          </p>
+        </div>
+      )}
+      {probe?.weak && !probe.local && (
+        <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
+          <p className="font-medium">⚠ Model testi başarısız</p>
+          <p className="text-amber-200/80">
+            Bu sağlayıcı yanıt vermedi — büyük olasılıkla anahtar, kota veya
+            faturalandırma sorunu.{" "}
+            {probe.error ? <span className="opacity-80">({probe.error})</span> : null}
+          </p>
+        </div>
+      )}
+      {probe && !probe.weak && (
+        <p className="text-[11px] text-emerald-400">
+          ✓ Model yapılandırılmış çıktıyı geçti ({probe.latencyMs} ms)
+        </p>
+      )}
     </div>
   );
 }
@@ -207,10 +259,10 @@ export function ModelPicker() {
           </div>
           <LlmForm
             current={current}
-            onSaved={() => {
-              qc.invalidateQueries({ queryKey: ["llm-settings"] });
-              setOpen(false);
-            }}
+            onRefresh={() =>
+              qc.invalidateQueries({ queryKey: ["llm-settings"] })
+            }
+            onClose={() => setOpen(false)}
           />
         </div>
       )}

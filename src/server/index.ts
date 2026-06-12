@@ -41,6 +41,8 @@ import { assertSpace, type DocStore } from "../store/docstore";
 import { createStorage } from "../store/factory";
 import { authorProvider, repairProvider } from "../agent/provider-author";
 import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
+import { reconcileWiring } from "../agent/wiring-repair";
+import { probeModel } from "../agent/probe";
 import { authorInputForm } from "../agent/form-author";
 import { createConnections } from "./connections";
 import { createChatStore } from "./chat";
@@ -1004,6 +1006,30 @@ app.post("/api/hooks/:spaceId/:workflowId", async (c) => {
   return c.json({ ok: true, runId: run.id, status: run.status });
 });
 
+// On-demand "Fix with AI": runs the same deterministic-detect + LLM-bridge
+// wiring repair the builder uses at design time, but on the CURRENT (saved or
+// hand-edited) workflow. Returns the wires it added so the client can apply them.
+app.post("/api/repair-wiring", async (c) => {
+  const spaceId = c.get("spaceId");
+  const body = await c.req.json<{
+    funcs?: {
+      id: string;
+      pure: boolean;
+      inputs: { name: string; role: string }[];
+      outputSchema?: { properties?: Record<string, unknown>; required?: string[] };
+    }[];
+    wires?: { from: string; fromOutput: string; to: string; toInput: string }[];
+    trigger?: { eventFields?: string[] };
+  }>();
+  const result = await reconcileWiring(
+    body.funcs ?? [],
+    body.wires ?? [],
+    body.trigger?.eventFields ?? [],
+    { spaceId },
+  );
+  return c.json(result);
+});
+
 app.post("/api/input-form", async (c) => {
   const body = await c.req.json<{
     goal?: string;
@@ -1058,6 +1084,26 @@ app.post("/api/settings/llm", async (c) => {
   await settings.setLlm(cfg);
   setLlmConfig(cfg);
   return c.json({ ok: true });
+});
+
+// Capability probe for the active model. Detects a model too weak to produce
+// the structured (JSON-schema) output the builder needs and flags it so the UI
+// can suggest a stronger model. `weak` true => steer the user to upgrade.
+app.post("/api/settings/llm/probe", async (c) => {
+  const cfg = getLlmConfig();
+  const r = await probeModel();
+  const local = cfg.provider === "local" || cfg.provider === "openai-compatible";
+  const weak = !r.structured || !r.accurate;
+  return c.json({
+    provider: cfg.provider,
+    model: cfg.model ?? "",
+    local,
+    structured: r.structured,
+    accurate: r.accurate,
+    latencyMs: r.latencyMs,
+    error: r.error,
+    weak,
+  });
 });
 
 app.get("/api/runs", async (c) => {

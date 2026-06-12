@@ -1,6 +1,5 @@
-import { generateText, Output } from "ai";
-import { getModel } from "./model";
 import { z } from "zod";
+import { genObject } from "./generate";
 import type { ProviderDraft } from "../providers/registry";
 import { trace, type AgentMeta } from "../observability";
 
@@ -132,11 +131,10 @@ export async function repairProvider(
   sampleInput?: string,
   meta?: AgentMeta,
 ): Promise<{ draft: ProviderDraft; changeNote: string }> {
-  const { output } = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: providerRepairZ }),
+  const output = await genObject({
+    schema: providerRepairZ,
     system: REPAIR_SYSTEM,
-    experimental_telemetry: trace("repair-provider", { ...meta, provider: draft.id }),
+    telemetry: trace("repair-provider", { ...meta, provider: draft.id }),
     prompt: [
       `Provider id: ${draft.id}`,
       `Service: ${draft.name}`,
@@ -173,11 +171,10 @@ export async function authorProvider(
   docs?: string,
   meta?: AgentMeta,
 ): Promise<ProviderDraft> {
-  const { output } = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: providerDraftZ }),
+  const output = await genObject({
+    schema: providerDraftZ,
     system: SYSTEM,
-    experimental_telemetry: trace("author-provider", { ...meta, service }),
+    telemetry: trace("author-provider", { ...meta, service }),
     prompt: [`Service: ${service}`, docs ? `API docs / notes: ${docs}` : ""].join(
       "\n",
     ),

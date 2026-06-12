@@ -12,7 +12,8 @@ import {
   type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Sun, Moon, Zap } from "lucide-react";
+import { Sun, Moon, Zap, Wand2, Loader2 } from "lucide-react";
+import { detectIssues, repairWiring } from "./health";
 import { Chat } from "./Chat";
 import { TriggerDialog } from "./TriggerDialog";
 import { Pipeline } from "./Pipeline";
@@ -182,6 +183,8 @@ export function App({
   const [view, setView] = useState<"story" | "pipeline" | "graph">("story");
   const [bottomHeight, setBottomHeight] = useState(256);
   const [building, setBuilding] = useState(false);
+  const [repairing, setRepairing] = useState(false);
+  const [repairMsg, setRepairMsg] = useState<string | null>(null);
 
   const startResize = useCallback(
     (e: React.MouseEvent) => {
@@ -257,6 +260,55 @@ export function App({
     }
     return [...required].filter((p) => !connectedProviders.has(p));
   }, [funcs, connectedProviders]);
+
+  const wiringIssues = useMemo(
+    () =>
+      detectIssues({
+        funcs,
+        wires,
+        trigger,
+        inputForm,
+        variables,
+        configValues,
+      }),
+    [funcs, wires, trigger, inputForm, variables, configValues],
+  );
+
+  const runRepair = useCallback(async () => {
+    if (repairing || funcs.length === 0) return;
+    setRepairing(true);
+    setRepairMsg(null);
+    try {
+      const r = await repairWiring({ funcs, wires, trigger });
+      if (r.added.length) {
+        setWires(r.wires);
+        const variableSet = new Set(r.variableFields);
+        setInputForm((prev) =>
+          prev
+            ? { ...prev, fields: prev.fields.filter((f) => variableSet.has(f.name)) }
+            : prev,
+        );
+        const list = r.added
+          .map((w) => `${w.from}.${w.fromOutput} → ${w.to}.${w.toInput}`)
+          .join(", ");
+        setRepairMsg(`✓ ${r.added.length} bağlantı eklendi: ${list}`);
+      } else {
+        const skipped = r.diagnostics.find((d) =>
+          d.startsWith("wiring repair skipped"),
+        );
+        setRepairMsg(
+          skipped
+            ? `AI onarımı çalışmadı: ${skipped.replace("wiring repair skipped: ", "")}`
+            : "Bağlantılar düzgün görünüyor.",
+        );
+      }
+    } catch (e) {
+      setRepairMsg(`Onarım başarısız: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setRepairing(false);
+      setTimeout(() => setRepairMsg(null), 6000);
+    }
+  }, [repairing, funcs, wires, trigger]);
 
   const workflowState = useMemo(
     () => summarizeWorkflow(funcs, wires, configValues),
@@ -844,7 +896,39 @@ export function App({
               <Zap className="h-3.5 w-3.5 text-tone-amber-fg" />
               <span>{t(`trigger.kind.${trigger.kind}`)}</span>
             </button>
+            {funcs.length > 0 && (
+              <button
+                onClick={runRepair}
+                disabled={repairing}
+                title="Eksik bağlantıları AI ile bul ve düzelt"
+                className={
+                  "flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs transition-colors disabled:opacity-60 " +
+                  (wiringIssues.length > 0
+                    ? "border-tone-amber/40 bg-tone-amber-surface text-tone-amber-fg hover:border-tone-amber"
+                    : "border-border/50 bg-muted text-foreground/90 hover:border-border")
+                }
+              >
+                {repairing ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Wand2 className="h-3.5 w-3.5" />
+                )}
+                <span>Fix with AI</span>
+                {wiringIssues.length > 0 && (
+                  <span className="rounded-full bg-tone-amber-fg/20 px-1.5 text-[10px] font-semibold">
+                    {wiringIssues.length}
+                  </span>
+                )}
+              </button>
+            )}
           </div>
+          {repairMsg && (
+            <div className="pointer-events-none absolute left-1/2 top-12 z-10 -translate-x-1/2">
+              <div className="max-w-md truncate rounded-full border border-border/50 bg-card px-3 py-1 text-xs text-foreground shadow">
+                {repairMsg}
+              </div>
+            </div>
+          )}
           {missingProviders.length > 0 && (
             <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2">
               <div className="rounded-full border border-tone-amber/40 bg-tone-amber-surface px-3 py-1 text-xs font-medium text-tone-amber-fg">

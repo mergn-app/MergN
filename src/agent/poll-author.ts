@@ -1,6 +1,5 @@
-import { generateText, Output } from "ai";
-import { getModel } from "./model";
 import { z } from "zod";
+import { genObject } from "./generate";
 import { trace, type AgentMeta } from "../observability";
 
 export const pollDraftZ = z.object({
@@ -42,15 +41,13 @@ export async function authorPollSource(
   intent: string,
   meta?: AgentMeta,
 ): Promise<z.infer<typeof pollDraftZ>> {
-  const { output } = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: pollDraftZ }),
+  return genObject({
+    schema: pollDraftZ,
     system: POLL_SYSTEM,
-    experimental_telemetry: trace("author-poll-source", { ...meta, provider }),
+    telemetry: trace("author-poll-source", { ...meta, provider }),
     prompt: [
       `Provider: ${provider}. API: ${apiDoc}`,
       `What to watch and what counts as new: ${intent}`,
     ].join("\n\n"),
   });
-  return output;
 }

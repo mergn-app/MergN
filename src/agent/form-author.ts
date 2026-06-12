@@ -1,6 +1,5 @@
-import { generateText, Output } from "ai";
-import { getModel } from "./model";
 import { z } from "zod";
+import { genObject } from "./generate";
 import { trace, type AgentMeta } from "../observability";
 
 const controlZ = z.enum([
@@ -58,11 +57,10 @@ export async function authorInputForm(
     .map((name) => `- ${name}: used by step "${fieldHints![name]}"`)
     .join("\n");
 
-  const { output } = await generateText({
-    model: getModel(),
-    output: Output.object({ schema: inputFormZ }),
+  const output = await genObject({
+    schema: inputFormZ,
     system: SYSTEM,
-    experimental_telemetry: trace("author-input-form", meta),
+    telemetry: trace("author-input-form", meta),
     prompt: [
       `Goal: ${goal || "(not given)"}`,
       `Trigger fields: ${fields.join(", ")}`,
