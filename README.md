@@ -32,35 +32,17 @@ Non-technical users can build and operate automations without writing code while
 Developers get the power of AI-generated workflow logic combined with a visual interface for monitoring, debugging, and managing complex automation systems.
 
 
-## Quick install (one line)
+## Setup with Docker (recommended)
 
-Installs the `mergn` command globally (clones to `~/.mergn`), so you can run it
-from anywhere:
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/flowbaker/MergN/main/install.sh | bash
-mergn run        # start it
-```
-
-Then `mergn update` (from any directory) to upgrade later. Prefer doing it by
-hand? Use the Docker or Native setup below.
-
-## Setup and Start with Docker
-
-Clone, run — Mongo, NATS and the Docker step-runner are all wired into compose
+Everything (Mongo, NATS, the step-runner) is bundled in compose — just clone and run:
 
 ```bash
 git clone https://github.com/flowbaker/MergN.git && cd MergN
-docker compose up -d --build       # starts in the background (no log wall)
-# → open http://localhost:8787
+docker compose up -d        # starts in the background -> http://localhost:8787
 ```
 
-Follow the app's logs:
-
-```bash
-docker compose logs -f app
-```
-## Setup Native
+Logs: `docker compose logs -f app` · Stop: `docker compose down`
+## Setup Native (Node)
 
 ```bash
 git clone https://github.com/flowbaker/MergN.git && cd MergN
@@ -68,68 +50,35 @@ npm install
 cd web && npm install && cd ..
 ```
 
-#### Start Native
-```bash
-mergn run        # backend (:8787) + web (:5173) together — Ctrl+C to stop
-```
-
-`mergn run` is equivalent to running both by hand:
-```bash
-npm run server          # backend — http://localhost:8787
-cd web && npm run dev   # frontend (Vite) — http://localhost:5173
-```
-
-## The `mergn` command
-
-A tiny CLI for self-hosting. Install it once so you can run it from anywhere:
+Start (in two terminals):
 
 ```bash
-sudo ln -sf "$PWD/mergn" /usr/local/bin/mergn   # any install
-# — or, for the native/npm install —
-npm link
+npm run server          # backend  -> http://localhost:8787
+cd web && npm run dev   # frontend -> http://localhost:5173
 ```
+
+## Optional: the `mergn` command
+
+A small CLI so you can run things from any directory. From the repo you can use
+`./mergn <cmd>` right away; to get a global `mergn`, install it once:
 
 ```bash
-mergn run               # start (native: backend+web; Docker: compose up)
-mergn run --update      # pull the latest first, then start
-mergn update            # update to the latest version
-mergn logs              # follow the app logs
-mergn status / restart / down
+npm link                                       # native (uses npm)
+# or, for any install:
+sudo ln -sf "$PWD/mergn" /usr/local/bin/mergn
 ```
 
-`mergn run` doesn't update on its own — it just **warns** if you're behind
-(`⬆ Update available — run: mergn update`). Use `mergn update` to apply, or
-`mergn run --update` to update-then-start in one go.
-
-(No install needed? Use `./update.sh` and `./mergn <cmd>` from the repo root.)
+Commands: `mergn run`, `mergn update`, `mergn logs`, `mergn status`,
+`mergn restart`, `mergn down`.
 
 ## Updating
 
-On startup MergN checks for a newer version and prints it in the app log
-(`mergn logs`, or the `npm run server` output):
+On startup MergN logs whether a newer version exists. To update:
 
-```
-[update] ⬆ Update available — latest 1a2b3c4. To update:  mergn update
-[update] ✓ up to date (1a2b3c4)
-```
+- **Docker:** `git pull && docker compose up -d`
+- **Native:** `git pull && npm install && (cd web && npm install)`, then restart
 
-**One command for both install paths** — run it from the repo root:
-
-```bash
-mergn update          # or: ./update.sh
-```
-
-It pulls the latest source, then auto-detects your install and applies it:
-
-- **Docker** → pulls the latest prebuilt image and restarts (Docker shows the
-  download progress; no local build). Use `mergn update --build` to build the
-  image from source instead.
-- **Native** (git clone + npm) → runs `npm install` (backend + web) and tells
-  you to restart with `mergn run`.
-
-Prefer doing it by hand? Docker: `docker compose pull && docker compose up -d`.
-Native: `git pull && npm install`. The boot check is non-blocking and silent if
-offline — disable it with `UPDATE_CHECK=0`.
+(Or `mergn update` if you installed the CLI. Disable the check with `UPDATE_CHECK=0`.)
 
 ## Troubleshooting & Advanced Setup
 
