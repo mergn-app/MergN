@@ -7,7 +7,7 @@ Clone, run — Mongo, NATS and the Docker step-runner are all wired into compose
 (email/password auth, a dev secret):
 
 ```bash
-git clone <repo> && cd workflowv2
+git clone https://github.com/flowbaker/mergN.git && cd workflowv2
 docker compose up -d --build       # starts in the background (no log wall)
 # → open http://localhost:8787
 ```
