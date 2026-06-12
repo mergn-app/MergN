@@ -48,7 +48,26 @@ Logs: `docker compose logs -f app` · Stop: `docker compose down`
 git clone https://github.com/flowbaker/MergN.git && cd MergN
 npm install
 cd web && npm install && cd ..
+cp .env.example .env       # required: npm run server loads .env
 ```
+
+By default native runs on local file storage with no extra services — fine for
+manual & webhook workflows. **Scheduled / poll triggers need NATS** (JetStream).
+Run it (port published so the host app can reach it):
+
+```bash
+docker run -d --name mergn-nats -p 4222:4222 nats:2.14-alpine -js
+```
+
+and set in `.env`: `NATS_URL=nats://localhost:4222`
+
+Optional — a real database instead of file storage (Mongo):
+
+```bash
+docker run -d --name mergn-mongo -p 27017:27017 mongo:7
+```
+
+`.env`: `STORE_DRIVER=mongo` and `MONGO_URL=mongodb://localhost:27017`
 
 Start (in two terminals):
 
