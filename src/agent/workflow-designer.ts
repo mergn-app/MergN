@@ -41,8 +41,9 @@ export const planZ = z.object({
         .describe("the count when mode is 'interval', e.g. 15"),
       intervalUnit: z
         .enum(["second", "minute", "hour", "day"])
+        .optional()
         .describe(
-          "the unit when mode is 'interval' — ALWAYS set it (second/minute/hour/day) to match the user's wording. For cron mode it is ignored; just use 'minute'.",
+          "REQUIRED for mode 'interval' — set it (second/minute/hour/day) to match the user's wording. OMIT it for mode 'cron' (it is not used there).",
         ),
     })
     .optional()
@@ -450,7 +451,9 @@ export async function designWorkflow(
         mode: plan.schedule.mode,
         cron: plan.schedule.cron,
         intervalValue: plan.schedule.intervalValue,
-        intervalUnit: plan.schedule.intervalUnit,
+        // optional in the plan (omitted for cron); default so an interval
+        // schedule never ends up with an undefined unit
+        intervalUnit: plan.schedule.intervalUnit ?? "minute",
         timezone: plan.schedule.timezone,
       },
     };
