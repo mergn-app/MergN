@@ -42,7 +42,7 @@ docker compose up -d --build       # starts in the background (no log wall)
 # → open http://localhost:8787
 ```
 
-Follow just the app's logs (without the Mongo/infra noise) when you want them:
+Follow the app's logs:
 
 ```bash
 docker compose logs -f app
