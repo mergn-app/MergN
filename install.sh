@@ -45,7 +45,21 @@ elif command -v npm >/dev/null 2>&1; then
   echo "OK - native deps installed. Start with:"
   echo "  mergn run        # backend :8787 + web :5173   |   mergn update"
 else
-  echo "Neither Docker nor Node found - install ONE, then run 'mergn run':"
-  echo "  - Docker Desktop (easiest):  https://www.docker.com/products/docker-desktop"
-  echo "  - or Node 22+:               https://nodejs.org"
+  echo "Node is not installed. Install it with the command for your system:"
+  if command -v brew >/dev/null 2>&1; then
+    echo "  brew install node"
+  elif command -v apt-get >/dev/null 2>&1; then
+    echo "  curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash - && sudo apt-get install -y nodejs"
+  elif command -v dnf >/dev/null 2>&1; then
+    echo "  sudo dnf install -y nodejs npm"
+  elif command -v pacman >/dev/null 2>&1; then
+    echo "  sudo pacman -S --noconfirm nodejs npm"
+  elif command -v apk >/dev/null 2>&1; then
+    echo "  sudo apk add nodejs npm"
+  else
+    echo "  curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . \"\$HOME/.nvm/nvm.sh\" && nvm install 22"
+  fi
+  echo
+  echo "Then re-run this installer (it will set up the native deps):"
+  echo "  curl -fsSL \"https://raw.githubusercontent.com/flowbaker/MergN/main/install.sh?\$(date +%s)\" | bash"
 fi
