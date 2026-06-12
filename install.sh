@@ -31,7 +31,21 @@ ln_cmd "${DEST}/mergn" "${BIN_DIR}/mergn"
 
 echo "OK - 'mergn' is now on your PATH (${BIN_DIR}/mergn), repo at ${DEST}"
 echo
-echo "Next:"
-echo "  mergn run        # start MergN (Docker: compose up; native: npm install first)"
-echo "  mergn update     # update later, from anywhere"
-echo "  mergn help       # all commands"
+
+# Prepare a runnable path so `mergn run` just works, whether or not the user
+# knows Docker. Prefer Docker (everything bundled); otherwise set up native.
+if command -v docker >/dev/null 2>&1; then
+  echo "Docker detected - MergN will run in Docker (app + Mongo + NATS bundled)."
+  echo "Make sure Docker is running, then:"
+  echo "  mergn run        # start  ->  http://localhost:8787"
+  echo "  mergn logs       # view logs    |   mergn update   # upgrade later"
+elif command -v npm >/dev/null 2>&1; then
+  echo "Docker not found - setting up the native (Node) install..."
+  ( cd "${DEST}" && npm install && cd web && npm install )
+  echo "OK - native deps installed. Start with:"
+  echo "  mergn run        # backend :8787 + web :5173   |   mergn update"
+else
+  echo "Neither Docker nor Node found - install ONE, then run 'mergn run':"
+  echo "  - Docker Desktop (easiest):  https://www.docker.com/products/docker-desktop"
+  echo "  - or Node 22+:               https://nodejs.org"
+fi

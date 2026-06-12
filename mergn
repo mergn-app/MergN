@@ -77,11 +77,17 @@ case "$cmd" in
     if [ -d node_modules ] && [ -d web/node_modules ]; then
       run_native
     elif command -v docker >/dev/null 2>&1; then
+      if ! docker info >/dev/null 2>&1; then
+        echo "Docker is installed but not running. Start Docker Desktop, then 'mergn run'." >&2
+        exit 1
+      fi
       echo "-> Starting MergN (Docker)..."
       docker compose up -d
       echo "OK Up at http://localhost:8787 - logs:  mergn logs"
     else
-      echo "Nothing to run. Install first: 'npm install' (native) or use Docker." >&2
+      echo "Nothing to run yet. Either:" >&2
+      echo "  - start Docker, then 'mergn run', or" >&2
+      echo "  - install native deps:  npm install && (cd web && npm install)" >&2
       exit 1
     fi
     ;;
