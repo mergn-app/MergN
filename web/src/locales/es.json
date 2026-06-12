@@ -238,10 +238,5 @@
     "de": "Deutsch",
     "fr": "Français",
     "es": "Español"
-  },
-  "scheduler": {
-    "needNatsTitle": "Se requiere NATS para flujos programados/poll",
-    "needNatsBody": "NATS no está en ejecución en el servidor: este flujo no se ejecutará automáticamente. Inícialo:",
-    "needNatsAfter": "luego configura NATS_URL=nats://localhost:4222 y reinicia."
   }
 }

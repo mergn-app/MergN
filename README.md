@@ -48,7 +48,7 @@ Open **http://localhost:8787**. Logs: `docker compose logs -f app` · Stop: `doc
 
 ## Setup Native
 
-**Requires:** Node 22+ (and Docker only if you want NATS/Mongo below).
+**Requires:** Node 22+ and Docker (for NATS — required to start).
 
 ```bash
 git clone https://github.com/flowbaker/MergN.git && cd MergN
@@ -56,32 +56,21 @@ npm install
 cd web && npm install && cd ..
 ```
 
-By default, Native uses local file storage and needs no extra services. This is enough for manual and webhook workflows. If so, proceed to **Start Native** section.
-
-**But scheduled and polling triggers require NATS.** If you need them, continue below.
-
-
-**Create an .env file**
-```bash
-cp .env.example .env
-```
-
- **Scheduled / poll triggers need NATS** (JetStream).
-Run it (port published so the host app can reach it):
+**NATS is required** (JetStream — runs scheduled & poll workflows). Start it and
+point the app at it, otherwise the backend exits on startup:
 
 ```bash
 docker run -d --name mergn-nats -p 4222:4222 nats:2.14-alpine -js
+cp .env.example .env
+# in .env:  NATS_URL=nats://localhost:4222
 ```
 
-and set in `.env`: `NATS_URL=nats://localhost:4222`
-
-**Optional** — a real database instead of file storage (Mongo):
+Storage defaults to local files. Optional — use Mongo instead:
 
 ```bash
 docker run -d --name mergn-mongo -p 27017:27017 mongo:7
+# in .env:  STORE_DRIVER=mongo   MONGO_URL=mongodb://localhost:27017
 ```
-
-and set in `.env`: `STORE_DRIVER=mongo` and `MONGO_URL=mongodb://localhost:27017`
 
 ## Start Native (in separated two terminals):
 

@@ -238,10 +238,5 @@
     "de": "Deutsch",
     "fr": "Français",
     "es": "Español"
-  },
-  "scheduler": {
-    "needNatsTitle": "NATS requis pour les workflows planifiés/poll",
-    "needNatsBody": "NATS n'est pas en cours d'exécution sur le serveur — ce workflow ne s'exécutera pas automatiquement. Démarrez-le :",
-    "needNatsAfter": "puis définissez NATS_URL=nats://localhost:4222 et redémarrez."
   }
 }

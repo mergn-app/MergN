@@ -302,7 +302,6 @@ interface ChatProps {
   onOps: (ops: WorkflowOp[]) => void;
   onBuilding?: (building: boolean) => void;
   workflowState?: string;
-  schedulerMissing?: boolean;
   onReady?: (send: (text: string) => void) => void;
 }
 
@@ -330,7 +329,6 @@ function ChatThread({
   onOps,
   onBuilding,
   workflowState,
-  schedulerMissing,
   onReady,
   initialMessages,
 }: ChatProps & { initialMessages: UIMessage[] }) {
@@ -625,17 +623,6 @@ function ChatThread({
             </Button>
           </AlertDescription>
         </Alert>
-      )}
-
-      {schedulerMissing && (
-        <div className="mx-2 mb-1 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-          <p className="font-medium">⚠ {t("scheduler.needNatsTitle")}</p>
-          <p className="mt-0.5 text-amber-200/80">{t("scheduler.needNatsBody")}</p>
-          <code className="mt-1 block overflow-x-auto whitespace-pre rounded bg-background-subtle px-2 py-1 font-mono text-[10px] text-amber-100">
-            docker run -d --name mergn-nats -p 4222:4222 nats:2.14-alpine -js
-          </code>
-          <p className="mt-1 text-amber-200/80">{t("scheduler.needNatsAfter")}</p>
-        </div>
       )}
 
       <form onSubmit={submit} className="p-2">
