@@ -28,7 +28,7 @@ npm run server          # backend (loads .env) — http://localhost:8787
 cd web && npm run dev   # frontend (Vite) — http://localhost:5173
 ```
 
-## How To Setup Other Stuff
+## Troubleshooting & Advanced Setup
 
 To use the AI you need a model. *Easiest:* open the app, and use the
 *gear icon → AI model* to pick a provider + key — stored in the DB, **no .env
@@ -36,10 +36,10 @@ needed*. Or set it via env (add **one* to a .env, cp .env.example .env):
 
 bash
 GOOGLE_GENERATIVE_AI_API_KEY=...                       # default (Gemini)
-# — or —
+#### — or —
 LLM_PROVIDER=openai
 LLM_API_KEY=sk-...
-# — or fully local, no key (run Ollama on the host) —
+#### — or fully local, no key (run Ollama on the host) —
 LLM_PROVIDER=local
 LLM_BASE_URL=http://host.docker.internal:11434/v1
 LLM_MODEL=llama3.1
