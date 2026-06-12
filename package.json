@@ -12,8 +12,7 @@
     "slack": "node --env-file=.env --import tsx src/examples/slack-live.ts",
     "author": "node --env-file=.env --import tsx src/agent/run-author.ts",
     "server": "node --env-file-if-exists=.env --import tsx src/server/index.ts",
-    "start": "node --import tsx src/server/index.ts",
-    "update": "bash update.sh"
+    "start": "node --import tsx src/server/index.ts"
   },
   "keywords": [],
   "author": "",

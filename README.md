@@ -44,6 +44,8 @@ docker compose up -d        # starts in the background -> http://localhost:8787
 
 Open **http://localhost:8787**. Logs: `docker compose logs -f app` · Stop: `docker compose down`
 
+**Update:** `git pull && docker compose up -d` — pulls the latest image and restarts.
+
 ## Setup Native (Node)
 
 **Requires:** Node 22+ (and Docker only if you want NATS/Mongo below).
@@ -83,24 +85,7 @@ npm run server          # backend  -> http://localhost:8787
 cd web && npm run dev   # frontend -> http://localhost:5173
 ```
 
-## First run — pick an AI model
-
-Open the app, sign up (local email/password), then click the **gear icon → AI
-model** and choose a provider + key — Google (Gemini), OpenAI, Anthropic, or a
-local Ollama model. It's stored in the app, so **no `.env` needed**.
-
-Now describe what you want in the chat and MergN builds the workflow.
-
-## Updating
-
-On startup MergN logs whether a newer version exists. From the repo root run:
-
-```bash
-./update.sh        # pulls the latest and applies it (Docker or Native — auto-detected)
-```
-
-By hand instead — **Docker:** `git pull && docker compose up -d` · **Native:**
-`git pull && npm install && (cd web && npm install)`, then restart.
+**Update:** `git pull && npm install && (cd web && npm install)`, then restart.
 
 (Disable the boot check with `UPDATE_CHECK=0`.)
 

@@ -80,7 +80,7 @@ export async function checkForUpdates(): Promise<void> {
       if (behind > 0 || cmp?.status === "behind" || cmp?.status === "diverged") {
         console.log(
           `[update] ⬆ Update available — ${behind || "new"} commit(s) behind, latest ${short}${title ? `: "${title}"` : ""}.\n` +
-            `[update]   To update:  ./update.sh   (or: git pull && npm install)`,
+            `[update]   To update:  git pull && npm install`,
         );
       } else {
         console.log(`[update] ✓ up to date (${local.slice(0, 7)})`);
@@ -94,7 +94,7 @@ export async function checkForUpdates(): Promise<void> {
     if (built && date && new Date(date).getTime() > new Date(built).getTime()) {
       console.log(
         `[update] ⬆ Update available — latest ${short} (${date})${title ? `: "${title}"` : ""}.\n` +
-          `[update]   To update:  ./update.sh   (or: docker compose pull && docker compose up -d)`,
+          `[update]   To update:  git pull && docker compose up -d`,
       );
     } else {
       console.log(`[update] ✓ up to date (latest ${short})`);
