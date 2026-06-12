@@ -62,7 +62,7 @@ cd web && npm run dev   # frontend (Vite) — http://localhost:5173
 
 ## How To Update
 
-**One command for both Docker and Native Builds** 
+**It works for both docker and native builds.** 
 
 ```bash
 cd ~/MergN # root the project directory
