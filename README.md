@@ -52,8 +52,11 @@ Open **http://localhost:8787**. Logs: `docker compose logs -f app` · Stop: `doc
 git clone https://github.com/flowbaker/MergN.git && cd MergN
 npm install
 cd web && npm install && cd ..
-cp .env.example .env       # required: npm run server loads .env
 ```
+
+No `.env` needed to start — the AI model is set from the UI (gear icon). A
+`.env` is only for optional services below; create one with `cp .env.example .env`
+when you need it.
 
 By default native runs on local file storage with no extra services — fine for
 manual & webhook workflows. **Scheduled / poll triggers need NATS** (JetStream).
