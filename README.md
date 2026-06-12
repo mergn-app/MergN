@@ -34,15 +34,19 @@ Developers get the power of AI-generated workflow logic combined with a visual i
 
 ## Setup with Docker (recommended)
 
-Everything (Mongo, NATS, the step-runner) is bundled in compose — just clone and run:
+**Requires:** Docker (Docker Desktop installed and running). Everything else —
+Mongo, NATS, the step-runner — is bundled in compose. Clone and run:
 
 ```bash
 git clone https://github.com/flowbaker/MergN.git && cd MergN
 docker compose up -d        # starts in the background -> http://localhost:8787
 ```
 
-Logs: `docker compose logs -f app` · Stop: `docker compose down`
+Open **http://localhost:8787**. Logs: `docker compose logs -f app` · Stop: `docker compose down`
+
 ## Setup Native (Node)
+
+**Requires:** Node 22+ (and Docker only if you want NATS/Mongo below).
 
 ```bash
 git clone https://github.com/flowbaker/MergN.git && cd MergN
@@ -76,6 +80,15 @@ npm run server          # backend  -> http://localhost:8787
 cd web && npm run dev   # frontend -> http://localhost:5173
 ```
 
+## First run — pick an AI model
+
+Open the app, sign up (local email/password), then click the **gear icon → AI
+model** and choose a provider + key — Google (Gemini), OpenAI, Anthropic, or a
+local Ollama model. It's stored in the app, so **no `.env` needed**.
+
+Now describe what you want in the chat and MergN builds the workflow. (Prefer
+configuring the model via `.env`? See *Troubleshooting & Advanced* below.)
+
 ## Updating
 
 On startup MergN logs whether a newer version exists. From the repo root run:
@@ -91,19 +104,18 @@ By hand instead — **Docker:** `git pull && docker compose up -d` · **Native:*
 
 ## Troubleshooting & Advanced Setup
 
-To use the AI you need a model. *Easiest:* open the app, and use the
-*gear icon → AI model* to pick a provider + key — stored in the DB, **no .env
-needed*. Or set it via env (add **one* to a .env, cp .env.example .env):
+Prefer setting the AI model via `.env` instead of the in-app gear? Add **one** of:
 
-bash
-GOOGLE_GENERATIVE_AI_API_KEY=...                       # default (Gemini)
-#### — or —
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=...                      # default (Gemini)
+# — or —
 LLM_PROVIDER=openai
 LLM_API_KEY=sk-...
-#### — or fully local, no key (run Ollama on the host) —
+# — or a fully local model (run Ollama on the host) —
 LLM_PROVIDER=local
 LLM_BASE_URL=http://host.docker.internal:11434/v1
 LLM_MODEL=llama3.1
+```
 
 Workflow steps run in throwaway Docker containers on your host — no extra setup.
 For real use (not just local), set your own BETTER_AUTH_SECRET in .env.
