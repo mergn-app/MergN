@@ -4,6 +4,9 @@
   "description": "",
   "main": "dist/index.js",
   "type": "module",
+  "bin": {
+    "mergn": "mergn"
+  },
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit",
