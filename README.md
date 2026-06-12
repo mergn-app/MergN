@@ -32,6 +32,19 @@ Non-technical users can build and operate automations without writing code while
 Developers get the power of AI-generated workflow logic combined with a visual interface for monitoring, debugging, and managing complex automation systems.
 
 
+## Quick install (one line)
+
+Installs the `mergn` command globally (clones to `~/.mergn`), so you can run it
+from anywhere:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/flowbaker/MergN/main/install.sh | bash
+mergn run        # start it
+```
+
+Then `mergn update` (from any directory) to upgrade later. Prefer doing it by
+hand? Use the Docker or Native setup below.
+
 ## Setup and Start with Docker (Recommended)
 
 Clone, run — Mongo, NATS and the Docker step-runner are all wired into compose
