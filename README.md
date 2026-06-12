@@ -56,8 +56,11 @@ npm install
 cd web && npm install && cd ..
 ```
 
-By default native runs on local file storage with no extra services — fine for
-manual & webhook workflows. **But Scheduled / poll triggers needs NATS. If you need these features, continue below.**
+By default, Native runs entirely on local file storage and requires no additional services. This setup is sufficient for manual and webhook-based workflows.
+If that's all you need, proceed to the **Start Native** section.
+
+**Scheduled and polling triggers require NATS.** If you need these features, continue with the setup instructions below.
+
 
 **Create an .env file**
 ```bash
