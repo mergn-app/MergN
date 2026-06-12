@@ -60,17 +60,12 @@ npm run server          # backend (loads .env) — http://localhost:8787
 cd web && npm run dev   # frontend (Vite) — http://localhost:5173
 ```
 
-## Updating
+## How To Update
 
 On startup MergN checks for a newer version and prints it in the app log
 (`docker compose logs -f app`, or the `npm run server` output):
 
-```
-[update] ⬆ Update available — latest 1a2b3c4. To update:  ./update.sh
-[update] ✓ up to date (1a2b3c4)
-```
-
-**One command for both install paths** — run it from the repo root:
+**One command for both Docker and Native Builds** — run it from the repo root:
 
 ```bash
 ./update.sh          # or: npm run update
