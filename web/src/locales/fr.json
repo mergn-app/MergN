@@ -50,7 +50,8 @@
   "panel": {
     "chat": "Chat",
     "history": "Historique",
-    "node": "Nœud"
+    "node": "Nœud",
+    "logs": "Journaux"
   },
   "chat": {
     "tokens": "{{n}} jetons",

@@ -417,6 +417,46 @@ export function saveLlmSettings(body: {
   });
 }
 
+export interface LogEntry {
+  id: string;
+  ts: string;
+  level: "error" | "warn" | "info";
+  source: string;
+  message: string;
+  detail?: string;
+  workflowId?: string;
+}
+
+export function useLogs(active: boolean) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["logs", getSpace()],
+    queryFn: () => json<LogEntry[]>("/api/logs"),
+    enabled: !!user,
+    // live-ish feed: poll while the Logs tab is open
+    refetchInterval: active ? 3000 : false,
+  });
+}
+
+export function clearLogs(): Promise<{ ok: boolean }> {
+  return json("/api/logs", { method: "DELETE" });
+}
+
+// Fire-and-forget client error reporter. Never throws — logging must not break
+// the app. Tagged 'client' server-side.
+export function reportLog(body: {
+  level?: "error" | "warn" | "info";
+  message: string;
+  detail?: string;
+  workflowId?: string;
+}): void {
+  void fetch("/api/logs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...spaceHeaders() },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}
+
 export interface LlmProbe {
   provider: string;
   model: string;

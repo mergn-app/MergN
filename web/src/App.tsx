@@ -14,6 +14,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { Sun, Moon, Zap, Wand2, Loader2 } from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
+import { LogsPanel } from "./LogsPanel";
 import { Chat } from "./Chat";
 import { TriggerDialog } from "./TriggerDialog";
 import { Pipeline } from "./Pipeline";
@@ -40,6 +41,7 @@ import {
   getWorkflowStatus,
   pauseWorkflow,
   resumeWorkflow,
+  reportLog,
   type ConnectionMeta,
   type ActivationState,
 } from "./queries";
@@ -303,12 +305,38 @@ export function App({
         );
       }
     } catch (e) {
-      setRepairMsg(`Onarım başarısız: ${e instanceof Error ? e.message : String(e)}`);
+      const msg = e instanceof Error ? e.message : String(e);
+      setRepairMsg(`Onarım başarısız: ${msg}`);
+      reportLog({ message: "Fix with AI failed", detail: msg });
     } finally {
       setRepairing(false);
       setTimeout(() => setRepairMsg(null), 6000);
     }
   }, [repairing, funcs, wires, trigger]);
+
+  // Capture browser-side errors the user hits (failed fetches, unhandled
+  // rejections like "Load failed") into the Logs feed. Throttled to avoid spam.
+  useEffect(() => {
+    let last = 0;
+    const report = (message: string, detail?: string) => {
+      const now = Date.now();
+      if (now - last < 2000) return;
+      last = now;
+      reportLog({ message, detail });
+    };
+    const onErr = (ev: ErrorEvent) =>
+      report("Browser error", ev.message || String(ev.error));
+    const onRej = (ev: PromiseRejectionEvent) => {
+      const r = ev.reason;
+      report("Unhandled rejection", r instanceof Error ? r.message : String(r));
+    };
+    window.addEventListener("error", onErr);
+    window.addEventListener("unhandledrejection", onRej);
+    return () => {
+      window.removeEventListener("error", onErr);
+      window.removeEventListener("unhandledrejection", onRej);
+    };
+  }, []);
 
   const workflowState = useMemo(
     () => summarizeWorkflow(funcs, wires, configValues),
@@ -1047,6 +1075,7 @@ export function App({
               onDelete={removeChat}
             />
           }
+          logs={<LogsPanel active={activeTab === "logs"} />}
           node={
             <NodePanel
               func={selected}

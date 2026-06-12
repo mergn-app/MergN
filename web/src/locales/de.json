@@ -50,7 +50,8 @@
   "panel": {
     "chat": "Chat",
     "history": "Verlauf",
-    "node": "Knoten"
+    "node": "Knoten",
+    "logs": "Logs"
   },
   "chat": {
     "tokens": "{{n}} Tokens",

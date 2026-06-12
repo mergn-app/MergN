@@ -46,6 +46,7 @@ import { probeModel } from "../agent/probe";
 import { authorInputForm } from "../agent/form-author";
 import { createConnections } from "./connections";
 import { createChatStore } from "./chat";
+import { createLogStore } from "./logs";
 import { connectNats, initSchedulerStream, type NatsCtx } from "./nats";
 import { createScheduler, missingRequiredParams, type Scheduler } from "./scheduler";
 import { createSchedulerConsumer, fireWorkflow } from "./scheduler-consumer";
@@ -203,6 +204,7 @@ void settings
   .catch((e) => console.error("llm settings load failed", e));
 const membership = createMembership(store);
 const chats = createChatStore(store);
+const userLogs = createLogStore(store);
 
 const rateLimiter = createMemoryRateLimiter();
 const CHAT_USER_LIMIT: RateLimitRule = { limit: 20, windowMs: 60_000 };
@@ -249,6 +251,19 @@ async function runSavedWorkflow(
     finishedAt: new Date().toISOString(),
   };
   await runs.saveRun(spaceId, run);
+  if (run.status === "failed") {
+    const errs = records
+      .filter((r) => r.status === "failed")
+      .map((r) => `${r.nodeId}: ${r.error ?? "failed"}`)
+      .join("; ");
+    void userLogs.append(spaceId, {
+      level: "error",
+      source: "run",
+      message: `Run failed: ${wf.name} (${trigger})`,
+      detail: errs || "unknown error",
+      workflowId: wf.id,
+    });
+  }
   emitRun(spaceId, {
     id: run.id,
     workflowId: run.workflowId,
@@ -414,6 +429,13 @@ function makeTools(
         console.error("design_workflow failed:", e);
         for (const it of items) if (it.status === "active") it.status = "failed";
         emit();
+        const failed = items.find((it) => it.status === "failed");
+        void userLogs.append(spaceId, {
+          level: "error",
+          source: "build",
+          message: `Workflow build failed${failed ? ` at "${failed.label}"` : ""}`,
+          detail: e instanceof Error ? e.message : String(e),
+        });
         throw e;
       } finally {
         clearInterval(heartbeat);
@@ -812,7 +834,14 @@ app.post("/api/chat", async (c) => {
     },
     onError: (error) => {
       console.error("STREAM ERROR:", error);
-      return error instanceof Error ? error.message : String(error);
+      const msg = error instanceof Error ? error.message : String(error);
+      void userLogs.append(spaceId, {
+        level: "error",
+        source: "chat",
+        message: "Chat/build stream error",
+        detail: msg,
+      });
+      return msg;
     },
   });
 
@@ -972,6 +1001,19 @@ app.post("/api/run", async (c) => {
       const status = records.some((r) => r.status === "failed")
         ? "failed"
         : "done";
+      if (status === "failed") {
+        const errs = records
+          .filter((r) => r.status === "failed")
+          .map((r) => `${r.nodeId}: ${r.error ?? "failed"}`)
+          .join("; ");
+        void userLogs.append(spaceId, {
+          level: "error",
+          source: "run",
+          message: `Run failed: ${body.workflowName ?? "untitled"} (manual)`,
+          detail: errs || "unknown error",
+          workflowId: body.workflowId,
+        });
+      }
       await runs.saveRun(spaceId, {
         id: runDocId,
         workflowId: body.workflowId,
@@ -1110,6 +1152,39 @@ app.post("/api/settings/llm/probe", async (c) => {
     error: r.error,
     weak,
   });
+});
+
+app.get("/api/logs", async (c) => {
+  const limit = Math.min(Number(c.req.query("limit")) || 200, 500);
+  return c.json(await userLogs.list(c.get("spaceId"), limit));
+});
+
+app.post("/api/logs", async (c) => {
+  const body = await c.req.json<{
+    level?: string;
+    source?: string;
+    message?: string;
+    detail?: string;
+    workflowId?: string;
+  }>();
+  if (!body.message) return c.json({ error: "message required" }, 400);
+  const level = (["error", "warn", "info"].includes(body.level ?? "")
+    ? body.level
+    : "error") as "error" | "warn" | "info";
+  // client-reported logs are always tagged 'client' regardless of claimed source
+  const entry = await userLogs.append(c.get("spaceId"), {
+    level,
+    source: "client",
+    message: String(body.message),
+    detail: body.detail ? String(body.detail) : undefined,
+    workflowId: body.workflowId,
+  });
+  return c.json(entry);
+});
+
+app.delete("/api/logs", async (c) => {
+  await userLogs.clear(c.get("spaceId"));
+  return c.json({ ok: true });
 });
 
 app.get("/api/runs", async (c) => {

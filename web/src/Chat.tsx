@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { spaceHeaders } from "./space";
 import { useAuth } from "./authContext";
-import { useConversation } from "./queries";
+import { useConversation, reportLog } from "./queries";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { ModelPicker } from "./ModelPicker";
 import { Button } from "@/components/ui/button";
@@ -361,7 +361,11 @@ function ChatThread({
     messages: initialMessages,
     transport,
     experimental_throttle: 50,
-    onError: (e) => setChatError(errorMessage(e)),
+    onError: (e) => {
+      const msg = errorMessage(e);
+      setChatError(msg);
+      reportLog({ message: "Chat request failed", detail: msg });
+    },
     onFinish: () => {
       void qc.invalidateQueries({ queryKey: ["conversations"] });
       void qc.invalidateQueries({ queryKey: ["conversation"] });
