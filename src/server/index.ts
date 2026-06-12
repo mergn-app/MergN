@@ -701,7 +701,9 @@ const DISABLE_AUTH =
   process.env.DISABLE_AUTH === "1" || process.env.DISABLE_AUTH === "true";
 const LOCAL_USER = { id: "local", email: "local@localhost", name: "Local" };
 
-app.get("/api/config", (c) => c.json({ authDisabled: DISABLE_AUTH }));
+app.get("/api/config", (c) =>
+  c.json({ authDisabled: DISABLE_AUTH, schedulerEnabled: scheduler !== null }),
+);
 
 app.use("/api/*", async (c, next) => {
   const path = c.req.path;

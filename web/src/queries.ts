@@ -417,6 +417,19 @@ export function saveLlmSettings(body: {
   });
 }
 
+export interface ServerConfig {
+  authDisabled: boolean;
+  schedulerEnabled: boolean;
+}
+
+export function useConfig() {
+  return useQuery({
+    queryKey: ["server-config"],
+    queryFn: () => json<ServerConfig>("/api/config"),
+    staleTime: Infinity,
+  });
+}
+
 export interface LogEntry {
   id: string;
   ts: string;

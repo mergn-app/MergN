@@ -42,6 +42,7 @@ import {
   pauseWorkflow,
   resumeWorkflow,
   reportLog,
+  useConfig,
   type ConnectionMeta,
   type ActivationState,
 } from "./queries";
@@ -262,6 +263,11 @@ export function App({
     }
     return [...required].filter((p) => !connectedProviders.has(p));
   }, [funcs, connectedProviders]);
+
+  const serverConfig = useConfig();
+  const schedulerMissing =
+    (trigger.kind === "schedule" || trigger.kind === "poll") &&
+    serverConfig.data?.schedulerEnabled === false;
 
   const wiringIssues = useMemo(
     () =>
@@ -1051,6 +1057,7 @@ export function App({
                 onOps={setOps}
                 onBuilding={setBuilding}
                 workflowState={workflowState}
+                schedulerMissing={schedulerMissing}
                 onReady={(send) => {
                   sendChatRef.current = send;
                 }}

@@ -238,5 +238,10 @@
     "de": "Deutsch",
     "fr": "Français",
     "es": "Español"
+  },
+  "scheduler": {
+    "needNatsTitle": "Zamanlanmış/poll akışı için NATS gerekli",
+    "needNatsBody": "Sunucuda NATS yok — bu akış otomatik çalışmaz. Başlat:",
+    "needNatsAfter": "sonra NATS_URL=nats://localhost:4222 ayarla ve yeniden başlat."
   }
 }
