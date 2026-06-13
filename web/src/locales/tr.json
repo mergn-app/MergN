@@ -95,7 +95,8 @@
   },
   "history": {
     "newChat": "Yeni sohbet",
-    "empty": "Henüz konuşma yok."
+    "empty": "Henüz konuşma yok.",
+    "recentChats": "Son sohbetler"
   },
   "connections": {
     "title": "Bağlantılar",

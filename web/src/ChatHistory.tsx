@@ -1,8 +1,28 @@
 import { useTranslation } from "react-i18next";
-import { MessageSquare, Trash2, Plus } from "lucide-react";
+import { Trash2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ConversationMeta } from "./queries";
+
+function relTime(iso: string, locale: string): string {
+  const d = new Date(iso);
+  const diff = Date.now() - d.getTime();
+  const day = 86_400_000;
+  if (diff < 7 * day && diff >= 0) {
+    const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+    if (diff < 3_600_000)
+      return rtf.format(-Math.max(1, Math.floor(diff / 60_000)), "minute");
+    if (diff < day) return rtf.format(-Math.floor(diff / 3_600_000), "hour");
+    return rtf.format(-Math.floor(diff / day), "day");
+  }
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  return d.toLocaleDateString(
+    locale,
+    sameYear
+      ? { day: "numeric", month: "short" }
+      : { day: "numeric", month: "short", year: "numeric" },
+  );
+}
 
 export function ChatHistory({
   conversations,
@@ -19,30 +39,37 @@ export function ChatHistory({
   onNew: () => void;
   onDelete: (id: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   return (
     <div className="flex h-full w-full flex-col">
-      <div className="px-2 pt-2">
+      <div className="px-3 pt-3">
         <button
           onClick={onNew}
-          className="flex w-full items-center gap-2 rounded-lg bg-background-subtle px-2.5 py-1.5 text-left text-xs font-medium text-foreground/80 transition-colors hover:bg-secondary"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90"
         >
           <Plus className="size-4" />
           {t("history.newChat")}
         </button>
       </div>
 
-      <div className="min-h-0 flex-1 space-y-1 overflow-auto p-2">
-        {isLoading &&
-          Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="flex items-center gap-2.5 px-2 py-2">
-              <Skeleton className="size-8 shrink-0 rounded-lg" />
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <Skeleton className="h-3 w-3/4" />
-                <Skeleton className="h-2.5 w-1/3" />
+      <div className="min-h-0 flex-1 overflow-auto px-3 pb-2 pt-4">
+        <p className="mb-2.5 px-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70">
+          {t("history.recentChats")}
+        </p>
+
+        {isLoading && (
+          <div className="space-y-2.5">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={i}
+                className="rounded-2xl border border-dashed border-border/60 px-4 py-3.5"
+              >
+                <Skeleton className="mb-2 h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/4" />
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
+        )}
 
         {!isLoading && conversations.length === 0 && (
           <div className="px-2 py-6 text-center text-xs text-muted-foreground">
@@ -50,50 +77,41 @@ export function ChatHistory({
           </div>
         )}
 
-        {conversations.map((c) => {
-          const active = c.id === currentId;
-          return (
-            <div
-              key={c.id}
-              onClick={() => onSelect(c.id)}
-              className={cn(
-                "group flex cursor-pointer items-center gap-2.5 rounded-xl border border-transparent px-2 py-2 transition-colors hover:bg-background-subtle",
-                active && "border-border/60 bg-background-subtle",
-              )}
-            >
+        <div className="space-y-2.5">
+          {conversations.map((c) => {
+            const active = c.id === currentId;
+            return (
               <div
+                key={c.id}
+                onClick={() => onSelect(c.id)}
                 className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                  "group relative cursor-pointer rounded-2xl border border-dashed px-4 py-3.5 transition-colors",
                   active
-                    ? "bg-primary/15 text-foreground"
-                    : "bg-muted/60 text-muted-foreground",
+                    ? "border-border bg-background-subtle"
+                    : "border-border/50 hover:border-border hover:bg-background-subtle/60",
                 )}
               >
-                <MessageSquare className="size-4" />
-              </div>
-
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-medium leading-tight">
+                <div className="truncate pr-6 text-[15px] font-medium leading-tight text-foreground">
                   {c.title}
                 </div>
-                <div className="truncate text-[11px] text-muted-foreground">
-                  {new Date(c.updatedAt).toLocaleString()}
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {relTime(c.updatedAt, i18n.language)}
                 </div>
-              </div>
 
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete(c.id);
-                }}
-                className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
-                title={t("common.delete")}
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </div>
-          );
-        })}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDelete(c.id);
+                  }}
+                  className="absolute right-3 top-3 flex size-6 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                  title={t("common.delete")}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

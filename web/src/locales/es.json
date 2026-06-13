@@ -95,7 +95,8 @@
   },
   "history": {
     "newChat": "Nuevo chat",
-    "empty": "Aún no hay conversaciones."
+    "empty": "Aún no hay conversaciones.",
+    "recentChats": "Chats recientes"
   },
   "connections": {
     "title": "Conexiones",
