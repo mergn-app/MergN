@@ -202,7 +202,9 @@ export function createBilling(
         id: inv.id ?? "",
         number: inv.number ?? null,
         status: inv.status ?? null,
-        amount: inv.amount_paid ?? inv.amount_due ?? 0,
+        // the invoice total (what it's for), not amount_paid — proration can put
+        // the charge on the account balance so amount_paid is 0 until next cycle
+        amount: inv.total ?? inv.amount_due ?? 0,
         currency: inv.currency ?? "usd",
         period_start: inv.period_start ?? 0,
         period_end: inv.period_end ?? 0,
