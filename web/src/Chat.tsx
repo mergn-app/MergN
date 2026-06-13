@@ -10,7 +10,7 @@ import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { spaceHeaders } from "./space";
 import { useAuth } from "./authContext";
-import { useConversation, reportLog } from "./queries";
+import { useConversation, useConnections, reportLog } from "./queries";
 import { ConnectionDialog } from "./ConnectionDialog";
 import { ModelPicker } from "./ModelPicker";
 import { Button } from "@/components/ui/button";
@@ -376,6 +376,7 @@ function ChatThread({
   const [input, setInput] = useState("");
   const [connectProvider, setConnectProvider] = useState<string | null>(null);
   const handledConnects = useRef<Set<string>>(new Set());
+  const { data: connectionsData } = useConnections();
   const taRef = useRef<HTMLTextAreaElement>(null);
 
   const grow = () => {
@@ -495,6 +496,11 @@ function ChatThread({
   }, [ops, onOps]);
 
   useEffect(() => {
+    // Wait until connections have loaded before deciding — otherwise the first
+    // pass (empty list) marks the request_connection parts as handled and the
+    // dialog pops for providers that are in fact already connected.
+    if (!connectionsData) return;
+    const connected = new Set(connectionsData.map((c) => c.provider));
     let target: string | null = null;
     messages.forEach((m) => {
       (m.parts as ToolPart[]).forEach((part, i) => {
@@ -504,11 +510,15 @@ function ChatThread({
         if (handledConnects.current.has(key)) return;
         handledConnects.current.add(key);
         const o = part.output as { provider?: string } | undefined;
-        if (o?.provider) target = o.provider;
+        // Don't auto-pop the dialog for a provider that's already connected.
+        // On reload `handledConnects` is empty, so historical request_connection
+        // calls would otherwise re-open the dialog for connections the user has
+        // since set up.
+        if (o?.provider && !connected.has(o.provider)) target = o.provider;
       });
     });
     if (target) setConnectProvider(target);
-  }, [messages]);
+  }, [messages, connectionsData]);
 
   useEffect(() => {
     onBuilding?.(building);
