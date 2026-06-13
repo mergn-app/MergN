@@ -55,6 +55,7 @@ git clone https://github.com/flowbaker/MergN.git && cd MergN
 npm install
 cd web && npm install && cd ..
 ```
+----------------------------------------------------
 
 **NATS is required** (JetStream — runs scheduled & poll workflows). Start it and
 point the app at it, otherwise the backend exits on startup:
