@@ -12,7 +12,7 @@ import { App } from "./App";
 import { AuthForm } from "./AuthForm";
 import { AuthProvider, useAuth } from "./authContext";
 import { useSpaces } from "./queries";
-import { setSpace } from "./space";
+import { setSpace, getLastSpace } from "./space";
 
 function RootLayout() {
   return (
@@ -38,9 +38,14 @@ function IndexPage() {
 
   useEffect(() => {
     if (user && spaces && spaces.length > 0) {
+      // Restore the space the user was last in (if it still exists), so a fresh
+      // login / landing on the root doesn't snap them to the first-created space
+      // — which may not be the one holding their connections and workflows.
+      const last = getLastSpace();
+      const target = spaces.some((s) => s.id === last) ? last : spaces[0].id;
       void navigate({
         to: "/s/$spaceId",
-        params: { spaceId: spaces[0].id },
+        params: { spaceId: target },
         replace: true,
       });
     }
