@@ -232,7 +232,12 @@ const webhookAuth = createWebhookAuthStore(store, vault);
 
 const rateLimiter = createMemoryRateLimiter();
 const CHAT_USER_LIMIT: RateLimitRule = { limit: 20, windowMs: 60_000 };
-const CHAT_GLOBAL_LIMIT: RateLimitRule = { limit: 120, windowMs: 60_000 };
+// Global cap across ALL users combined: at most N chat prompts per minute for
+// the whole deployment (single shared "chat:global" counter). Env-tunable.
+const CHAT_GLOBAL_LIMIT: RateLimitRule = {
+  limit: Number(process.env.CHAT_GLOBAL_LIMIT_PER_MIN ?? "20"),
+  windowMs: 60_000,
+};
 const HOOK_LIMIT: RateLimitRule = { limit: 60, windowMs: 60_000 };
 
 async function runSavedWorkflow(
@@ -1467,12 +1472,24 @@ app.get("/api/spaces", async (c) => {
   return c.json(spaces.map((s) => ({ id: s.id, name: s.name })));
 });
 
+// One workspace per account across all plans (every user already gets an
+// auto-provisioned personal space, so this blocks creating a second). Tunable
+// via env if a deployment ever needs more.
+const MAX_SPACES_PER_USER = Number(process.env.MAX_SPACES_PER_USER ?? "1");
+
 app.post("/api/spaces", async (c) => {
+  const userId = c.get("userId");
+  const existing = await membership.listSpaces(userId);
+  if (existing.length >= MAX_SPACES_PER_USER)
+    return c.json(
+      {
+        error: "space_limit",
+        message: `Your plan allows only ${MAX_SPACES_PER_USER} workspace${MAX_SPACES_PER_USER === 1 ? "" : "s"}.`,
+      },
+      403,
+    );
   const body = await c.req.json<{ name?: string }>();
-  const space = await membership.createSpace(
-    c.get("userId"),
-    body.name ?? "Workspace",
-  );
+  const space = await membership.createSpace(userId, body.name ?? "Workspace");
   await registry.ensureSpace(space.id);
   return c.json({ id: space.id, name: space.name });
 });

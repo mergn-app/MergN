@@ -46,6 +46,9 @@ export function SpaceSwitcher() {
     fire();
   };
 
+  // One workspace per account — hide the create UI once the user has a space.
+  const atLimit = spaces.length >= 1;
+
   const currentName =
     spaces.find((s) => s.id === current)?.name ??
     (user ? t("spaces.workspace") : t("spaces.signInToStart"));
@@ -88,8 +91,8 @@ export function SpaceSwitcher() {
               </button>
             ))}
           </div>
-          <div className="my-1 h-px bg-border/50" />
-          {creating ? (
+          {!atLimit && <div className="my-1 h-px bg-border/50" />}
+          {atLimit ? null : creating ? (
             <div className="flex items-center gap-1 p-1">
               <input
                 autoFocus
