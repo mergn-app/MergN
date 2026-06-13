@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
+  useConnections,
   useCreateConnection,
   useDeleteConnection,
   useUpdateConnection,
@@ -111,7 +112,14 @@ export function ConnectionDialog({
   const auth = useProviderAuth(provider);
   const isOAuth = auth.data?.type === "oauth2";
   const [adding, setAdding] = useState(false);
-  const creating = !connection || adding;
+  // Callers that open this dialog from a "connect X" prompt (chat, node picker)
+  // don't pass the existing connection — without this lookup the dialog would
+  // always render in create mode and show an already-connected provider as
+  // "not connected". Fall back to the current space's connection for this
+  // provider so it opens in manage mode when one already exists.
+  const { data: conns = [] } = useConnections();
+  const resolved = connection ?? conns.find((c) => c.provider === provider);
+  const creating = !resolved || adding;
   const oauthStatus = useOAuthStatus(provider, !!isOAuth && creating);
   const saveApp = useSaveOAuthApp(provider);
   const deleteApp = useDeleteOAuthApp(provider);
@@ -122,8 +130,8 @@ export function ConnectionDialog({
 
   const [cred, setCred] = useState<Record<string, string>>({});
   const [account, setAccount] = useState("");
-  const [nameDraft, setNameDraft] = useState(connection?.account ?? "");
-  const [savedName, setSavedName] = useState(connection?.account ?? "");
+  const [nameDraft, setNameDraft] = useState(resolved?.account ?? "");
+  const [savedName, setSavedName] = useState(resolved?.account ?? "");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [authUrl, setAuthUrl] = useState("");
@@ -197,7 +205,7 @@ export function ConnectionDialog({
   };
 
   const disconnect = () => {
-    if (connection) del.mutate(connection.id, { onSuccess: requestClose });
+    if (resolved) del.mutate(resolved.id, { onSuccess: requestClose });
   };
 
   const configured = oauthStatus.data?.configured ?? false;
@@ -273,7 +281,7 @@ export function ConnectionDialog({
                   onClick={() =>
                     update.mutate(
                       {
-                        id: connection.id,
+                        id: resolved.id,
                         account: nameDraft.trim() || undefined,
                       },
                       { onSuccess: (m) => setSavedName(m.account ?? "") },
@@ -286,7 +294,7 @@ export function ConnectionDialog({
             </div>
             <div className="text-xs text-muted-foreground">
               {t("connectionDialog.connectedOn", {
-                date: new Date(connection.createdAt).toLocaleDateString(
+                date: new Date(resolved.createdAt).toLocaleDateString(
                   i18n.language,
                 ),
               })}
