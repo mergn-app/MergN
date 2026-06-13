@@ -5,7 +5,7 @@ import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { AuthoredFunc, InputForm, TriggerConfig, Wire, WorkflowOp } from "./types";
-import { Sparkles, ArrowUpRight, Brain, Loader2, SquarePen, X } from "lucide-react";
+import { Sparkles, ArrowUpRight, Brain, Loader2, SquarePen, X, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { spaceHeaders, getSpace } from "./space";
@@ -305,6 +305,8 @@ interface ChatProps {
   onBuilding?: (building: boolean) => void;
   workflowState?: string;
   onReady?: (send: (text: string) => void) => void;
+  onBack?: () => void;
+  initialPrompt?: string;
 }
 
 export function Chat(props: ChatProps) {
@@ -332,6 +334,8 @@ function ChatThread({
   onBuilding,
   workflowState,
   onReady,
+  onBack,
+  initialPrompt,
   initialMessages,
 }: ChatProps & { initialMessages: UIMessage[] }) {
   const { t, i18n } = useTranslation();
@@ -406,6 +410,15 @@ function ChatThread({
   useEffect(() => {
     onReady?.(send);
   }, [send, onReady]);
+
+  // When opened from the list view with a typed prompt, send it once.
+  const sentInitial = useRef(false);
+  useEffect(() => {
+    if (initialPrompt && !sentInitial.current) {
+      sentInitial.current = true;
+      send(initialPrompt);
+    }
+  }, [initialPrompt, send]);
 
   const ops = useMemo(() => {
     const out: WorkflowOp[] = [];
@@ -557,6 +570,16 @@ function ChatThread({
   return (
     <div className="flex h-full w-full flex-col">
       <div className="flex items-center gap-2 px-3 py-1.5">
+        {onBack && (
+          <button
+            type="button"
+            title={t("common.back")}
+            onClick={onBack}
+            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+          </button>
+        )}
         <span className="ml-auto rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
           {t("chat.tokens", { n: totalTokens.toLocaleString(i18n.language) })}
         </span>

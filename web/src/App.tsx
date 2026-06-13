@@ -31,7 +31,7 @@ import { LanguageSwitcher } from "./LanguageSwitcher";
 import { LegalLinks } from "./LegalLinks";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { triggerIntervalMs } from "./schedule-display";
-import { ChatHistory } from "./ChatHistory";
+import { ChatPanel } from "./ChatPanel";
 import { RunPanel } from "./RunPanel";
 import {
   useSaveWorkflow,
@@ -184,6 +184,8 @@ export function App({
   );
   const [activeTab, setActiveTab] = useState<RightTab>("chat");
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [chatView, setChatView] = useState<"list" | "chat">("list");
+  const [chatPrompt, setChatPrompt] = useState<string | null>(null);
   const [loadedConvId, setLoadedConvId] = useState<string | null>(null);
   const [view, setView] = useState<"story" | "pipeline" | "graph">("story");
   const [bottomHeight, setBottomHeight] = useState(256);
@@ -233,11 +235,23 @@ export function App({
 
   const newChat = useCallback(() => {
     setConversationId(crypto.randomUUID());
+    setChatPrompt(null);
+    setChatView("chat");
     setActiveTab("chat");
   }, []);
 
   const selectChat = useCallback((id: string) => {
     setConversationId(id);
+    setChatPrompt(null);
+    setChatView("chat");
+    setActiveTab("chat");
+  }, []);
+
+  // Start a brand-new chat seeded with the prompt typed in the list view.
+  const startChatPrompt = useCallback((text: string) => {
+    setConversationId(crypto.randomUUID());
+    setChatPrompt(text);
+    setChatView("chat");
     setActiveTab("chat");
   }, []);
 
@@ -1052,35 +1066,39 @@ export function App({
           active={activeTab}
           onTab={setActiveTab}
           chat={
-            conversationId ? (
-              <Chat
-                conversationId={conversationId}
-                onNewChat={newChat}
-                onOps={setOps}
-                onBuilding={setBuilding}
-                workflowState={workflowState}
-                onReady={(send) => {
-                  sendChatRef.current = send;
-                }}
-              />
-            ) : (
-              <div className="flex h-full w-full items-center justify-center" />
-            )
-          }
-          history={
-            <ChatHistory
+            <ChatPanel
+              view={chatView}
               conversations={(conversationsQuery.data ?? []).filter((cv) =>
                 workflowId
                   ? cv.workflowId === workflowId ||
                     cv.id === conversationId ||
                     cv.id === loadedConvId
-                  : cv.id === conversationId,
+                  : true,
               )}
               isLoading={conversationsQuery.isLoading}
               currentId={conversationId}
-              onSelect={selectChat}
               onNew={newChat}
+              onSelect={selectChat}
               onDelete={removeChat}
+              onStartPrompt={startChatPrompt}
+              chat={
+                conversationId ? (
+                  <Chat
+                    conversationId={conversationId}
+                    onNewChat={newChat}
+                    onBack={() => setChatView("list")}
+                    initialPrompt={chatPrompt ?? undefined}
+                    onOps={setOps}
+                    onBuilding={setBuilding}
+                    workflowState={workflowState}
+                    onReady={(send) => {
+                      sendChatRef.current = send;
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center" />
+                )
+              }
             />
           }
           files={<FilesPanel />}
