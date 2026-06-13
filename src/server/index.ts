@@ -768,9 +768,13 @@ app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 // Self-host single-user mode: skip auth entirely and act as one local user.
 const DISABLE_AUTH =
   process.env.DISABLE_AUTH === "1" || process.env.DISABLE_AUTH === "true";
+const MANAGED =
+  process.env.MANAGED === "1" || process.env.MANAGED === "true";
 const LOCAL_USER = { id: "local", email: "local@localhost", name: "Local" };
 
-app.get("/api/config", (c) => c.json({ authDisabled: DISABLE_AUTH }));
+app.get("/api/config", (c) =>
+  c.json({ authDisabled: DISABLE_AUTH, managed: MANAGED }),
+);
 
 app.use("/api/*", async (c, next) => {
   const path = c.req.path;

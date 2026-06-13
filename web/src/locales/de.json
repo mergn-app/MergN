@@ -40,7 +40,12 @@
     "funcCount": "{{n}} Funktion",
     "configureTrigger": "Trigger konfigurieren",
     "connectionsNeeded_one": "{{count}} Verbindung benötigt",
-    "connectionsNeeded_other": "{{count}} Verbindungen benötigt"
+    "connectionsNeeded_other": "{{count}} Verbindungen benötigt",
+    "termsOfService": "Nutzungsbedingungen",
+    "privacyPolicy": "Datenschutz"
+  },
+  "legal": {
+    "backHome": "Zur Startseite"
   },
   "view": {
     "story": "Story",

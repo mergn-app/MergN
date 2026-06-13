@@ -40,7 +40,12 @@
     "funcCount": "{{n}} fonksiyon",
     "configureTrigger": "Tetikleyiciyi ayarla",
     "connectionsNeeded_one": "{{count}} bağlantı gerekli",
-    "connectionsNeeded_other": "{{count}} bağlantı gerekli"
+    "connectionsNeeded_other": "{{count}} bağlantı gerekli",
+    "termsOfService": "Kullanım Koşulları",
+    "privacyPolicy": "Gizlilik Politikası"
+  },
+  "legal": {
+    "backHome": "Ana sayfaya dön"
   },
   "view": {
     "story": "hikaye",

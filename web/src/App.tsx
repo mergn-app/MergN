@@ -28,6 +28,7 @@ import { WorkflowsPanel } from "./WorkflowsPanel";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { PlanChip } from "./PlanChip";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { LegalLinks } from "./LegalLinks";
 import { ConnectionsPanel } from "./ConnectionsPanel";
 import { triggerIntervalMs } from "./schedule-display";
 import { ChatHistory } from "./ChatHistory";
@@ -834,52 +835,56 @@ export function App({
         <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-4 py-2">
           {user && <SpaceSwitcher />}
           {user && <PlanChip />}
-          <Badge variant="secondary" className="ml-auto font-normal">
-            {t("header.funcCount", { n: funcs.length })}
-          </Badge>
-          <LanguageSwitcher />
-          <Button
-            size="icon"
-            variant="ghost"
-            className="h-8 w-8"
-            title={
-              theme === "dark"
-                ? t("header.switchToLight")
-                : t("header.switchToDark")
-            }
-            onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
-          >
-            {theme === "dark" ? (
-              <Sun className="h-4 w-4" />
-            ) : (
-              <Moon className="h-4 w-4" />
-            )}
-          </Button>
-          {user ? (
-            <div className="flex items-center gap-1.5">
-              <span className="max-w-32 truncate text-xs text-muted-foreground">
-                {user.email}
-              </span>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                title={t("auth.signOut")}
-                onClick={signOut}
-              >
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </div>
-          ) : (
+      
+          <div className="ml-auto flex items-center gap-3">
+            <LegalLinks />
+            <Badge variant="secondary" className="font-normal">
+              {t("header.funcCount", { n: funcs.length })}
+            </Badge>
+            <LanguageSwitcher />
             <Button
-              size="sm"
-              variant="outline"
-              className="h-8"
-              onClick={() => requireAuth()}
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8"
+              title={
+                theme === "dark"
+                  ? t("header.switchToLight")
+                  : t("header.switchToDark")
+              }
+              onClick={() => setTheme((prev) => (prev === "dark" ? "light" : "dark"))}
             >
-              {t("auth.signIn")}
+              {theme === "dark" ? (
+                <Sun className="h-4 w-4" />
+              ) : (
+                <Moon className="h-4 w-4" />
+              )}
             </Button>
-          )}
+            {user ? (
+              <div className="flex items-center gap-1.5">
+                <span className="max-w-32 truncate text-xs text-muted-foreground">
+                  {user.email}
+                </span>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8"
+                  title={t("auth.signOut")}
+                  onClick={signOut}
+                >
+                  <LogOut className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-8"
+                onClick={() => requireAuth()}
+              >
+                {t("auth.signIn")}
+              </Button>
+            )}
+          </div>
         </header>
       </div>
 

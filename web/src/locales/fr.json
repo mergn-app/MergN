@@ -40,7 +40,12 @@
     "funcCount": "{{n}} fonction",
     "configureTrigger": "Configurer le déclencheur",
     "connectionsNeeded_one": "{{count}} connexion requise",
-    "connectionsNeeded_other": "{{count}} connexions requises"
+    "connectionsNeeded_other": "{{count}} connexions requises",
+    "termsOfService": "Conditions d'utilisation",
+    "privacyPolicy": "Politique de confidentialité"
+  },
+  "legal": {
+    "backHome": "Retour à l'accueil"
   },
   "view": {
     "story": "récit",

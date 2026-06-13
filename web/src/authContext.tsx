@@ -22,6 +22,7 @@ export interface AuthUser {
 interface AuthContextValue {
   user: AuthUser | null;
   pending: boolean;
+  managed: boolean | null;
   requireAuth: (action?: () => void) => boolean;
   withAuth: <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => void;
   signOut: () => void;
@@ -30,6 +31,7 @@ interface AuthContextValue {
 const Ctx = createContext<AuthContextValue>({
   user: null,
   pending: true,
+  managed: null,
   requireAuth: () => false,
   withAuth: (fn) => fn,
   signOut: () => {},
@@ -67,11 +69,18 @@ const LOCAL_USER: AuthUser = {
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authDisabled, setAuthDisabled] = useState<boolean | null>(null);
+  const [managed, setManaged] = useState<boolean | null>(null);
   useEffect(() => {
     fetch("/api/config")
       .then((r) => r.json())
-      .then((c: { authDisabled?: boolean }) => setAuthDisabled(!!c.authDisabled))
-      .catch(() => setAuthDisabled(false));
+      .then((c: { authDisabled?: boolean; managed?: boolean }) => {
+        setAuthDisabled(!!c.authDisabled);
+        setManaged(!!c.managed);
+      })
+      .catch(() => {
+        setAuthDisabled(false);
+        setManaged(false);
+      });
   }, []);
 
   const { data: session, isPending } = useSession();
@@ -156,6 +165,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         pending,
+        managed,
         requireAuth,
         withAuth,
         signOut: doSignOut,

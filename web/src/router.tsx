@@ -10,10 +10,13 @@ import {
 } from "@tanstack/react-router";
 import { App } from "./App";
 import { AuthForm } from "./AuthForm";
+import { LanguageSwitcher } from "./LanguageSwitcher";
+import { LegalLinks } from "./LegalLinks";
 import { AuthProvider, useAuth } from "./authContext";
 import { useSpaces } from "./queries";
 import { setSpace, getLastSpace } from "./space";
 import { BillingPage } from "./BillingPage";
+import { LegalPage } from "./LegalPage";
 
 function RootLayout() {
   return (
@@ -63,9 +66,19 @@ function LoginPage() {
     if (user) void navigate({ to: "/", replace: true });
   }, [user, navigate]);
   return (
-    <div className="flex h-screen w-screen items-center justify-center bg-background p-4 text-foreground">
-      <div className="w-full max-w-sm rounded-2xl border border-border/50 bg-card p-6">
-        <AuthForm />
+    <div className="flex h-screen w-screen flex-col bg-background text-foreground">
+      <div className="p-2 pb-0">
+        <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-4 py-2">
+          <div className="ml-auto flex items-center gap-3">
+            <LegalLinks />
+            <LanguageSwitcher />
+          </div>
+        </header>
+      </div>
+      <div className="flex flex-1 items-center justify-center p-4">
+        <div className="w-full max-w-sm rounded-2xl border border-border/50 bg-card p-6">
+          <AuthForm showLegalLinks={false} />
+        </div>
       </div>
     </div>
   );
@@ -122,12 +135,28 @@ const billingRoute = createRoute({
   component: BillingPage,
 });
 
+const termsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/terms",
+  loader: () => setSpace(""),
+  component: () => <LegalPage kind="terms" />,
+});
+
+const privacyRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/privacy",
+  loader: () => setSpace(""),
+  component: () => <LegalPage kind="privacy" />,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
   loginRoute,
   spaceRoute,
   workflowRoute,
   billingRoute,
+  termsRoute,
+  privacyRoute,
 ]);
 
 export const router = createRouter({ routeTree });

@@ -40,7 +40,12 @@
     "funcCount": "{{n}} función",
     "configureTrigger": "Configurar disparador",
     "connectionsNeeded_one": "{{count}} conexión necesaria",
-    "connectionsNeeded_other": "{{count}} conexiones necesarias"
+    "connectionsNeeded_other": "{{count}} conexiones necesarias",
+    "termsOfService": "Términos de servicio",
+    "privacyPolicy": "Política de privacidad"
+  },
+  "legal": {
+    "backHome": "Volver al inicio"
   },
   "view": {
     "story": "historia",

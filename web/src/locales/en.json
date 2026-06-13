@@ -40,7 +40,12 @@
     "funcCount": "{{n}} func",
     "configureTrigger": "Configure trigger",
     "connectionsNeeded_one": "{{count}} connection needed",
-    "connectionsNeeded_other": "{{count}} connections needed"
+    "connectionsNeeded_other": "{{count}} connections needed",
+    "termsOfService": "Terms of Service",
+    "privacyPolicy": "Privacy Policy"
+  },
+  "legal": {
+    "backHome": "Back to home"
   },
   "view": {
     "story": "story",

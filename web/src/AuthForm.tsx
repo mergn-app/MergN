@@ -3,10 +3,11 @@ import { useTranslation } from "react-i18next";
 import { signIn, signUp } from "./auth";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { LegalLinks } from "./LegalLinks";
 
 type Mode = "signin" | "signup";
 
-export function AuthForm() {
+export function AuthForm({ showLegalLinks = true }: { showLegalLinks?: boolean }) {
   const { t } = useTranslation();
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
@@ -93,6 +94,12 @@ export function AuthForm() {
       >
         {mode === "signin" ? t("auth.toSignup") : t("auth.toSignin")}
       </button>
+
+      {showLegalLinks && (
+        <div className="mt-4 flex justify-center">
+          <LegalLinks />
+        </div>
+      )}
     </div>
   );
 }
