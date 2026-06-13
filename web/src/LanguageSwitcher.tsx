@@ -27,7 +27,7 @@ export function LanguageSwitcher() {
       >
         {current}
       </SelectTrigger>
-      <SelectContent>
+      <SelectContent position="popper" sideOffset={4} align="end">
         {LANGS.map((l) => (
           <SelectItem key={l.code} value={l.code}>
             {l.label}
