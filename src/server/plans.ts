@@ -26,7 +26,13 @@ export const PLANS: Plan[] = [
     description: "Get started building workflows with AI.",
     priceMonthly: 0,
     currency: "usd",
-    limits: { chats: 10, aiTokens: -1 },
+    // Limits are env-overridable so a deployment can tune the free tier (or set
+    // a temporary test cap) without a code change. Defaults: 10 chats, no token
+    // cap. -1 = unlimited.
+    limits: {
+      chats: Number(process.env.FREE_CHAT_LIMIT ?? "10"),
+      aiTokens: Number(process.env.FREE_TOKEN_LIMIT ?? "-1"),
+    },
     features: ["10 AI chats / month", "Run workflows", "Community support"],
     stripePriceEnv: "STRIPE_PRICE_FREE",
   },
@@ -36,7 +42,10 @@ export const PLANS: Plan[] = [
     description: "For builders who ship workflows every day.",
     priceMonthly: 19,
     currency: "usd",
-    limits: { chats: -1, aiTokens: 5_000_000 },
+    limits: {
+      chats: -1,
+      aiTokens: Number(process.env.PRO_TOKEN_LIMIT ?? "5000000"),
+    },
     features: [
       "Unlimited AI chats",
       "5M AI tokens / month",
