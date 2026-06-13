@@ -41,14 +41,17 @@ Mongo, NATS, the step-runner — is bundled in compose. Clone and run:
 git clone https://github.com/flowbaker/MergN.git && cd MergN
 docker compose up -d        # starts in the background -> http://localhost:8787
 ```
+Open http://localhost:8787. Logs: docker compose logs -f app · Stop: docker compose down
 
-Open **http://localhost:8787**. Logs: `docker compose logs -f app` · Stop: `docker compose down`
+That's it. The application is now running with Docker.
 
-**Update (Anytime You Want):** 
+**Update (Anytime)**
+
+When you want to update to the latest version, run:
 ```bash
 git pull && docker compose up -d
-``` 
-— pulls the latest image and restarts.
+```
+This pulls the latest changes and restarts the containers.
 
 ## Setup Native
 
@@ -107,15 +110,24 @@ npm run server          # backend  -> http://localhost:8787
 cd ~/MergN 
 cd web && npm run dev   # frontend -> http://localhost:5173
 ```
+That's it. The application is now running natively.
 
-**Update Native (Anytime You Want):** 
+**Update Native**
+
+When you want to update to the latest version, run:
+
 ```bash
-cd ~/MergN 
+cd ~/MergN
 git pull && npm install && (cd web && npm install)
 ```
-then restart.
 
-(Disable the boot check with `UPDATE_CHECK=0`.)
+Then restart the application.
+
+To disable update checks on startup, set:
+
+```bash
+UPDATE_CHECK=0
+```
 
 ## Troubleshooting & Advanced Setup
 
