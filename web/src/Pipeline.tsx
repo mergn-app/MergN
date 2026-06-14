@@ -28,9 +28,6 @@ function SourceChip({ source }: { source: Source }) {
   if (source.kind === "unbound") {
     return <span className="text-tone-rose-fg">⚠ unwired</span>;
   }
-  if (source.kind === "config") {
-    return <span className="text-muted-foreground">← config</span>;
-  }
   if (source.kind === "trigger") {
     return (
       <span className="text-tone-amber-fg/90">

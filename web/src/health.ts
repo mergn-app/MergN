@@ -9,7 +9,7 @@ export interface HealthIssue {
 }
 
 // Deterministic, instant (no LLM) detection of definitely-broken wiring:
-//  - orphan-input: a non-config input with no wire, no config value, not a
+//  - orphan-input: an input with no wire, no config value, not a
 //    trigger field, and not covered by the input form or saved variables — it
 //    would be `undefined` at run time.
 //  - cycle: the wire graph is not a DAG.
@@ -33,7 +33,6 @@ export function detectIssues(args: {
   for (const f of funcs) {
     const cfg = configValues[f.id] ?? {};
     for (const p of f.inputs) {
-      if (p.role === "config") continue;
       const wired = wires.some((w) => w.to === f.id && w.toInput === p.name);
       const hasConfig = cfg[p.name] !== undefined && cfg[p.name] !== "";
       if (

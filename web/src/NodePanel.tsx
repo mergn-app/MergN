@@ -3,7 +3,6 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeftRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthoredFunc, RunStepData } from "./types";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NodeConnection } from "./NodeConnection";
 
@@ -59,19 +58,15 @@ const RUN_DOT: Record<string, string> = {
 
 export function NodePanel({
   func,
-  config,
   connections,
   run,
-  onConfigChange,
   onConnectionChange,
   onFuncChange,
   onAddFunc,
 }: {
   func: AuthoredFunc | null;
-  config: Record<string, string>;
   connections?: Record<string, string>;
   run?: RunStepData;
-  onConfigChange: (port: string, value: string) => void;
   onConnectionChange?: (requirementName: string, connectionId: string) => void;
   onFuncChange?: (prevId: string, next: AuthoredFunc) => void;
   onAddFunc?: () => void;
@@ -104,7 +99,7 @@ export function NodePanel({
         inputs: Array.isArray(raw.inputs)
           ? raw.inputs.map((p) => ({
               name: String(p?.name ?? ""),
-              role: String(p?.role ?? "input"),
+              role: "input",
               type: String(p?.type ?? "string"),
               required: Boolean(p?.required),
             }))
@@ -172,8 +167,7 @@ export function NodePanel({
   const outs = func.outputSchema?.properties
     ? Object.keys(func.outputSchema.properties)
     : (func.outputSchema?.required ?? []);
-  const configPorts = func.inputs.filter((p) => p.role === "config");
-  const dataPorts = func.inputs.filter((p) => p.role !== "config");
+  const dataPorts = func.inputs;
 
   return (
     <ScrollArea className="h-full w-full">
@@ -258,33 +252,6 @@ export function NodePanel({
               </div>
             )}
           </div>
-        )}
-
-        {configPorts.length > 0 && (
-          <Section title={t("node.settings")}>
-            <div className="space-y-2.5">
-              {configPorts.map((p) => (
-                <div key={p.name} className="space-y-1">
-                  <label className="flex items-center gap-2 text-xs">
-                    <span className="min-w-0 truncate font-medium">{p.name}</span>
-                    <TypePill>{p.type}</TypePill>
-                    {!p.required && (
-                      <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                        {t("node.optional")}
-                      </span>
-                    )}
-                  </label>
-                  <Input
-                    value={config[p.name] ?? ""}
-                    onChange={(e) => onConfigChange(p.name, e.target.value)}
-                    type={p.type === "number" ? "number" : "text"}
-                    placeholder={`${p.name}…`}
-                    className="h-8 rounded-lg bg-background text-sm"
-                  />
-                </div>
-              ))}
-            </div>
-          </Section>
         )}
 
         <Section title={t("node.inputs")}>

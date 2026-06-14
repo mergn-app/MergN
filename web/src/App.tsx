@@ -67,6 +67,10 @@ import { Badge } from "@/components/ui/badge";
 import { LogOut } from "lucide-react";
 
 const wireKey = (w: Wire) => `${w.from}.${w.fromOutput}->${w.to}.${w.toInput}`;
+const normalizeFunc = (f: AuthoredFunc): AuthoredFunc => ({
+  ...f,
+  inputs: (f.inputs ?? []).map((p) => ({ ...p, role: "input" })),
+});
 
 const NO_CONNECTIONS: ConnectionMeta[] = [];
 
@@ -407,7 +411,6 @@ export function App({
     const names = new Set<string>();
     for (const f of funcs) {
       for (const p of f.inputs) {
-        if (p.role === "config") continue;
         if (wires.some((w) => w.to === f.id && w.toInput === p.name)) continue;
         names.add(p.name);
       }
@@ -555,16 +558,6 @@ export function App({
     [],
   );
 
-  const onConfigChange = useCallback(
-    (funcId: string, port: string, value: string) => {
-      setConfigValues((prev) => ({
-        ...prev,
-        [funcId]: { ...(prev[funcId] ?? {}), [port]: value },
-      }));
-    },
-    [],
-  );
-
   const onConnectionChange = useCallback(
     (funcId: string, requirementName: string, connectionId: string) => {
       setNodeConnections((prev) => {
@@ -683,7 +676,8 @@ export function App({
         });
         return;
       }
-      setFuncs((prev) => prev.map((f) => (f.id === prevId ? next : f)));
+      const normalized = normalizeFunc(next);
+      setFuncs((prev) => prev.map((f) => (f.id === prevId ? normalized : f)));
       if (prevId !== next.id) {
         setWires((prev) =>
           prev.map((w) => ({
@@ -725,7 +719,7 @@ export function App({
           positionsRef.current[next.id] = moved;
           delete positionsRef.current[prevId];
         }
-        setSelectedId((cur) => (cur === prevId ? next.id : cur));
+        setSelectedId((cur) => (cur === prevId ? normalized.id : cur));
       }
       setAutoSave(true);
     },
@@ -829,7 +823,7 @@ export function App({
       if (o.kind === "funcs") {
         setFuncs((prev) => {
           const map = new Map(prev.map((f) => [f.id, f]));
-          for (const f of o.funcs) map.set(f.id, f);
+          for (const f of o.funcs) map.set(f.id, normalizeFunc(f));
           return [...map.values()];
         });
       } else if (o.kind === "wires") {
@@ -874,7 +868,7 @@ export function App({
       const additions: Wire[] = [];
       for (const f of funcs) {
         for (const p of f.inputs) {
-          if (p.role === "config" || !eventFields.includes(p.name)) continue;
+          if (!eventFields.includes(p.name)) continue;
           const wired = kept.some(
             (w) => w.to === f.id && w.toInput === p.name,
           );
@@ -904,11 +898,10 @@ export function App({
           const wired = wires.some(
             (w) => w.to === f.id && w.toInput === p.name,
           );
-          const isConfig = p.role === "config";
           return {
             name: p.name,
             bound: wired || (cfg[p.name] !== undefined && cfg[p.name] !== ""),
-            variable: !wired && !isConfig,
+            variable: !wired,
           };
         });
         inputs.sort(
@@ -1011,7 +1004,6 @@ export function App({
     if (showTrigger) {
       for (const f of funcs) {
         for (const p of f.inputs) {
-          if (p.role === "config") continue;
           if (wires.some((w) => w.to === f.id && w.toInput === p.name)) continue;
           triggerEdges.push({
             id: `trigger.${p.name}->${f.id}.${p.name}`,
@@ -1133,7 +1125,7 @@ export function App({
     positionsRef.current = wf.positions ?? {};
     setSelectedId(null);
     setWires(wf.wires ?? []);
-    setFuncs(wf.funcs ?? []);
+    setFuncs((wf.funcs ?? []).map(normalizeFunc));
     setConfigValues(wf.config ?? {});
     setNodeConnections(wf.nodeConnections ?? {});
     setWorkflowId(wf.id);
@@ -1438,12 +1430,8 @@ export function App({
           node={
             <NodePanel
               func={selected}
-              config={selected ? (configValues[selected.id] ?? {}) : {}}
               connections={selected ? (nodeConnections[selected.id] ?? {}) : {}}
               run={selected ? runData[selected.id] : undefined}
-              onConfigChange={(port, value) =>
-                selected && onConfigChange(selected.id, port, value)
-              }
               onConnectionChange={(name, id) =>
                 selected && onConnectionChange(selected.id, name, id)
               }

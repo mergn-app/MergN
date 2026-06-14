@@ -1,6 +1,6 @@
 import type { Schema, UiHint } from './schema'
 
-export type PortRole = 'input' | 'config'
+export type PortRole = 'input'
 
 export type Binding =
   | { mode: 'literal'; value: unknown }

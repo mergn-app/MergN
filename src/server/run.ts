@@ -57,7 +57,7 @@ class NotifyingRunLog implements RunLogStore {
 
 interface RunInput {
   name: string;
-  role: "input" | "config";
+  role: "input";
   type: string;
   required: boolean;
 }
@@ -166,14 +166,11 @@ function toNode(
     // fromOutput "payload", which would otherwise resolve to trigger.output.payload
     // (wrong; we want the whole body). A step-sourced wire still wins.
     if (p.name === "payload" && (!w || w.from === "trigger")) {
-      if (p.role !== "config")
-        bindings[p.name] = { mode: "ref", path: "trigger.output" };
+      bindings[p.name] = { mode: "ref", path: "trigger.output" };
       continue;
     }
     if (!w) {
-      if (p.role !== "config") {
-        bindings[p.name] = { mode: "ref", path: `trigger.output.${p.name}` };
-      }
+      bindings[p.name] = { mode: "ref", path: `trigger.output.${p.name}` };
       continue;
     }
     bindings[p.name] = {

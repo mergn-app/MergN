@@ -244,7 +244,7 @@ export function RunPanel({
   const fieldNamesByNode = new Map<string, Set<string>>();
   for (const f of funcs) {
     for (const p of f.inputs) {
-      if (p.role === "config" || !formNames.has(p.name)) continue;
+      if (!formNames.has(p.name)) continue;
       if (wires.some((w) => w.to === f.id && w.toInput === p.name)) continue;
       let set = fieldNamesByNode.get(f.id);
       if (!set) {

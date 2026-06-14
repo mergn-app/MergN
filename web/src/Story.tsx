@@ -216,7 +216,6 @@ export function Story({
               src: sourceOf(f.id, p.name) as Source,
             }));
             const triggerIns = resolved.filter((r) => r.src.kind === "trigger");
-            const configIns = resolved.filter((r) => r.src.kind === "config");
             const unbound = resolved.filter((r) => r.src.kind === "unbound");
             const stepGroups = new Map<
               number,
@@ -257,18 +256,6 @@ export function Story({
                   <span className="text-tone-blue-fg">{g.title}</span>
                 </span>,
               );
-            if (configIns.length)
-              clauses.push(
-                <span key="cfg">
-                  {configIns.map((r) => (
-                    <Tok key={r.name} tone="config">
-                      {r.name}
-                    </Tok>
-                  ))}
-                  <span className="text-muted-foreground"> from config</span>
-                </span>,
-              );
-
             return (
               <div key={f.id} className="group">
                 <div

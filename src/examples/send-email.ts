@@ -36,14 +36,14 @@ export const sendEmailFunc: EffectfulFunc = {
     { name: 'to', role: 'input', schema: { type: 'string' }, required: true },
     {
       name: 'subject',
-      role: 'config',
+      role: 'input',
       schema: { type: 'string' },
       required: true,
       ui: { widget: 'text', label: 'Konu' },
     },
     {
       name: 'body',
-      role: 'config',
+      role: 'input',
       schema: { type: 'string' },
       required: true,
       ui: { widget: 'textarea', label: 'İçerik' },
@@ -76,7 +76,7 @@ export const slackPostFunc: EffectfulFunc = {
   inputs: [
     {
       name: 'channel',
-      role: 'config',
+      role: 'input',
       schema: { type: 'string' },
       required: true,
       ui: { widget: 'select', label: 'Kanal' },

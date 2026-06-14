@@ -24,8 +24,8 @@ export const funcDraftZ = z.object({
     z.object({
       name: z.string(),
       role: z
-        .enum(["input", "config"])
-        .describe("input = flowing data, config = setting"),
+        .enum(["input"])
+        .describe("input = flowing data"),
       type: primitiveType,
       required: z.boolean(),
     }),

@@ -3,7 +3,6 @@ import type { AuthoredFunc, Wire } from "./types";
 export type Source =
   | { kind: "trigger" }
   | { kind: "step"; num: number; title: string; output: string }
-  | { kind: "config" }
   | { kind: "unbound" };
 
 export function orderFuncs(funcs: AuthoredFunc[], wires: Wire[]): AuthoredFunc[] {
@@ -65,7 +64,7 @@ export function summarizeWorkflow(
         if (w) {
           src = w.from === "trigger" ? "trigger" : `${w.from}.${w.fromOutput}`;
         } else if ((configValues[f.id] ?? {})[p.name]) {
-          src = "config";
+          src = "trigger";
         }
         return `${p.name}<-${src}`;
       });
@@ -100,14 +99,8 @@ export function lineage(
     }
     const cfg = configValues[funcId] ?? {};
     if (cfg[inputName] !== undefined && cfg[inputName] !== "")
-      return { kind: "config" };
-    // No wire and no config value. A non-config input with no upstream wire is a
-    // run-time/trigger input the user fills in the run form (same as the backend,
-    // which binds it to trigger.output.<name>) — NOT a structural defect. Only a
-    // `config`-role input with no value is genuinely unbound.
-    const input = funcs.find((x) => x.id === funcId)?.inputs.find((p) => p.name === inputName);
-    if (input && input.role !== "config") return { kind: "trigger" };
-    return { kind: "unbound" };
+      return { kind: "trigger" };
+    return { kind: "trigger" };
   };
 
   return { ordered, numberOf, sourceOf };
