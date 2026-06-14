@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { BookOpenText } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { MergNLogo } from "@/components/MergNLogo";
 import type { AuthoredFunc, Wire } from "./types";
 import { lineage, outputsOf, type Source } from "./lineage";
 
@@ -130,7 +130,7 @@ export function Story({
       <div className="flex h-full items-center justify-center p-8">
         <div className="w-full max-w-md text-center">
           <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-secondary ring-1 ring-border">
-            <BookOpenText className="h-5 w-5 text-foreground/80" />
+            <MergNLogo className="h-7 w-auto text-foreground" />
           </div>
           <h2 className="mt-5 text-lg font-medium text-foreground">
             {t("story.title")}
