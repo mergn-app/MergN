@@ -306,6 +306,7 @@ interface ChatProps {
   onReady?: (send: (text: string) => void) => void;
   onBack?: () => void;
   initialPrompt?: string;
+  onPromptConsumed?: () => void;
 }
 
 export function Chat(props: ChatProps) {
@@ -334,6 +335,7 @@ function ChatThread({
   onReady,
   onBack,
   initialPrompt,
+  onPromptConsumed,
   initialMessages,
 }: ChatProps & { initialMessages: UIMessage[] }) {
   const { t, i18n } = useTranslation();
@@ -399,14 +401,17 @@ function ChatThread({
     onReady?.(send);
   }, [send, onReady]);
 
-  // When opened from the list view with a typed prompt, send it once.
+  // When opened from the list view with a typed prompt, send it once — then tell
+  // the parent to clear it so a later remount (e.g. starting a NEW workflow,
+  // which is keyed by conversationId) can't auto-resend the stale prompt.
   const sentInitial = useRef(false);
   useEffect(() => {
     if (initialPrompt && !sentInitial.current) {
       sentInitial.current = true;
       send(initialPrompt);
+      onPromptConsumed?.();
     }
-  }, [initialPrompt, send]);
+  }, [initialPrompt, send, onPromptConsumed]);
 
   const ops = useMemo(() => {
     const out: WorkflowOp[] = [];

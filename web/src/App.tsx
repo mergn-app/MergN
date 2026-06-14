@@ -845,6 +845,7 @@ export function App({
   const newWorkflow = () => {
     reset();
     setConversationId(crypto.randomUUID());
+    setChatPrompt(null); // never carry a previous flow's prompt into the new one
     setActiveTab("chat");
     if (spaceId) void navigate({ to: "/s/$spaceId", params: { spaceId } });
   };
@@ -1130,6 +1131,7 @@ export function App({
                     conversationId={conversationId}
                     onBack={() => setChatView("list")}
                     initialPrompt={chatPrompt ?? undefined}
+                    onPromptConsumed={() => setChatPrompt(null)}
                     onOps={setOps}
                     onBuilding={setBuilding}
                     workflowState={workflowState}
