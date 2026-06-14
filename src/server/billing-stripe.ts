@@ -94,7 +94,7 @@ export async function createStripeBilling(
             items: [{ price: freePrice }],
             metadata: { spaceId },
           });
-          applySubscription(rec, sub);
+          applySubscription(rec, sub as import("stripe").Stripe.Subscription);
         } catch {
           // fall back to local free record if Stripe provisioning fails
         }
