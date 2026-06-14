@@ -1277,6 +1277,8 @@ export function App({
                 )}
               </button>
             )}
+          </div>
+          <div className="absolute right-3 top-3 z-10">
             <button
               onClick={addCodeNode}
               className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-foreground/90 transition-colors hover:border-border"
