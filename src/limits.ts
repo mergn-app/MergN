@@ -49,6 +49,10 @@ export const LIMITS = {
 
   // ── Token / cost ceilings ──
   promptTokenCap: lim("PROMPT_TOKEN_CAP", NO_CAP), // one chat prompt, whole loop
+  // Max output tokens PER model call (chat + every internal authoring call).
+  // Output is the expensive side, so this is the biggest cost lever. `undefined`
+  // = let the model use its default (no app cap) when unset / self-host.
+  maxOutputTokens: ENFORCE_LIMITS ? envNum("MAX_OUTPUT_TOKENS") : undefined,
   // Deployment-wide cumulative kill-switch (0 = disabled, the safe default):
   globalTokenCap: ENFORCE_LIMITS ? (envNum("GLOBAL_TOKEN_CAP") ?? 0) : 0,
 

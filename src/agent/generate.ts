@@ -3,6 +3,7 @@ import { z } from "zod";
 import { getModel, getLlmConfig } from "./model";
 import { recordTokens } from "../store/usage-cap";
 import { assertLlmBudget, recordSpaceTokens } from "./llm-budget";
+import { LIMITS } from "../limits";
 
 // Transient failures from structured-output generation: the model returned
 // nothing parseable ("No object/output generated"), or a rate/5xx/network blip.
@@ -87,6 +88,7 @@ export async function genObject<S extends z.ZodTypeAny>(args: {
       system: args.system,
       prompt: args.prompt,
       experimental_telemetry: args.telemetry,
+      maxOutputTokens: LIMITS.maxOutputTokens,
       abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS),
     });
     const t = usage?.totalTokens ?? 0;

@@ -1034,7 +1034,7 @@ app.post("/api/chat", async (c) => {
             steps.reduce((sum, s) => sum + (s.usage?.totalTokens ?? 0), 0) >=
             LIMITS.promptTokenCap,
         ],
-        maxOutputTokens: LIMITS.promptTokenCap,
+        maxOutputTokens: LIMITS.maxOutputTokens,
         tools: withResultLimits(makeTools(spaceId, writer, sessionId)),
         providerOptions: {
           google: { thinkingConfig: { includeThoughts: true } },
