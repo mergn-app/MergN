@@ -42,6 +42,7 @@ git clone https://github.com/flowbaker/MergN.git && cd MergN
 docker compose up -d        # starts in the background -> http://localhost:8787
 ```
 Open http://localhost:8787. 
+
 Logs: 
 ```bash
 docker compose logs -f app 
