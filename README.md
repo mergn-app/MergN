@@ -2,7 +2,7 @@
 
 > The observability of n8n. The flexibility of AI agents.
 
-<img width="2879" height="1799" alt="image" src="https://github.com/user-attachments/assets/419fc75e-a7c2-4f0f-ad86-7cd727223470" />
+[<img width="2879" height="1799" alt="image" src="https://github.com/user-attachments/assets/419fc75e-a7c2-4f0f-ad86-7cd727223470" />](https://mergn.quollhq.com/s/b01fdfa3-d9d1-4955-b9c9-d637d1970456)
 
 
 MergN is an AI-native automation platform built by Quoll crew. checkout: https://quollhq.com/
