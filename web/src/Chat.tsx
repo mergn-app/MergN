@@ -5,7 +5,7 @@ import type { TFunction } from "i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import type { AuthoredFunc, InputForm, TriggerConfig, Wire, WorkflowOp } from "./types";
-import { Sparkles, ArrowUpRight, Brain, Loader2, SquarePen, X, ArrowLeft } from "lucide-react";
+import { Sparkles, ArrowUpRight, Brain, Loader2, X, ArrowLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { spaceHeaders, getSpace } from "./space";
@@ -14,7 +14,7 @@ import { useSubscription, atPlanLimit } from "./billing";
 import { useAuth } from "./authContext";
 import { useConversation, useConnections, reportLog } from "./queries";
 import { ConnectionDialog } from "./ConnectionDialog";
-import { ModelPicker } from "./ModelPicker";
+import { ChatComposer } from "./ChatComposer";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -300,7 +300,6 @@ const MessageItem = memo(function MessageItem({
 
 interface ChatProps {
   conversationId: string;
-  onNewChat: () => void;
   onOps: (ops: WorkflowOp[]) => void;
   onBuilding?: (building: boolean) => void;
   workflowState?: string;
@@ -329,7 +328,6 @@ export function Chat(props: ChatProps) {
 
 function ChatThread({
   conversationId,
-  onNewChat,
   onOps,
   onBuilding,
   workflowState,
@@ -387,19 +385,9 @@ function ChatThread({
   const { data: subscription } = useSubscription(getSpace());
   const taRef = useRef<HTMLTextAreaElement>(null);
 
-  const grow = () => {
-    const el = taRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = Math.min(el.scrollHeight, 208) + "px";
-  };
-
   const useExample = (text: string) => {
     setInput(text);
-    requestAnimationFrame(() => {
-      grow();
-      taRef.current?.focus();
-    });
+    requestAnimationFrame(() => taRef.current?.focus());
   };
 
   const send = useCallback(
@@ -553,15 +541,13 @@ function ChatThread({
     return sum;
   }, [messages]);
 
-  const submit = (e: { preventDefault: () => void }) => {
-    e.preventDefault();
+  const submit = () => {
     const text = input.trim();
     if (!text) return;
     const fire = () => {
       setChatError(null);
       send(text);
       setInput("");
-      if (taRef.current) taRef.current.style.height = "auto";
     };
     if (!requireAuth(fire)) return;
     fire();
@@ -583,17 +569,6 @@ function ChatThread({
         <span className="ml-auto rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
           {t("chat.tokens", { n: totalTokens.toLocaleString(i18n.language) })}
         </span>
-        {messages.length > 0 && (
-          <button
-            type="button"
-            title={t("chat.newChat")}
-            disabled={status === "streaming" || status === "submitted"}
-            onClick={onNewChat}
-            className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:pointer-events-none disabled:opacity-40"
-          >
-            <SquarePen className="size-3.5" />
-          </button>
-        )}
       </div>
 
       <ScrollArea className="min-h-0 flex-1">
@@ -691,37 +666,15 @@ function ChatThread({
         </div>
       )}
 
-      <form onSubmit={submit} className="p-2">
-        <div className="flex items-end gap-2 rounded-2xl border border-border/40 bg-background-subtle p-2 transition-colors focus-within:border-foreground/20">
-          <textarea
-            ref={taRef}
-            value={input}
-            rows={1}
-            onChange={(e) => {
-              setInput(e.target.value);
-              grow();
-            }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
-                e.preventDefault();
-                submit(e);
-              }
-            }}
-            placeholder={t("chat.placeholder")}
-            className="max-h-52 min-h-20 flex-1 resize-none self-stretch border-none bg-transparent px-1 py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0"
-          />
-          <Button
-            type="submit"
-            size="icon"
-            disabled={status === "streaming" || status === "submitted"}
-            className="h-8 w-8 shrink-0 rounded-xl"
-          >
-            ↑
-          </Button>
-        </div>
-      </form>
-
-      <ModelPicker />
+      <ChatComposer
+        value={input}
+        onChange={setInput}
+        onSubmit={submit}
+        inputRef={taRef}
+        submitDisabled={
+          !input.trim() || status === "streaming" || status === "submitted"
+        }
+      />
 
       {connectProvider && (
         <ConnectionDialog

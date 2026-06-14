@@ -259,13 +259,6 @@ export function App({
     setConversationId(conversationsQuery.data?.[0]?.id ?? crypto.randomUUID());
   }, [conversationId, user, conversationsQuery.isFetched, conversationsQuery.data]);
 
-  const newChat = useCallback(() => {
-    setConversationId(crypto.randomUUID());
-    setChatPrompt(null);
-    setChatView("chat");
-    setActiveTab("chat");
-  }, []);
-
   const selectChat = useCallback((id: string) => {
     setConversationId(id);
     setChatPrompt(null);
@@ -1128,7 +1121,6 @@ export function App({
               )}
               isLoading={conversationsQuery.isLoading}
               currentId={conversationId}
-              onNew={newChat}
               onSelect={selectChat}
               onDelete={removeChat}
               onStartPrompt={startChatPrompt}
@@ -1136,7 +1128,6 @@ export function App({
                 conversationId ? (
                   <Chat
                     conversationId={conversationId}
-                    onNewChat={newChat}
                     onBack={() => setChatView("list")}
                     initialPrompt={chatPrompt ?? undefined}
                     onOps={setOps}

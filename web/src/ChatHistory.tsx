@@ -1,7 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { Trash2, MessageSquarePlus } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import type { ConversationMeta } from "./queries";
 
@@ -33,31 +32,18 @@ export function ChatHistory({
   isLoading,
   currentId,
   onSelect,
-  onNew,
   onDelete,
 }: {
   conversations: ConversationMeta[];
   isLoading: boolean;
   currentId: string | null;
   onSelect: (id: string) => void;
-  onNew: () => void;
   onDelete: (id: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   return (
     <div className="flex h-full w-full flex-col">
       <div className="min-h-0 flex-1 space-y-2.5 overflow-auto p-3">
-        {/* New chat — same card style as the items, pinned to the top */}
-        <Button
-          onClick={onNew}
-          variant="ghost"
-          size="sm"
-          className="mt-1 h-auto w-full justif-center gap-2 rounded-xl border-border/80 py-2.5 font-medium text-foreground shadow-none hover:border-border hover:bg-background-subtle"
-        >
-          <MessageSquarePlus className="size-4 shrink-0" />
-          {t("history.newChat")}
-        </Button>
-
         {isLoading &&
           Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className={cn(CARD, "border-border/60")}>
