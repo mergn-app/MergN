@@ -45,6 +45,7 @@ export async function authorPollSource(
     schema: pollDraftZ,
     system: POLL_SYSTEM,
     telemetry: trace("author-poll-source", { ...meta, provider }),
+    spaceId: meta?.spaceId,
     prompt: [
       `Provider: ${provider}. API: ${apiDoc}`,
       `What to watch and what counts as new: ${intent}`,

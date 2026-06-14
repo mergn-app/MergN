@@ -6,6 +6,7 @@ import { authorInputForm } from "./form-author";
 import { authorPollSource } from "./poll-author";
 import { reconcileWiring } from "./wiring-repair";
 import { trace, type AgentMeta } from "../observability";
+import { LIMITS } from "../limits";
 
 export const planZ = z.object({
   name: z
@@ -132,6 +133,7 @@ export async function planWorkflow(
     system: PLAN_SYSTEM,
     prompt: goal,
     telemetry: trace("plan-workflow", meta),
+    spaceId: meta?.spaceId,
   });
 }
 
@@ -187,6 +189,7 @@ async function authorStepBody(
     schema: stepBodyZ,
     system: BODY_SYSTEM,
     telemetry: trace("author-step-body", { ...meta, step: step.id }),
+    spaceId: meta?.spaceId,
     prompt: [
       `Step: ${step.intent}`,
       `Required output fields: ${step.outputs.join(", ") || "(none)"}`,
@@ -299,6 +302,10 @@ export async function designWorkflow(
   meta?: AgentMeta,
 ) {
   const m: AgentMeta = { ...meta, spaceId };
+  // Each step is one authoring LLM call, so cap the count to bound the fan-out
+  // of a single design_workflow (limit configured in src/limits.ts).
+  if (plan.steps.length > LIMITS.maxPlanSteps)
+    plan.steps = plan.steps.slice(0, LIMITS.maxPlanSteps);
   const providerIds = new Set(
     plan.steps.filter((s) => s.effectful && s.provider).map((s) => s.provider!),
   );

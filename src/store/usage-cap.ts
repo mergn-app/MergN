@@ -1,12 +1,13 @@
 import type { DocStore } from "./docstore";
+import { LIMITS } from "../limits";
 
 // Instance-wide token spend guard. A single cumulative token counter across the
-// whole deployment (all spaces/users). When it reaches GLOBAL_TOKEN_CAP, new AI
+// whole deployment (all spaces/users). When it reaches the global cap, new AI
 // chat turns are refused. Off by default (cap 0) — self-host never hits it; the
 // managed/test deployment sets a cap so a test run can't run up an unbounded LLM
 // bill. Approximate (no locking) — fine for a safety ceiling.
 
-const CAP = Number(process.env.GLOBAL_TOKEN_CAP) || 0; // 0 = disabled
+const CAP = LIMITS.globalTokenCap; // 0 = disabled (configured in src/limits.ts)
 const SYS = "__sys";
 const COLLECTION = "usage";
 const KEY = "global-tokens";

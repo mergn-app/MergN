@@ -1,6 +1,9 @@
 // Pricing plans. Kept in code (not a DB table) — they change rarely and the
 // Stripe price ids come from env so the same code runs in test and prod.
-// Limit convention: -1 = unlimited. Free is bounded by chats, Pro by AI tokens.
+// Limit convention: -1 = unlimited. The numeric quotas come from the single
+// limits config (src/limits.ts) — edit them there or via env, not here.
+
+import { LIMITS } from "../limits";
 
 export interface PlanLimits {
   chats: number; // chat conversations / month (-1 = unlimited)
@@ -26,12 +29,10 @@ export const PLANS: Plan[] = [
     description: "Get started building workflows with AI.",
     priceMonthly: 0,
     currency: "usd",
-    // Limits are env-overridable so a deployment can tune the free tier (or set
-    // a temporary test cap) without a code change. Defaults: 10 chats AND a 1M
-    // token ceiling — whichever is hit first blocks. -1 = unlimited.
+    // Free is bounded by 10 chats AND 1M tokens — whichever is hit first blocks.
     limits: {
-      chats: Number(process.env.FREE_CHAT_LIMIT ?? "10"),
-      aiTokens: Number(process.env.FREE_TOKEN_LIMIT ?? "1000000"),
+      chats: LIMITS.freeChats,
+      aiTokens: LIMITS.freeTokens,
     },
     features: [
       "10 AI chats / month",
@@ -49,7 +50,7 @@ export const PLANS: Plan[] = [
     currency: "usd",
     limits: {
       chats: -1,
-      aiTokens: Number(process.env.PRO_TOKEN_LIMIT ?? "5000000"),
+      aiTokens: LIMITS.proTokens,
     },
     features: [
       "Unlimited AI chats",
@@ -70,7 +71,7 @@ export const PLANS: Plan[] = [
     currency: "usd",
     limits: {
       chats: -1,
-      aiTokens: Number(process.env.PRO_TOKEN_LIMIT ?? "5000000"),
+      aiTokens: LIMITS.proTokens,
     },
     features: ["Test plan"],
     stripePriceEnv: "STRIPE_PRICE_PRO_TEST",

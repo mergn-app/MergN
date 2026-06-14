@@ -61,6 +61,7 @@ export async function authorInputForm(
     schema: inputFormZ,
     system: SYSTEM,
     telemetry: trace("author-input-form", meta),
+    spaceId: meta?.spaceId,
     prompt: [
       `Goal: ${goal || "(not given)"}`,
       `Trigger fields: ${fields.join(", ")}`,

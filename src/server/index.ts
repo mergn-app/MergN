@@ -50,10 +50,12 @@ import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
 import { reconcileWiring } from "../agent/wiring-repair";
 import { probeModel } from "../agent/probe";
 import { authorInputForm } from "../agent/form-author";
+import { setLlmBudgetHooks } from "../agent/llm-budget";
+import { LIMITS } from "../limits";
 import { createConnections } from "./connections";
 import { createChatStore } from "./chat";
 import { createLogStore } from "./logs";
-import { createFileService, MAX_FILE_BYTES } from "./files";
+import { createFileService, FileLimitError } from "./files";
 import { createBlobStore } from "../store/blobs";
 import { createBillingStub } from "./billing-stub";
 import type { BillingService } from "./billing-types";
@@ -238,21 +240,59 @@ const billing: BillingService =
     : createBillingStub();
 const webhookAuth = createWebhookAuthStore(store, vault);
 
-const rateLimiter = createMemoryRateLimiter();
-const CHAT_USER_LIMIT: RateLimitRule = { limit: 20, windowMs: 60_000 };
-// Global cap across ALL users combined: at most N chat prompts per minute for
-// the whole deployment (single shared "chat:global" counter). Env-tunable.
-const CHAT_GLOBAL_LIMIT: RateLimitRule = {
-  limit: Number(process.env.CHAT_GLOBAL_LIMIT_PER_MIN ?? "20"),
-  windowMs: 60_000,
-};
-const HOOK_LIMIT: RateLimitRule = { limit: 60, windowMs: 60_000 };
+// Make EVERY internal authoring LLM call (genObject) budget-aware: count its
+// tokens toward the space's real usage, and refuse before spending once the
+// space is over its token limit or the deployment global cap is hit. This is
+// what stops a single design_workflow (planWorkflow + N step bodies + provider
+// + wiring + form) — or the standalone repair/probe endpoints — from running up
+// an unbounded Gemini bill outside the chat loop's caps.
+setLlmBudgetHooks({
+  record: (spaceId, tokens) => void usage.addTokens(spaceId, tokens),
+  guard: async (spaceId) => {
+    if (await usageCapExceeded())
+      throw new Error("The AI usage limit for this deployment has been reached.");
+    if (!billing.enabled()) return; // self-host: no per-space plan enforcement
+    const plan = getPlan((await billing.planOf(spaceId)).slug);
+    if (plan.limits.aiTokens < 0) return; // unlimited tier
+    const u = await usage.get(spaceId);
+    if (u.aiTokens >= plan.limits.aiTokens)
+      throw new Error(
+        "You've used all your AI tokens for this month. They reset next cycle, or upgrade for a higher limit.",
+      );
+  },
+});
 
-// Hard ceiling on the tokens a SINGLE chat prompt may spend across its whole
-// agentic loop (all tool steps combined). The loop stops as soon as the
-// accumulated step usage crosses this, so one prompt can't burn an unbounded
-// amount. Env-tunable; note a workflow build needs a lot of headroom.
-const PROMPT_TOKEN_CAP = Number(process.env.PROMPT_TOKEN_CAP ?? "20000");
+const rateLimiter = createMemoryRateLimiter();
+const min = (limit: number): RateLimitRule => ({ limit, windowMs: 60_000 });
+// All limit VALUES live in src/limits.ts (single source of truth, env-tunable,
+// auto-bypassed for self-host). These just wrap them as rate-limit rules.
+const CHAT_USER_LIMIT = min(LIMITS.chatPerUserPerMin);
+// Shared "chat:global" bucket: one cross-user cap for the whole deployment.
+const CHAT_GLOBAL_LIMIT = min(LIMITS.chatGlobalPerMin);
+const HOOK_LIMIT = min(LIMITS.hookPerMin);
+// Direct LLM-triggering endpoints (repair-wiring, input-form, provider repair,
+// model probe) bypass the chat handler, so they get their own per-user bucket
+// PLUS the shared chat:global bucket — covering EVERY LLM entry point.
+const LLM_DIRECT_USER_LIMIT = min(LIMITS.llmDirectPerUserPerMin);
+
+async function llmRateLimit(c: Context): Promise<Response | null> {
+  const u = await rateLimiter.take(
+    `llm:user:${c.get("userId")}`,
+    LLM_DIRECT_USER_LIMIT,
+  );
+  const g = u.ok ? await rateLimiter.take("chat:global", CHAT_GLOBAL_LIMIT) : u;
+  if (!g.ok)
+    return c.json(
+      {
+        error: "rate_limited",
+        message: "Too many AI requests. Please wait a moment and try again.",
+        retryAfterMs: g.retryAfterMs,
+      },
+      429,
+      { "Retry-After": String(Math.ceil(g.retryAfterMs / 1000)) },
+    );
+  return null;
+}
 
 async function runSavedWorkflow(
   spaceId: string,
@@ -796,7 +836,11 @@ const DISABLE_AUTH =
 const LOCAL_USER = { id: "local", email: "local@localhost", name: "Local" };
 
 app.get("/api/config", (c) =>
-  c.json({ authDisabled: DISABLE_AUTH, managed: MANAGED }),
+  c.json({
+    authDisabled: DISABLE_AUTH,
+    managed: MANAGED,
+    maxSpaces: LIMITS.maxSpacesPerUser,
+  }),
 );
 
 app.use("/api/*", async (c, next) => {
@@ -977,9 +1021,9 @@ app.post("/api/chat", async (c) => {
           // crosses the per-prompt cap (bounds a runaway prompt)
           ({ steps }) =>
             steps.reduce((sum, s) => sum + (s.usage?.totalTokens ?? 0), 0) >=
-            PROMPT_TOKEN_CAP,
+            LIMITS.promptTokenCap,
         ],
-        maxOutputTokens: PROMPT_TOKEN_CAP,
+        maxOutputTokens: LIMITS.promptTokenCap,
         tools: withResultLimits(makeTools(spaceId, writer, sessionId)),
         providerOptions: {
           google: { thinkingConfig: { includeThoughts: true } },
@@ -1282,6 +1326,8 @@ app.post("/api/workflows/:id/webhook-auth/test", async (c) => {
 // wiring repair the builder uses at design time, but on the CURRENT (saved or
 // hand-edited) workflow. Returns the wires it added so the client can apply them.
 app.post("/api/repair-wiring", async (c) => {
+  const rl = await llmRateLimit(c);
+  if (rl) return rl;
   const spaceId = c.get("spaceId");
   const body = await c.req.json<{
     funcs?: {
@@ -1303,6 +1349,8 @@ app.post("/api/repair-wiring", async (c) => {
 });
 
 app.post("/api/input-form", async (c) => {
+  const rl = await llmRateLimit(c);
+  if (rl) return rl;
   const body = await c.req.json<{
     goal?: string;
     fields?: string[];
@@ -1362,6 +1410,8 @@ app.post("/api/settings/llm", async (c) => {
 // the structured (JSON-schema) output the builder needs and flags it so the UI
 // can suggest a stronger model. `weak` true => steer the user to upgrade.
 app.post("/api/settings/llm/probe", async (c) => {
+  const rl = await llmRateLimit(c);
+  if (rl) return rl;
   const cfg = getLlmConfig();
   const r = await probeModel();
   const local = cfg.provider === "local" || cfg.provider === "openai-compatible";
@@ -1417,15 +1467,24 @@ app.post("/api/files", async (c) => {
   const f = body.file;
   if (!(f instanceof File))
     return c.json({ error: "multipart field 'file' required" }, 400);
-  if (f.size > MAX_FILE_BYTES)
+  // Early reject (before buffering the whole file into memory) when the file
+  // alone already exceeds the workspace storage limit.
+  if (f.size > LIMITS.maxStorageBytes)
     return c.json(
-      { error: `file too large (max ${Math.floor(MAX_FILE_BYTES / 1024 / 1024)} MB)` },
+      {
+        error: `file too large (max ${Math.floor(LIMITS.maxStorageBytes / 1024 / 1024 / 1024)} GB per workspace)`,
+      },
       413,
     );
   const buf = Buffer.from(await f.arrayBuffer());
-  return c.json(
-    await fileService.upload(spaceId, { name: f.name, mime: f.type, body: buf }),
-  );
+  try {
+    return c.json(
+      await fileService.upload(spaceId, { name: f.name, mime: f.type, body: buf }),
+    );
+  } catch (e) {
+    if (e instanceof FileLimitError) return c.json({ error: e.message }, 413);
+    throw e;
+  }
 });
 
 app.get("/api/files", async (c) =>
@@ -1494,19 +1553,17 @@ app.get("/api/spaces", async (c) => {
   return c.json(spaces.map((s) => ({ id: s.id, name: s.name })));
 });
 
-// One workspace per account across all plans (every user already gets an
-// auto-provisioned personal space, so this blocks creating a second). Tunable
-// via env if a deployment ever needs more.
-const MAX_SPACES_PER_USER = Number(process.env.MAX_SPACES_PER_USER ?? "1");
-
 app.post("/api/spaces", async (c) => {
+  // One workspace per account when enforcing (every user already gets an
+  // auto-provisioned personal space, so this blocks creating a second). The cap
+  // lives in src/limits.ts and is "unlimited" for self-host.
   const userId = c.get("userId");
   const existing = await membership.listSpaces(userId);
-  if (existing.length >= MAX_SPACES_PER_USER)
+  if (existing.length >= LIMITS.maxSpacesPerUser)
     return c.json(
       {
         error: "space_limit",
-        message: `Your plan allows only ${MAX_SPACES_PER_USER} workspace${MAX_SPACES_PER_USER === 1 ? "" : "s"}.`,
+        message: `Your plan allows only ${LIMITS.maxSpacesPerUser} workspace${LIMITS.maxSpacesPerUser === 1 ? "" : "s"}.`,
       },
       403,
     );
@@ -1700,6 +1757,8 @@ app.get("/api/oauth/callback", async (c) => {
 });
 
 app.post("/api/providers/:id/repair", async (c) => {
+  const rl = await llmRateLimit(c);
+  if (rl) return rl;
   const spaceId = c.get("spaceId");
   const id = c.req.param("id");
   const body = await c.req.json<{ error?: string }>();

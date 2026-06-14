@@ -2,6 +2,7 @@ import { generateText, Output } from "ai";
 import { z } from "zod";
 import { getModel, getLlmConfig } from "./model";
 import { recordTokens } from "../store/usage-cap";
+import { assertLlmBudget, recordSpaceTokens } from "./llm-budget";
 
 // Transient failures from structured-output generation: the model returned
 // nothing parseable ("No object/output generated"), or a rate/5xx/network blip.
@@ -74,7 +75,11 @@ export async function genObject<S extends z.ZodTypeAny>(args: {
   prompt: string;
   system?: string;
   telemetry?: Telemetry;
+  spaceId?: string;
 }): Promise<z.infer<S>> {
+  // Refuse BEFORE spending when the space is over its token budget or the
+  // deployment global cap is reached — bounds runaway authoring fan-out.
+  await assertLlmBudget(args.spaceId);
   return withRetry(async () => {
     const { output, usage } = await generateText({
       model: getModel(),
@@ -84,7 +89,9 @@ export async function genObject<S extends z.ZodTypeAny>(args: {
       experimental_telemetry: args.telemetry,
       abortSignal: AbortSignal.timeout(CALL_TIMEOUT_MS),
     });
-    void recordTokens(usage?.totalTokens ?? 0);
+    const t = usage?.totalTokens ?? 0;
+    void recordTokens(t); // deployment-wide global cap
+    recordSpaceTokens(args.spaceId, t); // per-space billing/quota (real spend)
     return output as z.infer<S>;
   });
 }

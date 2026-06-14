@@ -26,6 +26,7 @@ interface AuthContextValue {
   pending: boolean;
   authDisabled: boolean | null;
   managed: boolean | null;
+  maxSpaces: number | null; // workspaces allowed per account (server-configured)
   requireAuth: (action?: () => void) => boolean;
   withAuth: <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => void;
   signOut: () => void;
@@ -36,6 +37,7 @@ const Ctx = createContext<AuthContextValue>({
   pending: true,
   authDisabled: null,
   managed: null,
+  maxSpaces: null,
   requireAuth: () => false,
   withAuth: (fn) => fn,
   signOut: () => {},
@@ -92,6 +94,7 @@ function ApiUnreachable({ onRetry }: { onRetry: () => void }) {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authDisabled, setAuthDisabled] = useState<boolean | null>(null);
   const [managed, setManaged] = useState<boolean | null>(null);
+  const [maxSpaces, setMaxSpaces] = useState<number | null>(null);
   const [apiUnreachable, setApiUnreachable] = useState(false);
   const [configAttempt, setConfigAttempt] = useState(0);
 
@@ -101,12 +104,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     fetch("/api/config")
       .then(async (r) => {
         if (!r.ok) throw new Error(String(r.status));
-        return r.json() as Promise<{ authDisabled?: boolean; managed?: boolean }>;
+        return r.json() as Promise<{
+          authDisabled?: boolean;
+          managed?: boolean;
+          maxSpaces?: number;
+        }>;
       })
       .then((c) => {
         if (cancelled) return;
         setAuthDisabled(!!c.authDisabled);
         setManaged(!!c.managed);
+        setMaxSpaces(typeof c.maxSpaces === "number" ? c.maxSpaces : null);
       })
       .catch(() => {
         if (cancelled) return;
@@ -207,6 +215,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         pending,
         authDisabled,
         managed,
+        maxSpaces,
         requireAuth,
         withAuth,
         signOut: doSignOut,

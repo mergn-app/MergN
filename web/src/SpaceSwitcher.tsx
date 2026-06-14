@@ -11,7 +11,7 @@ export function SpaceSwitcher() {
   const { t } = useTranslation();
   const current = getSpace();
   const navigate = useNavigate();
-  const { user, pending, requireAuth } = useAuth();
+  const { user, pending, requireAuth, maxSpaces } = useAuth();
   const { data: spaces = [] } = useSpaces();
   const createSpace = useCreateSpace();
   const [open, setOpen] = useState(false);
@@ -46,8 +46,9 @@ export function SpaceSwitcher() {
     fire();
   };
 
-  // One workspace per account — hide the create UI once the user has a space.
-  const atLimit = spaces.length >= 1;
+  // Hide the create UI once the account is at its server-configured workspace
+  // limit (self-host reports a very high limit, so the button always shows).
+  const atLimit = maxSpaces != null && spaces.length >= maxSpaces;
 
   const currentName =
     spaces.find((s) => s.id === current)?.name ??

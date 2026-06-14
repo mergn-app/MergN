@@ -47,6 +47,7 @@ export async function authorFunc(
     system: SYSTEM,
     prompt: [`Task: ${spec.intent}`, providerNote].join("\n"),
     telemetry: trace("author-func", { ...meta, spaceId: spec.spaceId }),
+    spaceId: spec.spaceId ?? meta?.spaceId,
   });
   return {
     def: toFuncDefinition(object),

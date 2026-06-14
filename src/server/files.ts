@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
 import type { DocStore } from "../store/docstore";
 import type { BlobStore } from "../store/blobs";
+import { LIMITS } from "../limits";
 
 const COLLECTION = "files";
 
-// Max bytes a single uploaded file may have. Files are injected into step input
-// over stdin (egress-locked sandbox), so this is bounded by the payload size.
-export const MAX_FILE_BYTES = Number(process.env.MAX_FILE_BYTES) || 25 * 1024 * 1024;
+// Thrown when an upload would exceed the per-space storage limit, so the HTTP
+// layer can map it to a 413 instead of a 500.
+export class FileLimitError extends Error {}
 
 export type FileSource = "user" | "workflow";
 
@@ -33,6 +34,17 @@ export interface FileService {
 export function createFileService(store: DocStore, blobs: BlobStore): FileService {
   return {
     async upload(spaceId, file) {
+      // Enforce the per-space total storage quota (sum of existing file sizes +
+      // this one). Unlimited for self-host (the cap is MAX_SAFE_INTEGER).
+      const existing = (await store.list(
+        spaceId,
+        COLLECTION,
+      )) as unknown as FileMeta[];
+      const used = existing.reduce((sum, f) => sum + (f.size || 0), 0);
+      if (used + file.body.length > LIMITS.maxStorageBytes)
+        throw new FileLimitError(
+          `storage limit reached (max ${Math.floor(LIMITS.maxStorageBytes / 1024 / 1024 / 1024)} GB per workspace)`,
+        );
       const id = randomUUID();
       await blobs.put(spaceId, id, file.body);
       const meta: FileMeta = {

@@ -137,6 +137,7 @@ export async function repairProvider(
     schema: providerRepairZ,
     system: REPAIR_SYSTEM,
     telemetry: trace("repair-provider", { ...meta, provider: draft.id }),
+    spaceId: meta?.spaceId,
     prompt: [
       `Provider id: ${draft.id}`,
       `Service: ${draft.name}`,
@@ -177,6 +178,7 @@ export async function authorProvider(
     schema: providerDraftZ,
     system: SYSTEM,
     telemetry: trace("author-provider", { ...meta, service }),
+    spaceId: meta?.spaceId,
     prompt: [`Service: ${service}`, docs ? `API docs / notes: ${docs}` : ""].join(
       "\n",
     ),
