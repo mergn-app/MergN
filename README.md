@@ -118,7 +118,8 @@ When you want to update to the latest version, run:
 
 ```bash
 cd ~/MergN
-git pull && npm install && (cd web && npm install)
+git pull && npm install  
+cd web && npm install
 ```
 
 Then restart the application.
