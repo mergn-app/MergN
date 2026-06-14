@@ -13,6 +13,9 @@ interface PipelineProps {
   configValues: Record<string, Record<string, string>>;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onInsertBetween: (wire: import("./types").Wire) => void;
+  onDeleteNode: (id: string) => void;
+  onDeleteEdge: (key: string) => void;
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -55,6 +58,9 @@ export function Pipeline({
   configValues,
   selectedId,
   onSelect,
+  onInsertBetween,
+  onDeleteNode,
+  onDeleteEdge,
 }: PipelineProps) {
   const { t } = useTranslation();
   const { ordered, numberOf, sourceOf } = lineage(funcs, wires, configValues);
@@ -104,9 +110,14 @@ export function Pipeline({
           const provider = f.requires[0]?.provider;
           const outputs = outputsOf(f);
 
+          const idx = ordered.findIndex((x) => x.id === f.id);
+          const next = idx >= 0 && idx < ordered.length - 1 ? ordered[idx + 1] : null;
+          const betweenWire = next
+            ? wires.find((w) => w.from === f.id && w.to === next.id)
+            : undefined;
           return (
             <div key={f.id} className="flex flex-col items-stretch">
-              <div className="mx-auto h-5 w-px bg-border" />
+              <div className="mx-auto h-8 w-px bg-border" />
               <button
                 onClick={() => onSelect(f.id)}
                 className={cn(
@@ -134,6 +145,15 @@ export function Pipeline({
                   </span>
                   <span className="truncate text-sm font-medium">{f.title}</span>
                   <div className="ml-auto flex items-center gap-2">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteNode(f.id);
+                      }}
+                      className="rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      delete
+                    </button>
                     {provider && (
                       <span className="font-mono text-[11px] text-muted-foreground">
                         {provider}
@@ -182,6 +202,25 @@ export function Pipeline({
                   ))}
                 </div>
               </button>
+              {betweenWire && (
+                <div className="group relative mx-auto my-2 flex h-7 w-full max-w-[240px] items-center justify-center">
+                  <div className="absolute inset-x-3 top-1/2 h-px -translate-y-1/2 bg-border/70" />
+                  <div className="relative flex gap-1 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      onClick={() => onInsertBetween(betweenWire)}
+                      className="rounded-full border border-border/60 bg-background px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      add node manually
+                    </button>
+                    <button
+                      onClick={() => onDeleteEdge(`${betweenWire.from}.${betweenWire.fromOutput}->${betweenWire.to}.${betweenWire.toInput}`)}
+                      className="rounded-full border border-border/60 bg-background px-2 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      delete edge
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}

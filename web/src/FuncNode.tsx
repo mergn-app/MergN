@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeftRight, Zap } from "lucide-react";
+import { ArrowLeftRight, Trash2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Port {
@@ -17,6 +17,7 @@ interface FuncNodeData {
   needsConnection?: boolean;
   inputs: Port[];
   outputs: string[];
+  onDelete?: () => void;
 }
 
 function PortDot({
@@ -85,6 +86,16 @@ export function FuncNode({ data, selected }: NodeProps) {
               {d.summary}
             </p>
           </div>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              d.onDelete?.();
+            }}
+            className="opacity-0 transition-opacity group-hover:opacity-100 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Delete node"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
         </div>
 
         {(d.inputs.length > 0 || d.outputs.length > 0) && (

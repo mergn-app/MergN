@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { ArrowLeftRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -64,6 +64,8 @@ export function NodePanel({
   run,
   onConfigChange,
   onConnectionChange,
+  onFuncChange,
+  onAddFunc,
 }: {
   func: AuthoredFunc | null;
   config: Record<string, string>;
@@ -71,12 +73,98 @@ export function NodePanel({
   run?: RunStepData;
   onConfigChange: (port: string, value: string) => void;
   onConnectionChange?: (requirementName: string, connectionId: string) => void;
+  onFuncChange?: (prevId: string, next: AuthoredFunc) => void;
+  onAddFunc?: () => void;
 }) {
   const { t } = useTranslation();
+  const [draft, setDraft] = useState("");
+  const [draftError, setDraftError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!func) {
+      setDraft("");
+      setDraftError(null);
+      return;
+    }
+    setDraft(JSON.stringify(func, null, 2));
+    setDraftError(null);
+  }, [func]);
+
+  const saveDraft = () => {
+    if (!func) return;
+    try {
+      const raw = JSON.parse(draft) as Partial<AuthoredFunc>;
+      const next: AuthoredFunc = {
+        id: String(raw.id ?? func.id),
+        title: String(raw.title ?? ""),
+        summary: String(raw.summary ?? ""),
+        version: Number(raw.version ?? 1) || 1,
+        kind: String(raw.kind ?? "adapter"),
+        pure: Boolean(raw.pure),
+        inputs: Array.isArray(raw.inputs)
+          ? raw.inputs.map((p) => ({
+              name: String(p?.name ?? ""),
+              role: String(p?.role ?? "input"),
+              type: String(p?.type ?? "string"),
+              required: Boolean(p?.required),
+            }))
+          : [],
+        outputSchema:
+          raw.outputSchema && typeof raw.outputSchema === "object"
+            ? {
+                type: String(raw.outputSchema.type ?? "object"),
+                properties:
+                  raw.outputSchema.properties &&
+                  typeof raw.outputSchema.properties === "object"
+                    ? raw.outputSchema.properties
+                    : undefined,
+                required: Array.isArray(raw.outputSchema.required)
+                  ? raw.outputSchema.required.map((x) => String(x))
+                  : undefined,
+              }
+            : { type: "object", properties: {}, required: [] },
+        bodySource: String(raw.bodySource ?? ""),
+        requires: Array.isArray(raw.requires)
+          ? raw.requires.map((r) => ({
+              name: String(r?.name ?? ""),
+              provider: String(r?.provider ?? ""),
+              scopes: Array.isArray(r?.scopes)
+                ? r.scopes.map((s) => String(s))
+                : [],
+            }))
+          : [],
+        dangerClass:
+          raw.dangerClass == null ? null : String(raw.dangerClass ?? "benign"),
+        idempotency:
+          raw.idempotency && typeof raw.idempotency === "object"
+            ? {
+                key: String(raw.idempotency.key ?? "runId+funcId"),
+                mechanism: String(raw.idempotency.mechanism ?? "none"),
+              }
+            : null,
+      };
+      if (!next.id.trim()) throw new Error("id is required");
+      if (!next.bodySource.trim()) throw new Error("bodySource is required");
+      if (next.inputs.some((p) => !p.name.trim()))
+        throw new Error("each input needs a name");
+      onFuncChange?.(func.id, next);
+      setDraft(JSON.stringify(next, null, 2));
+      setDraftError(null);
+    } catch (e) {
+      setDraftError(e instanceof Error ? e.message : String(e));
+    }
+  };
+
   if (!func) {
     return (
-      <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
-        {t("node.selectStep")}
+      <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+        <div className="text-sm text-muted-foreground">{t("node.selectStep")}</div>
+        <button
+          onClick={() => onAddFunc?.()}
+          className="rounded-lg border border-border/60 bg-background px-3 py-1.5 text-xs text-foreground transition-colors hover:border-border"
+        >
+          Add code node
+        </button>
       </div>
     );
   }
@@ -281,6 +369,36 @@ export function NodePanel({
             </Section>
           </>
         )}
+
+        <Section title="code node">
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <button
+                onClick={saveDraft}
+                className="rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] font-medium transition-colors hover:border-border"
+              >
+                Save node
+              </button>
+              <button
+                onClick={() => setDraft(JSON.stringify(func, null, 2))}
+                className="rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+              >
+                Reset
+              </button>
+            </div>
+            <textarea
+              spellCheck={false}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              className="min-h-[340px] w-full resize-y rounded-lg border border-border/50 bg-background p-2.5 font-mono text-[11px] leading-relaxed outline-none transition-colors focus:border-foreground/20"
+            />
+            {draftError && (
+              <div className="rounded-lg border border-tone-rose/30 bg-tone-rose/5 px-2 py-1 text-[11px] text-tone-rose-fg">
+                {draftError}
+              </div>
+            )}
+          </div>
+        </Section>
       </div>
     </ScrollArea>
   );

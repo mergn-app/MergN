@@ -10,6 +10,7 @@ import {
   type Node,
   type Edge,
   type OnNodesChange,
+  type Connection,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { Sun, Moon, Zap, Wand2, Loader2 } from "lucide-react";
@@ -22,6 +23,7 @@ import { Pipeline } from "./Pipeline";
 import { Story } from "./Story";
 import { FuncNode } from "./FuncNode";
 import { TriggerNode } from "./TriggerNode";
+import { DeletableEdge } from "./DeletableEdge";
 import { NodePanel } from "./NodePanel";
 import { RightPanel, type RightTab } from "./RightPanel";
 import { WorkflowsPanel } from "./WorkflowsPanel";
@@ -69,6 +71,7 @@ const wireKey = (w: Wire) => `${w.from}.${w.fromOutput}->${w.to}.${w.toInput}`;
 const NO_CONNECTIONS: ConnectionMeta[] = [];
 
 const nodeTypes = { func: FuncNode, trigger: TriggerNode };
+const edgeTypes = { deletable: DeletableEdge };
 
 function buildNode(
   f: AuthoredFunc,
@@ -76,6 +79,7 @@ function buildNode(
   status: string | undefined,
   needsConnection: boolean,
   inputs: { name: string; bound: boolean; variable?: boolean }[],
+  onDelete: () => void,
 ): Node {
   return {
     id: f.id,
@@ -89,6 +93,7 @@ function buildNode(
       needsConnection,
       inputs,
       outputs: outputsOf(f),
+      onDelete,
     },
   };
 }
@@ -98,12 +103,18 @@ function Canvas({
   edges,
   onNodesChange,
   onSelect,
+  onConnect,
+  onDeleteNodes,
+  onDeleteEdges,
   colorMode,
 }: {
   nodes: Node[];
   edges: Edge[];
   onNodesChange: OnNodesChange<Node>;
   onSelect: (id: string) => void;
+  onConnect: (connection: Connection) => void;
+  onDeleteNodes: (nodes: Node[]) => void;
+  onDeleteEdges: (edges: Edge[]) => void;
   colorMode: "dark" | "light";
 }) {
   const { fitView } = useReactFlow();
@@ -116,7 +127,12 @@ function Canvas({
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
+      onConnect={onConnect}
+      onNodesDelete={onDeleteNodes}
+      onEdgesDelete={onDeleteEdges}
+      deleteKeyCode={["Backspace", "Delete"]}
       fitView
       fitViewOptions={{ padding: 0.28 }}
       colorMode={colorMode}
@@ -561,6 +577,247 @@ export function App({
     [],
   );
 
+  const removeNode = useCallback((id: string) => {
+    setFuncs((prev) => prev.filter((f) => f.id !== id));
+    setWires((prev) => prev.filter((w) => w.from !== id && w.to !== id));
+    setConfigValues((prev) => {
+      const out = { ...prev };
+      delete out[id];
+      return out;
+    });
+    setNodeConnections((prev) => {
+      const out = { ...prev };
+      delete out[id];
+      return out;
+    });
+    setRunStatus((prev) => {
+      const out = { ...prev };
+      delete out[id];
+      return out;
+    });
+    setRunData((prev) => {
+      const out = { ...prev };
+      delete out[id];
+      return out;
+    });
+    delete positionsRef.current[id];
+    setSelectedId((cur) => (cur === id ? null : cur));
+    setAutoSave(true);
+  }, []);
+
+  const removeWireByKey = useCallback((key: string) => {
+    setWires((prev) => prev.filter((w) => wireKey(w) !== key));
+    setAutoSave(true);
+  }, []);
+
+  const connectNodes = useCallback(
+    (c: Connection) => {
+      const source = c.source;
+      const target = c.target;
+      if (!source || !target || source === target) return;
+
+      const sourceFunc = funcs.find((f) => f.id === source);
+      const targetFunc = funcs.find((f) => f.id === target);
+      const toInput = c.targetHandle || targetFunc?.inputs[0]?.name || "";
+      const fromOutput =
+        c.sourceHandle ||
+        (source === "trigger"
+          ? toInput
+          : sourceFunc
+            ? outputsOf(sourceFunc)[0] || ""
+            : "");
+      if (!toInput) return;
+
+      const nextWire: Wire = { from: source, fromOutput, to: target, toInput };
+      setWires((prev) => {
+        const kept = prev.filter(
+          (w) => !(w.to === nextWire.to && w.toInput === nextWire.toInput),
+        );
+        const key = wireKey(nextWire);
+        if (kept.some((w) => wireKey(w) === key)) return kept;
+        return [...kept, nextWire];
+      });
+      setAutoSave(true);
+    },
+    [funcs],
+  );
+
+  const addCodeNode = useCallback(() => {
+    const used = new Set(funcs.map((f) => f.id));
+    let n = 1;
+    let id = `code_step_${n}`;
+    while (used.has(id)) {
+      n += 1;
+      id = `code_step_${n}`;
+    }
+    const next: AuthoredFunc = {
+      id,
+      title: `Code step ${n}`,
+      summary: "Manual code node",
+      version: 1,
+      kind: "adapter",
+      pure: true,
+      inputs: [],
+      outputSchema: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+      bodySource: "export default async (ctx, input) => ({})",
+      requires: [],
+      dangerClass: null,
+      idempotency: null,
+    };
+    setFuncs((prev) => [...prev, next]);
+    setSelectedId(id);
+    setActiveTab("node");
+    setAutoSave(true);
+  }, [funcs]);
+
+  const updateCodeNode = useCallback(
+    (prevId: string, next: AuthoredFunc) => {
+      if (prevId !== next.id && funcs.some((f) => f.id === next.id)) {
+        reportLog({
+          level: "warn",
+          message: `node update rejected: duplicate id '${next.id}'`,
+        });
+        return;
+      }
+      setFuncs((prev) => prev.map((f) => (f.id === prevId ? next : f)));
+      if (prevId !== next.id) {
+        setWires((prev) =>
+          prev.map((w) => ({
+            ...w,
+            from: w.from === prevId ? next.id : w.from,
+            to: w.to === prevId ? next.id : w.to,
+          })),
+        );
+        setConfigValues((prev) => {
+          const out: Record<string, Record<string, string>> = {};
+          for (const [k, v] of Object.entries(prev)) {
+            out[k === prevId ? next.id : k] = v;
+          }
+          return out;
+        });
+        setNodeConnections((prev) => {
+          const out: Record<string, Record<string, string>> = {};
+          for (const [k, v] of Object.entries(prev)) {
+            out[k === prevId ? next.id : k] = v;
+          }
+          return out;
+        });
+        setRunStatus((prev) => {
+          const out: Record<string, string> = {};
+          for (const [k, v] of Object.entries(prev)) {
+            out[k === prevId ? next.id : k] = v;
+          }
+          return out;
+        });
+        setRunData((prev) => {
+          const out: Record<string, RunStepData> = {};
+          for (const [k, v] of Object.entries(prev)) {
+            out[k === prevId ? next.id : k] = v;
+          }
+          return out;
+        });
+        const moved = positionsRef.current[prevId];
+        if (moved) {
+          positionsRef.current[next.id] = moved;
+          delete positionsRef.current[prevId];
+        }
+        setSelectedId((cur) => (cur === prevId ? next.id : cur));
+      }
+      setAutoSave(true);
+    },
+    [funcs],
+  );
+
+  const insertCodeNodeBetween = useCallback(
+    (wire: Wire) => {
+      const used = new Set(funcs.map((f) => f.id));
+      let n = 1;
+      let id = `code_step_${n}`;
+      while (used.has(id)) {
+        n += 1;
+        id = `code_step_${n}`;
+      }
+
+      const upstream = funcs.find((f) => f.id === wire.from);
+      const downstream = funcs.find((f) => f.id === wire.to);
+      const outProps = upstream?.outputSchema?.properties as
+        | Record<string, { type?: string }>
+        | undefined;
+      const upstreamType =
+        (wire.fromOutput && outProps?.[wire.fromOutput]?.type) || undefined;
+      const downstreamType = downstream?.inputs.find(
+        (p) => p.name === wire.toInput,
+      )?.type;
+
+      const inputName = wire.fromOutput || wire.toInput || "value";
+      const outputName = wire.toInput || wire.fromOutput || "value";
+      const inputType = upstreamType || downstreamType || "string";
+      const outputType = downstreamType || upstreamType || "string";
+
+      const next: AuthoredFunc = {
+        id,
+        title: `Code step ${n}`,
+        summary: "Inserted manual node",
+        version: 1,
+        kind: "adapter",
+        pure: true,
+        inputs: [
+          {
+            name: inputName,
+            role: "input",
+            type: inputType,
+            required: true,
+          },
+        ],
+        outputSchema: {
+          type: "object",
+          properties: { [outputName]: { type: outputType } },
+          required: [outputName],
+        },
+        bodySource: `export default async (ctx, input) => ({\n  ${JSON.stringify(outputName)}: input[${JSON.stringify(inputName)}]\n})`,
+        requires: [],
+        dangerClass: null,
+        idempotency: null,
+      };
+
+      setFuncs((prev) => [...prev, next]);
+      setWires((prev) => {
+        const kept = prev.filter(
+          (w) =>
+            !(
+              w.from === wire.from &&
+              w.fromOutput === wire.fromOutput &&
+              w.to === wire.to &&
+              w.toInput === wire.toInput
+            ),
+        );
+        return [
+          ...kept,
+          {
+            from: wire.from,
+            fromOutput: wire.fromOutput,
+            to: id,
+            toInput: inputName,
+          },
+          {
+            from: id,
+            fromOutput: outputName,
+            to: wire.to,
+            toInput: wire.toInput || outputName,
+          },
+        ];
+      });
+      setSelectedId(id);
+      setActiveTab("node");
+      setAutoSave(true);
+    },
+    [funcs],
+  );
+
   const [ops, setOps] = useState<WorkflowOp[]>([]);
   const processedOps = useRef<Set<string>>(new Set());
 
@@ -664,6 +921,7 @@ export function App({
           runStatus[f.id],
           needsConnection,
           inputs,
+          () => removeNode(f.id),
         );
       });
       const triggerOut = [...new Set([...triggerFields, ...variableFields])];
@@ -721,6 +979,7 @@ export function App({
     fireAnchor,
     justFired,
     fireStatus,
+    removeNode,
     setNodes,
   ]);
 
@@ -732,12 +991,19 @@ export function App({
       .filter((w) => ids.has(w.from) && ids.has(w.to))
       .map((w) => ({
         id: wireKey(w),
+        type: "deletable",
         source: w.from,
         target: w.to,
         sourceHandle: w.fromOutput || undefined,
         targetHandle: w.toInput || undefined,
         animated: true,
         style: { stroke: "#6ea8ff" },
+        data: {
+          canDelete: true,
+          onDelete: () => removeWireByKey(wireKey(w)),
+          canInsert: true,
+          onInsert: () => insertCodeNodeBetween(w),
+        },
       }));
     // Trigger-fed inputs are implicit bindings (not wires) — draw them as edges
     // from the trigger node so a webhook/schedule visibly connects to its steps.
@@ -749,18 +1015,21 @@ export function App({
           if (wires.some((w) => w.to === f.id && w.toInput === p.name)) continue;
           triggerEdges.push({
             id: `trigger.${p.name}->${f.id}.${p.name}`,
+            type: "deletable",
             source: "trigger",
             target: f.id,
             sourceHandle: p.name,
             targetHandle: p.name,
             animated: true,
             style: { stroke: "#6ea8ff" },
+            selectable: false,
+            data: { canDelete: false, canInsert: false },
           });
         }
       }
     }
     return [...wireEdges, ...triggerEdges];
-  }, [wires, funcs, trigger.kind]);
+  }, [wires, funcs, trigger.kind, removeWireByKey, insertCodeNodeBetween]);
 
   const reset = () => {
     setFuncs([]);
@@ -1016,6 +1285,12 @@ export function App({
                 )}
               </button>
             )}
+            <button
+              onClick={addCodeNode}
+              className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-foreground/90 transition-colors hover:border-border"
+            >
+              <span>+ Add Node</span>
+            </button>
           </div>
           {repairMsg && (
             <div className="pointer-events-none absolute left-1/2 top-12 z-10 -translate-x-1/2">
@@ -1042,6 +1317,15 @@ export function App({
                   edges={rfEdges}
                   onNodesChange={onNodesChange}
                   onSelect={onSelectNode}
+                  onConnect={connectNodes}
+                  onDeleteNodes={(ds) => {
+                    for (const n of ds) {
+                      if (n.id !== "trigger") removeNode(n.id);
+                    }
+                  }}
+                  onDeleteEdges={(ds) => {
+                    for (const e of ds) removeWireByKey(e.id);
+                  }}
                   colorMode={theme}
                 />
               </ReactFlowProvider>
@@ -1056,6 +1340,7 @@ export function App({
                 building={building}
                 selectedId={selectedId}
                 onSelect={onSelectNode}
+                onDeleteNode={removeNode}
               />
             ) : (
               <Pipeline
@@ -1067,6 +1352,9 @@ export function App({
                 configValues={configValues}
                 selectedId={selectedId}
                 onSelect={onSelectNode}
+                onInsertBetween={insertCodeNodeBetween}
+                onDeleteNode={removeNode}
+                onDeleteEdge={removeWireByKey}
               />
             )}
           </div>
@@ -1159,6 +1447,8 @@ export function App({
               onConnectionChange={(name, id) =>
                 selected && onConnectionChange(selected.id, name, id)
               }
+              onFuncChange={updateCodeNode}
+              onAddFunc={addCodeNode}
             />
           }
         />

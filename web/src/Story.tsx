@@ -14,6 +14,7 @@ interface StoryProps {
   building?: boolean;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onDeleteNode: (id: string) => void;
 }
 
 type SkelLine = { w: string; head?: 1 | 2; gap: number };
@@ -117,6 +118,7 @@ export function Story({
   building,
   selectedId,
   onSelect,
+  onDeleteNode,
 }: StoryProps) {
   const { t } = useTranslation();
   const { ordered, sourceOf } = lineage(funcs, wires, configValues);
@@ -199,7 +201,7 @@ export function Story({
           )}
         </p>
 
-        <div className="mt-6 space-y-6">
+        <div className="mt-8 space-y-9">
           {ordered.map((f, idx) => {
             const num = idx + 1;
             const status = runStatus[f.id];
@@ -268,82 +270,94 @@ export function Story({
               );
 
             return (
-              <div
-                key={f.id}
-                onClick={() => onSelect(f.id)}
-                className={cn(
-                  "cursor-pointer rounded-2xl border border-transparent p-4 transition-colors hover:border-border hover:bg-card",
-                  selectedId === f.id && "border-border bg-card",
-                )}
-              >
-                <p>
-                  <NumBadge n={num} />
-                  <span className="font-medium text-foreground">{f.title}.</span>{" "}
-                  <span className="text-foreground/85">{f.summary}</span>{" "}
-                  {clauses.length > 0 && (
-                    <span>
-                      <span className="text-muted-foreground">It uses </span>
-                      {clauses.map((c, i) => (
-                        <span key={i}>
-                          {c}
-                          {i < clauses.length - 1 ? (
-                            <span className="text-muted-foreground">
-                              {i === clauses.length - 2 ? " and " : ", "}
-                            </span>
-                          ) : null}
-                        </span>
-                      ))}
-                      <span className="text-muted-foreground">, </span>
-                    </span>
+              <div key={f.id} className="group">
+                <div
+                  onClick={() => onSelect(f.id)}
+                  className={cn(
+                    "cursor-pointer rounded-2xl border border-transparent p-4 transition-colors hover:border-border hover:bg-card",
+                    selectedId === f.id && "border-border bg-card",
                   )}
-                  {outputs.length > 0 && (
-                    <span>
-                      <span className="text-muted-foreground">producing </span>
-                      {outputs.map((o) => (
-                        <Tok key={o} tone="out">
-                          {o}
-                        </Tok>
-                      ))}
-                    </span>
-                  )}
-                  <span className="text-muted-foreground">.</span>
-                </p>
-
-                {(provider || needsConnection || unbound.length > 0 || status) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
-                    {status && (
-                      <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                        <span
-                          className={cn(
-                            "size-2 rounded-full",
-                            STATUS_DOT[status] ?? "bg-muted-foreground",
-                          )}
-                        />
-                        {status}
+                >
+                  <div className="mb-1 flex justify-end">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onDeleteNode(f.id);
+                      }}
+                      className="rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground hover:text-foreground"
+                    >
+                      delete
+                    </button>
+                  </div>
+                  <p>
+                    <NumBadge n={num} />
+                    <span className="font-medium text-foreground">{f.title}.</span>{" "}
+                    <span className="text-foreground/85">{f.summary}</span>{" "}
+                    {clauses.length > 0 && (
+                      <span>
+                        <span className="text-muted-foreground">It uses </span>
+                        {clauses.map((c, i) => (
+                          <span key={i}>
+                            {c}
+                            {i < clauses.length - 1 ? (
+                              <span className="text-muted-foreground">
+                                {i === clauses.length - 2 ? " and " : ", "}
+                              </span>
+                            ) : null}
+                          </span>
+                        ))}
+                        <span className="text-muted-foreground">, </span>
                       </span>
                     )}
-                    {provider && (
-                      <span className="font-mono text-muted-foreground">
-                        {t("story.via", { provider })}
-                      </span>
-                    )}
-                    {needsConnection && (
-                      <span className="text-tone-amber-fg">
-                        ⚠ {t("connections.needsConnection")}
-                      </span>
-                    )}
-                    {unbound.length > 0 && (
-                      <span className="text-tone-rose-fg">
-                        ⚠ {t("story.missing")}{" "}
-                        {unbound.map((r) => (
-                          <Tok key={r.name} tone="bad">
-                            {r.name}
+                    {outputs.length > 0 && (
+                      <span>
+                        <span className="text-muted-foreground">producing </span>
+                        {outputs.map((o) => (
+                          <Tok key={o} tone="out">
+                            {o}
                           </Tok>
                         ))}
                       </span>
                     )}
-                  </div>
-                )}
+                    <span className="text-muted-foreground">.</span>
+                  </p>
+
+                  {(provider || needsConnection || unbound.length > 0 || status) && (
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px]">
+                      {status && (
+                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                          <span
+                            className={cn(
+                              "size-2 rounded-full",
+                              STATUS_DOT[status] ?? "bg-muted-foreground",
+                            )}
+                          />
+                          {status}
+                        </span>
+                      )}
+                      {provider && (
+                        <span className="font-mono text-muted-foreground">
+                          {t("story.via", { provider })}
+                        </span>
+                      )}
+                      {needsConnection && (
+                        <span className="text-tone-amber-fg">
+                          ⚠ {t("connections.needsConnection")}
+                        </span>
+                      )}
+                      {unbound.length > 0 && (
+                        <span className="text-tone-rose-fg">
+                          ⚠ {t("story.missing")}{" "}
+                          {unbound.map((r) => (
+                            <Tok key={r.name} tone="bad">
+                              {r.name}
+                            </Tok>
+                          ))}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
