@@ -365,6 +365,12 @@ export async function designWorkflow(
   const funcs = [];
   const wires = [];
   const variableFieldSet = new Set<string>();
+  // Deterministic guard: a dep is a STEP→STEP edge only. The trigger emits only
+  // its eventFields (e.g. `payload`); it never carries user-config values. So a
+  // dep whose fromStep isn't a real step (the AI sometimes writes
+  // fromStep:"trigger") is rejected — that input falls back to an event field or
+  // a user form field, never a bogus trigger wire.
+  const stepIds = new Set(plan.steps.map((s) => s.id));
   const eventFields =
     plan.triggerKind === "poll" && pollDraft
       ? pollDraft.itemFields
@@ -398,7 +404,7 @@ export async function designWorkflow(
 
     for (const name of usedInputs) {
       const dep = depByInput.get(name);
-      if (dep) {
+      if (dep && stepIds.has(dep.fromStep)) {
         wires.push({
           from: dep.fromStep,
           fromOutput: dep.fromOutput,
