@@ -31,7 +31,6 @@ import { Story } from "./Story";
 import { FuncNode } from "./FuncNode";
 import { TriggerNode } from "./TriggerNode";
 import { DeletableEdge } from "./DeletableEdge";
-import { NodePanel } from "./NodePanel";
 import { RightPanel, type RightTab } from "./RightPanel";
 import { WorkflowsPanel } from "./WorkflowsPanel";
 import { SpaceSwitcher } from "./SpaceSwitcher";
@@ -480,7 +479,6 @@ export function App({
       return;
     }
     setSelectedId(id);
-    setActiveTab("node");
   }, []);
 
   const scheduling = trigger.kind === "schedule" || trigger.kind === "poll";
@@ -619,13 +617,10 @@ export function App({
       const sourceFunc = funcs.find((f) => f.id === source);
       const targetFunc = funcs.find((f) => f.id === target);
       const toInput = c.targetHandle || targetFunc?.inputs[0]?.name || "";
+      if (source === "trigger" && !c.sourceHandle) return;
       const fromOutput =
         c.sourceHandle ||
-        (source === "trigger"
-          ? toInput
-          : sourceFunc
-            ? outputsOf(sourceFunc)[0] || ""
-            : "");
+        (sourceFunc ? outputsOf(sourceFunc)[0] || "" : "");
       if (!toInput) return;
 
       const nextWire: Wire = { from: source, fromOutput, to: target, toInput };
@@ -670,7 +665,6 @@ export function App({
     };
     setFuncs((prev) => [...prev, next]);
     setSelectedId(id);
-    setActiveTab("node");
     setAutoSave(true);
   }, [funcs]);
 
@@ -813,7 +807,6 @@ export function App({
         ];
       });
       setSelectedId(id);
-      setActiveTab("node");
       setAutoSave(true);
     },
     [funcs],
@@ -924,7 +917,7 @@ export function App({
           () => removeNode(f.id),
         );
       });
-      const triggerOut = [...new Set([...triggerFields, ...variableFields])];
+      const triggerOut = [...new Set(triggerFields)];
       if (
         trigger.kind === "manual" ||
         (funcs.length === 0 && triggerOut.length === 0)
@@ -1079,6 +1072,11 @@ export function App({
 
   const applyVariables = useCallback((vars: Record<string, unknown>) => {
     setVariables(vars);
+    setAutoSave(true);
+  }, []);
+
+  const applyFuncsFromRunPanel = useCallback((next: AuthoredFunc[]) => {
+    setFuncs(next);
     setAutoSave(true);
   }, []);
 
@@ -1390,6 +1388,8 @@ export function App({
                   onStatus={setRunStatus}
                   onData={setRunData}
                   onRepair={onRepair}
+                  onFuncsChange={applyFuncsFromRunPanel}
+                  onConnectionChange={onConnectionChange}
                 />
               </div>
             </>
@@ -1435,18 +1435,6 @@ export function App({
           }
           files={<FilesPanel />}
           logs={<LogsPanel active={activeTab === "logs"} />}
-          node={
-            <NodePanel
-              func={selected}
-              connections={selected ? (nodeConnections[selected.id] ?? {}) : {}}
-              run={selected ? runData[selected.id] : undefined}
-              onConnectionChange={(name, id) =>
-                selected && onConnectionChange(selected.id, name, id)
-              }
-              onFuncChange={updateCodeNode}
-              onAddFunc={addCodeNode}
-            />
-          }
         />
       </div>
       {triggerOpen && (

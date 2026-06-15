@@ -2,6 +2,10 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Loader2, Check, Pencil } from "lucide-react";
+import CodeMirror from "@uiw/react-codemirror";
+import { javascript } from "@codemirror/lang-javascript";
+import { oneDark } from "@codemirror/theme-one-dark";
+import { EditorView } from "@codemirror/view";
 import { ArrayEditorDialog } from "./ArrayEditorDialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,6 +29,7 @@ import {
   type ProviderSource,
 } from "./queries";
 import { CodeBlock } from "./CodeBlock";
+import { NodeConnection } from "./NodeConnection";
 
 interface RunRecord {
   nodeId: string;
@@ -32,6 +37,12 @@ interface RunRecord {
   output?: unknown;
   error?: string;
   resolvedInput?: unknown;
+}
+
+type OutputSchemaProp = { type?: string; [k: string]: unknown };
+
+function asOutputSchemaProp(v: unknown): OutputSchemaProp {
+  return typeof v === "object" && v !== null ? (v as OutputSchemaProp) : {};
 }
 
 const STATUS_DOT: Record<string, string> = {
@@ -77,6 +88,8 @@ export function RunPanel({
   onStatus,
   onData,
   onRepair,
+  onFuncsChange,
+  onConnectionChange,
 }: {
   funcs: AuthoredFunc[];
   wires: Wire[];
@@ -107,6 +120,12 @@ export function RunPanel({
       declaredInputs: string[];
     },
   ) => void;
+  onFuncsChange: (next: AuthoredFunc[]) => void;
+  onConnectionChange: (
+    funcId: string,
+    requirementName: string,
+    connectionId: string,
+  ) => void;
 }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
@@ -114,14 +133,16 @@ export function RunPanel({
   const runsQuery = useRuns(workflowId);
   const { data: filesData } = useFiles();
   const files = filesData ?? [];
+  const [editableFuncs, setEditableFuncs] = useState<AuthoredFunc[]>(() => funcs);
+  const [manualNodeId, setManualNodeId] = useState<string>("");
   const fileFields = useMemo(
     () =>
       new Set(
-        funcs.flatMap((f) =>
+        editableFuncs.flatMap((f) =>
           f.inputs.filter((i) => i.type === "file").map((i) => i.name),
         ),
       ),
-    [funcs],
+    [editableFuncs],
   );
   const [input, setInput] = useState("{}");
   const [records, setRecords] = useState<RunRecord[]>([]);
@@ -142,6 +163,14 @@ export function RunPanel({
   const [inputMode, setInputMode] = useState<"form" | "json">("form");
   const [regenerating, setRegenerating] = useState(false);
   const [editingArray, setEditingArray] = useState<string | null>(null);
+
+  useEffect(() => {
+    setEditableFuncs(funcs);
+  }, [funcs]);
+
+  useEffect(() => {
+    if (selected?.id) setManualNodeId(selected.id);
+  }, [selected?.id]);
 
   useEffect(() => {
     if (!inputForm) return;
@@ -201,7 +230,7 @@ export function RunPanel({
     setError(null);
     try {
       const hints: Record<string, string> = {};
-      for (const f of funcs) {
+      for (const f of editableFuncs) {
         for (const p of f.inputs) {
           if (variableFields.includes(p.name) && f.title) hints[p.name] = f.title;
         }
@@ -219,7 +248,7 @@ export function RunPanel({
   const useForm = !!inputForm && inputForm.fields.length > 0;
 
   const providers = [
-    ...new Set(funcs.flatMap((f) => f.requires.map((r) => r.provider))),
+    ...new Set(editableFuncs.flatMap((f) => f.requires.map((r) => r.provider))),
   ];
   const activeProv =
     provView && providers.includes(provView) ? provView : (providers[0] ?? "");
@@ -242,7 +271,7 @@ export function RunPanel({
 
   const formNames = new Set((inputForm?.fields ?? []).map((f) => f.name));
   const fieldNamesByNode = new Map<string, Set<string>>();
-  for (const f of funcs) {
+  for (const f of editableFuncs) {
     for (const p of f.inputs) {
       if (!formNames.has(p.name)) continue;
       if (wires.some((w) => w.to === f.id && w.toInput === p.name)) continue;
@@ -254,7 +283,7 @@ export function RunPanel({
       set.add(p.name);
     }
   }
-  const nodesWithFields = funcs.filter(
+  const nodesWithFields = editableFuncs.filter(
     (f) => (fieldNamesByNode.get(f.id)?.size ?? 0) > 0,
   );
   const titleCounts = new Map<string, number>();
@@ -290,12 +319,68 @@ export function RunPanel({
   const titleOf = (nodeId: string) =>
     nodeId === "trigger"
       ? t("trigger.title")
-      : (funcs.find((x) => x.id === nodeId)?.title ?? nodeId);
+      : (editableFuncs.find((x) => x.id === nodeId)?.title ?? nodeId);
 
   const providerForNode = (nodeId: string): string | undefined => {
-    const f = funcs.find((x) => x.id === nodeId);
+    const f = editableFuncs.find((x) => x.id === nodeId);
     return f && !f.pure && f.requires[0] ? f.requires[0].provider : undefined;
   };
+
+  const updateEditableFunc = (
+    id: string,
+    updater: (fn: AuthoredFunc) => AuthoredFunc,
+  ) => {
+    setEditableFuncs((prev) => {
+      const next = prev.map((fn) => (fn.id === id ? updater(fn) : fn));
+      onFuncsChange(next);
+      return next;
+    });
+  };
+
+  const addManualNode = () => {
+    setEditableFuncs((prev) => {
+      let idx = prev.length + 1;
+      let id = `manual_node_${idx}`;
+      while (prev.some((f) => f.id === id)) {
+        idx += 1;
+        id = `manual_node_${idx}`;
+      }
+      const next: AuthoredFunc = {
+        id,
+        title: `Manual Node ${idx}`,
+        summary: "",
+        version: 1,
+        kind: "manual",
+        pure: true,
+        inputs: [],
+        outputSchema: { type: "object", properties: {}, required: [] },
+        bodySource: "return {};",
+        requires: [],
+        dangerClass: null,
+        idempotency: null,
+      };
+      setManualNodeId(id);
+      const merged = [...prev, next];
+      onFuncsChange(merged);
+      return merged;
+    });
+  };
+
+  const manualNode =
+    editableFuncs.find((f) => f.id === manualNodeId) ??
+    (selected?.id ? editableFuncs.find((f) => f.id === selected.id) : undefined) ??
+    editableFuncs[0];
+  const activeManualNodeId = manualNode?.id ?? "";
+
+  useEffect(() => {
+    if (!manualNode && editableFuncs.length === 0) {
+      setManualNodeId("");
+      return;
+    }
+    if (manualNode && manualNodeId !== manualNode.id) {
+      setManualNodeId(manualNode.id);
+    }
+  }, [editableFuncs, manualNode, manualNodeId]);
 
   const streamRun = async (payload: Record<string, unknown>) => {
     setError(null);
@@ -371,7 +456,7 @@ export function RunPanel({
     const id = crypto.randomUUID();
     setCurrentRunId(id);
     await streamRun({
-      funcs,
+      funcs: editableFuncs,
       wires,
       config,
       nodeConnections,
@@ -387,7 +472,7 @@ export function RunPanel({
     const id = crypto.randomUUID();
     setCurrentRunId(id);
     await streamRun({
-      funcs,
+      funcs: editableFuncs,
       wires,
       config,
       nodeConnections,
@@ -436,7 +521,7 @@ export function RunPanel({
         <Button
           size="sm"
           onClick={run}
-          disabled={running || funcs.length === 0}
+          disabled={running || editableFuncs.length === 0}
           className="h-7 rounded-lg px-3"
         >
           {running ? t("run.running") : t("run.run")}
@@ -468,7 +553,7 @@ export function RunPanel({
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {t(`run.tab.${tabKey}`)}
+              {tabKey === "input" ? "Global state" : t(`run.tab.${tabKey}`)}
               {tabKey === "input" && syncing && (
                 <RefreshCw className="h-2.5 w-2.5 animate-spin text-amber-300" />
               )}
@@ -871,36 +956,329 @@ export function RunPanel({
         </div>
       ) : tab === "code" ? (
         <div className="flex min-h-0 flex-1 flex-col px-3 pb-3">
-          {!selected ? (
+          {!manualNode ? (
             <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
               {t("run.selectStepCode")}
             </div>
           ) : (
             <>
               <div className="mb-2 flex items-center gap-2">
-                <span className="text-xs font-medium">
-                  {selected.title || selected.id}
-                </span>
-                <span className="font-mono text-[10px] text-muted-foreground/60">
-                  {selected.id} · v{selected.version}
-                </span>
+                <Select value={activeManualNodeId} onValueChange={setManualNodeId}>
+                  <SelectTrigger
+                    size="sm"
+                    className="h-7 w-auto min-w-[180px] bg-background text-xs"
+                  >
+                    <SelectValue placeholder="Select node" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {editableFuncs.map((f) => (
+                      <SelectItem key={f.id} value={f.id}>
+                        {f.title || f.id}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <button
+                  onClick={addManualNode}
+                  className="rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Add node
+                </button>
                 <button
                   onClick={() =>
-                    navigator.clipboard?.writeText(selected.bodySource)
+                    navigator.clipboard?.writeText(manualNode.bodySource)
                   }
                   className="ml-auto rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
                 >
                   {t("run.copy")}
                 </button>
               </div>
-              <div className="min-h-0 flex-1">
-                <CodeBlock
-                  source={selected.bodySource}
-                  name={selected.id}
-                  theme={theme}
-                  wrap={false}
-                  fill
-                />
+              <div className="min-h-0 flex-1 space-y-3 overflow-auto rounded-xl border border-border/50 bg-background p-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Node title
+                    </div>
+                    <Input
+                      value={manualNode.title}
+                      onChange={(e) =>
+                        updateEditableFunc(manualNode.id, (fn) => ({
+                          ...fn,
+                          title: e.target.value,
+                        }))
+                      }
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      Node id
+                    </div>
+                    <Input
+                      value={manualNode.id}
+                      readOnly
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Inputs
+                  </div>
+                  <div className="space-y-1.5">
+                    {manualNode.inputs.map((inp, idx) => (
+                      <div key={`${inp.name}-${idx}`} className="flex items-center gap-1.5">
+                        <Input
+                          value={inp.name}
+                          onChange={(e) =>
+                            updateEditableFunc(manualNode.id, (fn) => {
+                              const inputs = [...fn.inputs];
+                              inputs[idx] = { ...inputs[idx], name: e.target.value };
+                              return { ...fn, inputs };
+                            })
+                          }
+                          placeholder="name"
+                          className="h-7 text-xs"
+                        />
+                        <Input
+                          value={inp.type}
+                          onChange={(e) =>
+                            updateEditableFunc(manualNode.id, (fn) => {
+                              const inputs = [...fn.inputs];
+                              inputs[idx] = { ...inputs[idx], type: e.target.value };
+                              return { ...fn, inputs };
+                            })
+                          }
+                          placeholder="type"
+                          className="h-7 w-28 text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateEditableFunc(manualNode.id, (fn) => {
+                              const inputs = [...fn.inputs];
+                              inputs[idx] = {
+                                ...inputs[idx],
+                                required: !inputs[idx].required,
+                              };
+                              return { ...fn, inputs };
+                            })
+                          }
+                          className={cn(
+                            "rounded border px-2 py-1 text-[10px]",
+                            inp.required
+                              ? "border-emerald-500/50 text-emerald-300"
+                              : "border-border/50 text-muted-foreground",
+                          )}
+                        >
+                          required
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() =>
+                            updateEditableFunc(manualNode.id, (fn) => ({
+                              ...fn,
+                              inputs: fn.inputs.filter((_, i) => i !== idx),
+                            }))
+                          }
+                          className="rounded border border-border/50 px-2 py-1 text-[10px] text-rose-300"
+                        >
+                          remove
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateEditableFunc(manualNode.id, (fn) => ({
+                          ...fn,
+                          inputs: [
+                            ...fn.inputs,
+                            {
+                              name: `input_${fn.inputs.length + 1}`,
+                              role: "input",
+                              type: "string",
+                              required: false,
+                            },
+                          ],
+                        }))
+                      }
+                      className="rounded border border-border/50 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      + add input
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Outputs
+                  </div>
+                  <div className="space-y-1.5">
+                    {Object.entries(manualNode.outputSchema.properties ?? {}).map(
+                      ([name, rawSchema]) => {
+                        const schema = asOutputSchemaProp(rawSchema);
+                        const outputType =
+                          typeof schema.type === "string" ? schema.type : "string";
+                        return (
+                          <div key={name} className="flex items-center gap-1.5">
+                            <Input
+                              value={name}
+                              onChange={(e) =>
+                                updateEditableFunc(manualNode.id, (fn) => {
+                                  const props = { ...(fn.outputSchema.properties ?? {}) };
+                                  const oldSchema = props[name];
+                                  const nextName = e.target.value.trim();
+                                  if (!nextName || nextName === name) return fn;
+                                  if (Object.prototype.hasOwnProperty.call(props, nextName))
+                                    return fn;
+                                  delete props[name];
+                                  props[nextName] = oldSchema;
+                                  const req = (fn.outputSchema.required ?? []).map((x) =>
+                                    x === name ? nextName : x,
+                                  );
+                                  return {
+                                    ...fn,
+                                    outputSchema: {
+                                      ...fn.outputSchema,
+                                      properties: props,
+                                      required: req,
+                                    },
+                                  };
+                                })
+                              }
+                              placeholder="name"
+                              className="h-7 text-xs"
+                            />
+                            <Input
+                              value={outputType}
+                              onChange={(e) =>
+                                updateEditableFunc(manualNode.id, (fn) => {
+                                  const props = { ...(fn.outputSchema.properties ?? {}) };
+                                  const prevSchema = asOutputSchemaProp(props[name]);
+                                  props[name] = { ...prevSchema, type: e.target.value };
+                                  return {
+                                    ...fn,
+                                    outputSchema: { ...fn.outputSchema, properties: props },
+                                  };
+                                })
+                              }
+                              placeholder="type"
+                              className="h-7 w-28 text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateEditableFunc(manualNode.id, (fn) => {
+                                  const props = { ...(fn.outputSchema.properties ?? {}) };
+                                  delete props[name];
+                                  return {
+                                    ...fn,
+                                    outputSchema: {
+                                      ...fn.outputSchema,
+                                      properties: props,
+                                      required: (fn.outputSchema.required ?? []).filter(
+                                        (x) => x !== name,
+                                      ),
+                                    },
+                                  };
+                                })
+                              }
+                              className="rounded border border-border/50 px-2 py-1 text-[10px] text-rose-300"
+                            >
+                              remove
+                            </button>
+                          </div>
+                        );
+                      },
+                    )}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateEditableFunc(manualNode.id, (fn) => {
+                          const props = { ...(fn.outputSchema.properties ?? {}) };
+                          let idx = Object.keys(props).length + 1;
+                          let key = `output_${idx}`;
+                          while (Object.prototype.hasOwnProperty.call(props, key)) {
+                            idx += 1;
+                            key = `output_${idx}`;
+                          }
+                          props[key] = { type: "string" };
+                          return {
+                            ...fn,
+                            outputSchema: { ...fn.outputSchema, properties: props },
+                          };
+                        })
+                      }
+                      className="rounded border border-border/50 px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                    >
+                      + add output
+                    </button>
+                  </div>
+                </div>
+
+                {!manualNode.pure && (
+                  <div className="space-y-1">
+                    <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                      {t("node.connections")}
+                    </div>
+                    {manualNode.requires.length === 0 ? (
+                      <div className="text-xs text-muted-foreground/70">
+                        {t("node.none")}
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {manualNode.requires.map((r) => (
+                          <NodeConnection
+                            key={r.name}
+                            provider={r.provider}
+                            requirementName={r.name}
+                            selectedId={nodeConnections[manualNode.id]?.[r.name]}
+                            onSelect={(name, id) =>
+                              onConnectionChange(manualNode.id, name, id)
+                            }
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-1">
+                  <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                    Code
+                  </div>
+                  <div className="overflow-hidden rounded-lg border border-border/50 bg-background-subtle">
+                    <CodeMirror
+                      value={manualNode.bodySource}
+                      onChange={(value) =>
+                        updateEditableFunc(manualNode.id, (fn) => ({
+                          ...fn,
+                          bodySource: value,
+                        }))
+                      }
+                      theme={theme === "dark" ? oneDark : "light"}
+                      extensions={[
+                        javascript(),
+                        EditorView.lineWrapping,
+                        EditorView.theme({
+                          "&": { fontSize: "12px" },
+                          ".cm-gutters": { fontSize: "11px" },
+                        }),
+                      ]}
+                      editable
+                      width="100%"
+                      minHeight="260px"
+                      basicSetup={{
+                        lineNumbers: true,
+                        foldGutter: false,
+                        highlightActiveLine: false,
+                        highlightActiveLineGutter: false,
+                      }}
+                    />
+                  </div>
+                </div>
               </div>
             </>
           )}
@@ -1007,7 +1385,7 @@ export function RunPanel({
                       {provider && (
                         <button
                           onClick={() => {
-                            const f = funcs.find((x) => x.id === r.nodeId);
+                            const f = editableFuncs.find((x) => x.id === r.nodeId);
                             onRepair(provider, {
                               error: r.error ?? "",
                               callSite: f?.bodySource ?? "",
