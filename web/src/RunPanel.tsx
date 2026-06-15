@@ -21,8 +21,6 @@ import {
 import { spaceHeaders } from "./space";
 import { useAuth } from "./authContext";
 import {
-  useRuns,
-  fetchRun,
   generateInputForm,
   fetchProviderSource,
   useFiles,
@@ -127,10 +125,9 @@ export function RunPanel({
     connectionId: string,
   ) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const { requireAuth } = useAuth();
-  const runsQuery = useRuns(workflowId);
   const { data: filesData } = useFiles();
   const files = filesData ?? [];
   const [editableFuncs, setEditableFuncs] = useState<AuthoredFunc[]>(() => funcs);
@@ -148,11 +145,8 @@ export function RunPanel({
   const [records, setRecords] = useState<RunRecord[]>([]);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [loadingRun, setLoadingRun] = useState<string | null>(null);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
-  const [tab, setTab] = useState<
-    "input" | "state" | "runs" | "code" | "provider"
-  >("input");
+  const [tab, setTab] = useState<"input" | "state" | "code" | "provider">("input");
   const [nodeView, setNodeView] = useState<string>("");
   const [provView, setProvView] = useState<string>("");
   const [provSource, setProvSource] = useState<ProviderSource | null>(null);
@@ -483,33 +477,6 @@ export function RunPanel({
     });
   };
 
-  const openRun = async (id: string) => {
-    setLoadingRun(id);
-    try {
-      const run = await fetchRun(id);
-      setRecords(run.records as RunRecord[]);
-      setCurrentRunId(id);
-      const status: Record<string, string> = {};
-      const dataByNode: Record<string, RunStepData> = {};
-      for (const r of run.records) {
-        status[r.nodeId] = r.status;
-        dataByNode[r.nodeId] = {
-          status: r.status,
-          resolvedInput: r.resolvedInput,
-          output: r.output,
-          error: r.error,
-        };
-      }
-      onStatus(status);
-      onData(dataByNode);
-      setTab("state");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoadingRun(null);
-    }
-  };
-
   const canResume =
     !!workflowId &&
     !!currentRunId &&
@@ -541,7 +508,7 @@ export function RunPanel({
         )}
 
         <div className="flex rounded-lg border border-border/50 bg-muted/50 p-0.5 text-xs">
-          {(["input", "state", "runs", "code", "provider"] as const).map(
+          {(["input", "state", "code", "provider"] as const).map(
             (tabKey) => (
             <button
               key={tabKey}
@@ -910,49 +877,6 @@ export function RunPanel({
             />
           )}
           </div>
-        </div>
-      ) : tab === "runs" ? (
-        <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
-          {!workflowId ? (
-            <div className="flex h-full items-center justify-center px-6 text-center text-xs text-muted-foreground">
-              {t("run.saveForHistory")}
-            </div>
-          ) : (runsQuery.data?.length ?? 0) === 0 ? (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              {t("run.noRuns")}
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              {runsQuery.data?.map((r) => (
-                <button
-                  key={r.id}
-                  onClick={() => openRun(r.id)}
-                  className="flex w-full items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-2.5 py-2 text-left transition-colors hover:border-border"
-                >
-                  <span
-                    className={cn(
-                      "size-2 shrink-0 rounded-full",
-                      STATUS_DOT[r.status] ?? "bg-muted-foreground",
-                    )}
-                  />
-                  <span className="shrink-0 rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
-                    {r.trigger}
-                  </span>
-                  <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
-                    {new Date(r.startedAt).toLocaleString(i18n.language)}
-                  </span>
-                  <span className="shrink-0 text-[10px] text-muted-foreground/60">
-                    {t("run.steps", { count: r.stepCount })}
-                  </span>
-                  {loadingRun === r.id && (
-                    <span className="shrink-0 text-[10px] text-muted-foreground">
-                      {t("common.loading")}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       ) : tab === "code" ? (
         <div className="flex min-h-0 flex-1 flex-col px-3 pb-3">

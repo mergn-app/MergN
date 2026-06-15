@@ -45,6 +45,8 @@ import { RunPanel } from "./RunPanel";
 import {
   useSaveWorkflow,
   useRunStream,
+  useRuns,
+  fetchRun,
   fetchWorkflow,
   generateInputForm,
   useConnections,
@@ -79,6 +81,11 @@ const normalizeFunc = (f: AuthoredFunc): AuthoredFunc => ({
 
 const NO_CONNECTIONS: ConnectionMeta[] = [];
 const LEFT_PANEL_MINIMIZED_KEY = "leftPanelMinimized";
+const STATUS_DOT: Record<string, string> = {
+  done: "bg-emerald-500",
+  failed: "bg-rose-500",
+  pending: "bg-amber-500 animate-pulse",
+};
 
 const nodeTypes = { func: FuncNode, trigger: TriggerNode };
 const edgeTypes = { deletable: DeletableEdge };
@@ -224,6 +231,7 @@ export function App({
   }, [theme]);
   const [runStatus, setRunStatus] = useState<Record<string, string>>({});
   const [runData, setRunData] = useState<Record<string, RunStepData>>({});
+  const [loadingHistoryRun, setLoadingHistoryRun] = useState<string | null>(null);
   const [configValues, setConfigValues] = useState<
     Record<string, Record<string, string>>
   >({});
@@ -287,6 +295,7 @@ export function App({
   const { user, requireAuth, signOut, managed } = useAuth();
   const { data: connections = NO_CONNECTIONS } = useConnections();
   const conversationsQuery = useConversations();
+  const runsQuery = useRuns(workflowId);
   const deleteConversation = useDeleteConversation();
   const selected = funcs.find((f) => f.id === selectedId) ?? null;
 
@@ -621,6 +630,28 @@ export function App({
   const removeWireByKey = useCallback((key: string) => {
     setWires((prev) => prev.filter((w) => wireKey(w) !== key));
     setAutoSave(true);
+  }, []);
+
+  const openRunFromHistory = useCallback(async (id: string) => {
+    setLoadingHistoryRun(id);
+    try {
+      const run = await fetchRun(id);
+      const status: Record<string, string> = {};
+      const dataByNode: Record<string, RunStepData> = {};
+      for (const r of run.records) {
+        status[r.nodeId] = r.status;
+        dataByNode[r.nodeId] = {
+          status: r.status,
+          resolvedInput: r.resolvedInput,
+          output: r.output,
+          error: r.error,
+        };
+      }
+      setRunStatus(status);
+      setRunData(dataByNode);
+    } finally {
+      setLoadingHistoryRun(null);
+    }
   }, []);
 
   const connectNodes = useCallback(
@@ -1447,6 +1478,47 @@ export function App({
                 )
               }
             />
+          }
+          runs={
+            <div className="min-h-0 flex-1 overflow-auto p-2">
+              {!workflowId ? (
+                <div className="flex h-full items-center justify-center px-6 text-center text-xs text-muted-foreground">
+                  {t("run.saveForHistory")}
+                </div>
+              ) : (runsQuery.data?.length ?? 0) === 0 ? (
+                <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                  {t("run.noRuns")}
+                </div>
+              ) : (
+                <div className="space-y-1.5">
+                  {runsQuery.data?.map((r) => (
+                    <button
+                      key={r.id}
+                      onClick={() => openRunFromHistory(r.id)}
+                      className="flex w-full items-center gap-2 rounded-xl border border-border/50 bg-background/60 px-2.5 py-2 text-left transition-colors hover:border-border"
+                    >
+                      <span
+                        className={`size-2 shrink-0 rounded-full ${STATUS_DOT[r.status] ?? "bg-muted-foreground"}`}
+                      />
+                      <span className="shrink-0 rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                        {r.trigger}
+                      </span>
+                      <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+                        {new Date(r.startedAt).toLocaleString()}
+                      </span>
+                      <span className="shrink-0 text-[10px] text-muted-foreground/60">
+                        {t("run.steps", { count: r.stepCount })}
+                      </span>
+                      {loadingHistoryRun === r.id && (
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {t("common.loading")}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           }
           files={<FilesPanel />}
           logs={<LogsPanel active={activeTab === "logs"} />}
