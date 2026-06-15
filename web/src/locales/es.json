@@ -135,7 +135,9 @@
     "saved": "Guardado",
     "newWorkflow": "Nuevo flujo de trabajo",
     "empty": "Aún no hay flujos de trabajo guardados.",
-    "meta": "{{n}} funciones · {{date}}"
+    "meta": "{{n}} funciones · {{date}}",
+    "minimizePanel": "Minimizar panel",
+    "expandPanel": "Expandir panel"
   },
   "spaces": {
     "title": "Espacios",

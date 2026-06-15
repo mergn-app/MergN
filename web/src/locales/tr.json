@@ -135,7 +135,9 @@
     "saved": "Kayıtlı",
     "newWorkflow": "Yeni akış",
     "empty": "Henüz kayıtlı akış yok.",
-    "meta": "{{n}} fonksiyon · {{date}}"
+    "meta": "{{n}} fonksiyon · {{date}}",
+    "minimizePanel": "Paneli küçült",
+    "expandPanel": "Paneli genişlet"
   },
   "spaces": {
     "title": "Alanlar",

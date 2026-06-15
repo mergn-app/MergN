@@ -135,7 +135,9 @@
     "saved": "Gespeichert",
     "newWorkflow": "Neuer Workflow",
     "empty": "Noch keine gespeicherten Workflows.",
-    "meta": "{{n}} Funktionen · {{date}}"
+    "meta": "{{n}} Funktionen · {{date}}",
+    "minimizePanel": "Panel minimieren",
+    "expandPanel": "Panel erweitern"
   },
   "spaces": {
     "title": "Bereiche",

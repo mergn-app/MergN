@@ -135,7 +135,9 @@
     "saved": "Enregistré",
     "newWorkflow": "Nouveau workflow",
     "empty": "Aucun workflow enregistré pour l'instant.",
-    "meta": "{{n}} fonctions · {{date}}"
+    "meta": "{{n}} fonctions · {{date}}",
+    "minimizePanel": "Réduire le panneau",
+    "expandPanel": "Agrandir le panneau"
   },
   "spaces": {
     "title": "Espaces",
