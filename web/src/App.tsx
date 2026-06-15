@@ -611,30 +611,17 @@ export function App({
   useEffect(() => {
     const eventFields = trigger.eventFields ?? [];
     setWires((prev) => {
+      // Never auto-create trigger bindings for unwired inputs.
+      // If an input is unwired, it must stay as global state.
+      // Only keep explicitly wired trigger edges that map to real trigger fields.
       const kept = prev.filter(
-        (w) => !(w.from === "trigger" && !eventFields.includes(w.fromOutput)),
+        (w) =>
+          w.from !== "trigger" ||
+          (!!w.fromOutput && eventFields.includes(w.fromOutput)),
       );
-      const additions: Wire[] = [];
-      for (const f of funcs) {
-        for (const p of f.inputs) {
-          if (p.role === "config" || !eventFields.includes(p.name)) continue;
-          const wired = kept.some(
-            (w) => w.to === f.id && w.toInput === p.name,
-          );
-          if (!wired) {
-            additions.push({
-              from: "trigger",
-              fromOutput: p.name,
-              to: f.id,
-              toInput: p.name,
-            });
-          }
-        }
-      }
-      if (kept.length === prev.length && additions.length === 0) return prev;
-      return additions.length ? [...kept, ...additions] : kept;
+      return kept.length === prev.length ? prev : kept;
     });
-  }, [funcs, trigger]);
+  }, [trigger]);
 
   useEffect(() => {
     setNodes((prev) => {
@@ -742,33 +729,8 @@ export function App({
         animated: true,
         style: { stroke: "#6ea8ff" },
       }));
-    // Trigger-fed inputs are implicit bindings (not wires) — draw them as edges
-    // from the trigger node. ONLY the actual event-data fields (trigger.eventFields,
-    // e.g. `payload` for a webhook) come from the trigger. Every OTHER unwired
-    // input is a user-provided value (global state / input form) and must NOT be
-    // wired to the trigger.
-    const eventFields = trigger.eventFields ?? [];
-    const triggerEdges: Edge[] = [];
-    if (showTrigger) {
-      for (const f of funcs) {
-        for (const p of f.inputs) {
-          if (p.role === "config") continue;
-          if (!eventFields.includes(p.name)) continue;
-          if (wires.some((w) => w.to === f.id && w.toInput === p.name)) continue;
-          triggerEdges.push({
-            id: `trigger.${p.name}->${f.id}.${p.name}`,
-            source: "trigger",
-            target: f.id,
-            sourceHandle: p.name,
-            targetHandle: p.name,
-            animated: true,
-            style: { stroke: "#6ea8ff" },
-          });
-        }
-      }
-    }
-    return [...wireEdges, ...triggerEdges];
-  }, [wires, funcs, trigger.kind, trigger.eventFields]);
+    return wireEdges;
+  }, [wires, funcs, trigger.kind]);
 
   const reset = () => {
     setFuncs([]);
