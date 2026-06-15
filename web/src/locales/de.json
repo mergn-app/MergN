@@ -272,5 +272,8 @@
     "download": "Herunterladen",
     "delete": "Löschen",
     "fromWorkflow": "aus einem Flow"
+  },
+  "canvas": {
+    "autoArrange": "Auto-anordnen"
   }
 }

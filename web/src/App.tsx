@@ -5,6 +5,7 @@ import {
   ReactFlowProvider,
   Background,
   Controls,
+  Panel,
   useNodesState,
   useReactFlow,
   type Node,
@@ -12,7 +13,7 @@ import {
   type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Sun, Moon, Zap, Wand2, Loader2 } from "lucide-react";
+import { Sun, Moon, Zap, Wand2, Loader2, Network } from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
 import { LogsPanel } from "./LogsPanel";
 import { FilesPanel } from "./FilesPanel";
@@ -21,6 +22,7 @@ import { TriggerDialog } from "./TriggerDialog";
 import { Pipeline } from "./Pipeline";
 import { Story } from "./Story";
 import { FuncNode } from "./FuncNode";
+import { layoutPositions } from "./layout";
 import { TriggerNode } from "./TriggerNode";
 import { NodePanel } from "./NodePanel";
 import { RightPanel, type RightTab } from "./RightPanel";
@@ -101,15 +103,18 @@ function Canvas({
   edges,
   onNodesChange,
   onSelect,
+  onArrange,
   colorMode,
 }: {
   nodes: Node[];
   edges: Edge[];
   onNodesChange: OnNodesChange<Node>;
   onSelect: (id: string) => void;
+  onArrange: () => void;
   colorMode: "dark" | "light";
 }) {
   const { fitView } = useReactFlow();
+  const { t } = useTranslation();
   useEffect(() => {
     if (nodes.length > 0) fitView({ duration: 300, padding: 0.28 });
   }, [nodes.length, fitView]);
@@ -127,6 +132,21 @@ function Canvas({
     >
       <Background />
       <Controls />
+      {nodes.length > 1 && (
+        <Panel position="top-right">
+          <button
+            onClick={() => {
+              onArrange();
+              setTimeout(() => fitView({ duration: 400, padding: 0.28 }), 60);
+            }}
+            title={t("canvas.autoArrange")}
+            className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/90 px-2.5 py-1.5 text-xs font-medium text-foreground/80 shadow-sm backdrop-blur transition-colors hover:text-foreground"
+          >
+            <Network className="h-3.5 w-3.5" />
+            {t("canvas.autoArrange")}
+          </button>
+        </Panel>
+      )}
     </ReactFlow>
   );
 }
@@ -642,6 +662,9 @@ export function App({
   useEffect(() => {
     setNodes((prev) => {
       const prevPos = new Map(prev.map((n) => [n.id, n.position]));
+      // graph-aware fallback for nodes the user hasn't placed yet: dependency
+      // depth on X, crossing-minimised order on Y (replaces the old index row).
+      const layout = layoutPositions(funcs, wires, trigger);
       const funcNodes = funcs.map((f, i) => {
         const needsConnection =
           !f.pure && f.requires.some((r) => !connectedProviders.has(r.provider));
@@ -671,7 +694,8 @@ export function App({
         return buildNode(
           f,
           prevPos.get(f.id) ??
-            positionsRef.current[f.id] ?? { x: 360 + i * 340, y: 160 },
+            positionsRef.current[f.id] ??
+            layout[f.id] ?? { x: 360 + i * 340, y: 160 },
           runStatus[f.id],
           needsConnection,
           inputs,
@@ -692,7 +716,8 @@ export function App({
         type: "trigger",
         position:
           prevPos.get("trigger") ??
-          positionsRef.current["trigger"] ?? { x: 40, y: 160 },
+          positionsRef.current["trigger"] ??
+          layout["trigger"] ?? { x: 40, y: 160 },
         data: {
           fields: triggerOut,
           kind: trigger.kind,
@@ -807,6 +832,16 @@ export function App({
     }
     return [...wireEdges, ...triggerEdges, ...gateEdges];
   }, [wires, funcs, trigger.kind, trigger.eventFields]);
+
+  // Re-run the graph layout for ALL nodes (overrides manual positions on demand).
+  const arrangeLayout = useCallback(() => {
+    const pos = layoutPositions(funcs, wires, trigger);
+    positionsRef.current = { ...positionsRef.current, ...pos };
+    setNodes((ns) =>
+      ns.map((n) => (pos[n.id] ? { ...n, position: pos[n.id] } : n)),
+    );
+    setAutoSave(true);
+  }, [funcs, wires, trigger, setNodes]);
 
   const reset = () => {
     setFuncs([]);
@@ -1088,6 +1123,7 @@ export function App({
                   edges={rfEdges}
                   onNodesChange={onNodesChange}
                   onSelect={onSelectNode}
+                  onArrange={arrangeLayout}
                   colorMode={theme}
                 />
               </ReactFlowProvider>

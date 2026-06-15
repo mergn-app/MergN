@@ -272,5 +272,8 @@
     "download": "Télécharger",
     "delete": "Supprimer",
     "fromWorkflow": "d’un flux"
+  },
+  "canvas": {
+    "autoArrange": "Auto-disposer"
   }
 }

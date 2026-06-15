@@ -272,5 +272,8 @@
     "download": "İndir",
     "delete": "Sil",
     "fromWorkflow": "akıştan"
+  },
+  "canvas": {
+    "autoArrange": "Otomatik diz"
   }
 }
