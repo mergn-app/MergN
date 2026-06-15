@@ -485,8 +485,26 @@ function makeTools(
   spaceId: string,
   writer: UIMessageStreamWriter,
   sessionId: string,
+  triggerCtx?: { kind?: string; eventFields?: string[] },
 ) {
   const meta = { spaceId, sessionId };
+  // Tell the single-step author (author_func/update_func) how this workflow's
+  // trigger feeds event data, so an edited step reads it the same way the
+  // designer wired it — instead of inventing a flat input or asking the user
+  // for a path into the event body.
+  const triggerHint = ((): string | undefined => {
+    const kind = triggerCtx?.kind;
+    if (kind === "webhook") {
+      return "This workflow's trigger is a WEBHOOK: the entire raw request body the external service POSTs arrives as `input.payload` (already-parsed JSON). To use a value from the event (e.g. a customer name/email/amount), READ IT FROM input.payload IN CODE — navigate its likely structure yourself (e.g. input.payload?.data?.object?.customer_name ?? input.payload?.customer_name). NEVER invent a flat trigger input like input.customerName for event data, and NEVER create a user input that asks for a PATH/field-location (no `*_path`/`*_field`/`*_key` input + lodash get). The user only provides destinations/actions.";
+    }
+    if (kind === "poll" && triggerCtx?.eventFields?.length) {
+      return `This workflow's trigger POLLS for new items; each item arrives with these EXACT fields: ${triggerCtx.eventFields.join(", ")}. Read event data from those input names directly. Do NOT invent other trigger field names.`;
+    }
+    if (kind === "schedule") {
+      return "This workflow's trigger is a SCHEDULE: the only event field is input.timestamp. Do NOT invent other trigger field names.";
+    }
+    return undefined;
+  })();
   return {
   design_workflow: tool({
     description:
@@ -614,7 +632,7 @@ function makeTools(
         .describe("provider id, if this step calls an external service"),
     }),
     execute: async ({ intent, provider }) => {
-      const r = await authorFunc(registry, { spaceId, intent, provider }, meta);
+      const r = await authorFunc(registry, { spaceId, intent, provider, triggerHint }, meta);
       return funcToWire(r.def, r.title, r.summary);
     },
     toModelOutput: ({ output }) => ({ type: "json", value: leanFunc(output) }),
@@ -635,7 +653,7 @@ function makeTools(
         .describe("provider id if this step calls an external service"),
     }),
     execute: async ({ id, intent, provider }) => {
-      const r = await authorFunc(registry, { spaceId, intent, provider }, meta);
+      const r = await authorFunc(registry, { spaceId, intent, provider, triggerHint }, meta);
       return funcToWire({ ...r.def, id }, r.title, r.summary);
     },
     toModelOutput: ({ output }) => ({ type: "json", value: leanFunc(output) }),
@@ -949,11 +967,13 @@ app.delete("/api/chat/conversations/:id", async (c) => {
 app.post("/api/chat", async (c) => {
   const spaceId = c.get("spaceId");
   const userId = c.get("userId");
-  const { message: rawMessage, conversationId, workflowState } =
+  const { message: rawMessage, conversationId, workflowState, triggerKind, eventFields } =
     await c.req.json<{
       message: UIMessage;
       conversationId: string;
       workflowState?: string;
+      triggerKind?: string;
+      eventFields?: string[];
     }>();
   if (!/^[A-Za-z0-9_-]+$/.test(conversationId ?? ""))
     return c.json({ error: "bad conversation id" }, 400);
@@ -1068,7 +1088,9 @@ app.post("/api/chat", async (c) => {
             LIMITS.promptTokenCap,
         ],
         maxOutputTokens: LIMITS.maxOutputTokens,
-        tools: withResultLimits(makeTools(spaceId, writer, sessionId)),
+        tools: withResultLimits(
+          makeTools(spaceId, writer, sessionId, { kind: triggerKind, eventFields }),
+        ),
         providerOptions: {
           google: { thinkingConfig: { includeThoughts: true } },
         },

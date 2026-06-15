@@ -1143,6 +1143,8 @@ export function App({
                     onOps={setOps}
                     onBuilding={setBuilding}
                     workflowState={workflowState}
+                    triggerKind={trigger.kind}
+                    eventFields={trigger.eventFields ?? []}
                     onReady={(send) => {
                       sendChatRef.current = send;
                     }}

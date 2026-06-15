@@ -17,12 +17,17 @@ const SYSTEM = [
   "- If it calls an external service, set pure=false, fill requires, and pick a suitable dangerClass and idempotencyMechanism.",
   "- When a provider's connection API is given below, declare a connection with that provider id and call it exactly as documented.",
   "- For each input you read as a LIST (input.x is iterated/mapped/indexed), declare its type as 'array' so the UI offers a list editor.",
+  "- TRIGGER/EVENT DATA: when the step consumes data from the workflow's trigger (a webhook payload, a polled item, the incoming event), read it the way the trigger note below describes. NEVER invent a flat input name for event data (e.g. input.customerName for a value that lives inside a webhook payload), and NEVER create a config input that asks the end user for a PATH/field-location into the event (no `*_path`/`*_field` input fed to lodash get). Extract specific values from the event object in code. The user only supplies destinations/actions (a channel, a spreadsheet id), never a path into the event body.",
 ].join("\n");
 
 export interface FuncSpec {
   spaceId: string;
   intent: string;
   provider?: string;
+  // describes how this workflow's trigger feeds event data (webhook->input.payload,
+  // poll->item fields, schedule->input.timestamp), so an edited step reads it the
+  // same way the original designer did.
+  triggerHint?: string;
 }
 
 export interface AuthoredFuncResult {
@@ -45,7 +50,9 @@ export async function authorFunc(
   const object = await genObject({
     schema: funcDraftZ,
     system: SYSTEM,
-    prompt: [`Task: ${spec.intent}`, providerNote].join("\n"),
+    prompt: [`Task: ${spec.intent}`, providerNote, spec.triggerHint ?? ""]
+      .filter(Boolean)
+      .join("\n"),
     telemetry: trace("author-func", { ...meta, spaceId: spec.spaceId }),
     spaceId: spec.spaceId ?? meta?.spaceId,
   });

@@ -303,6 +303,8 @@ interface ChatProps {
   onOps: (ops: WorkflowOp[]) => void;
   onBuilding?: (building: boolean) => void;
   workflowState?: string;
+  triggerKind?: string;
+  eventFields?: string[];
   onReady?: (send: (text: string) => void) => void;
   onBack?: () => void;
   initialPrompt?: string;
@@ -332,6 +334,8 @@ function ChatThread({
   onOps,
   onBuilding,
   workflowState,
+  triggerKind,
+  eventFields,
   onReady,
   onBack,
   initialPrompt,
@@ -341,6 +345,8 @@ function ChatThread({
   const { t, i18n } = useTranslation();
   const stateRef = useRef("");
   stateRef.current = workflowState ?? "";
+  const triggerRef = useRef<{ kind?: string; eventFields?: string[] }>({});
+  triggerRef.current = { kind: triggerKind, eventFields };
   const qc = useQueryClient();
 
   const transport = useMemo(
@@ -354,6 +360,8 @@ function ChatThread({
               message: messages[messages.length - 1],
               conversationId: id,
               workflowState: stateRef.current,
+              triggerKind: triggerRef.current.kind,
+              eventFields: triggerRef.current.eventFields,
             },
           };
         },
