@@ -15,6 +15,7 @@ interface FuncNodeData {
   pure: boolean;
   status?: string;
   needsConnection?: boolean;
+  needsValue?: boolean;
   inputs: Port[];
   outputs: string[];
 }
@@ -95,22 +96,12 @@ export function FuncNode({ data, selected }: NodeProps) {
                   <PortDot
                     id={p.name}
                     type="target"
-                    tone={
-                      p.variable
-                        ? "!border-tone-amber"
-                        : p.bound
-                          ? "!border-tone-blue"
-                          : "!border-tone-rose"
-                    }
+                    tone={p.bound ? "!border-tone-blue" : "!border-tone-amber"}
                   />
                   <span
                     className={cn(
                       "truncate font-mono text-[11px]",
-                      p.variable
-                        ? "text-tone-amber-fg"
-                        : p.bound
-                          ? "text-foreground/80"
-                          : "text-tone-rose-fg",
+                      p.bound ? "text-foreground/80" : "text-tone-amber-fg",
                     )}
                   >
                     {p.name}
@@ -132,9 +123,13 @@ export function FuncNode({ data, selected }: NodeProps) {
         )}
       </div>
 
-      {d.needsConnection && (
+      {(d.needsConnection || d.needsValue) && (
         <div
-          title={t("connections.needsConnection")}
+          title={
+            d.needsConnection
+              ? t("connections.needsConnection")
+              : t("node.needsValue")
+          }
           className="absolute -right-1 -top-1 size-2.5 rounded-full bg-amber-500 ring-2 ring-background"
         />
       )}

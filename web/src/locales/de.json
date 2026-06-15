@@ -192,6 +192,7 @@
     "outputLabel": "Ausgabe",
     "errorLabel": "Fehler",
     "settings": "Einstellungen",
+    "needsValue": "Benötigt einen Wert — im Eingabe-Tab ausfüllen",
     "inputs": "Eingaben",
     "output": "Ausgabe",
     "connections": "Verbindungen",

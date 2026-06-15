@@ -192,6 +192,7 @@
     "outputLabel": "çıktı",
     "errorLabel": "hata",
     "settings": "Ayarlar",
+    "needsValue": "Bir değer gerekiyor — Girdi sekmesinden doldur",
     "inputs": "Girdiler",
     "output": "Çıktı",
     "connections": "Bağlantılar",

@@ -77,10 +77,12 @@ export function RunPanel({
   onStatus,
   onData,
   onRepair,
+  onConfigChange,
 }: {
   funcs: AuthoredFunc[];
   wires: Wire[];
   config: Record<string, Record<string, string>>;
+  onConfigChange: (funcId: string, port: string, value: string) => void;
   nodeConnections: Record<string, Record<string, string>>;
   workflowId: string | null;
   workflowName: string;
@@ -254,8 +256,19 @@ export function RunPanel({
       set.add(p.name);
     }
   }
+  // config inputs are per-node settings (each node keeps its own value, so two
+  // nodes can both have a `channelId` without colliding). Surface them in the
+  // SAME per-node input form as the global fields, so every value the user
+  // provides lives in one place — never a separate red thing on the node.
+  const configByNode = new Map<string, AuthoredFunc["inputs"]>();
+  for (const f of funcs) {
+    const cfgs = f.inputs.filter((p) => p.role === "config");
+    if (cfgs.length) configByNode.set(f.id, cfgs);
+  }
   const nodesWithFields = funcs.filter(
-    (f) => (fieldNamesByNode.get(f.id)?.size ?? 0) > 0,
+    (f) =>
+      (fieldNamesByNode.get(f.id)?.size ?? 0) > 0 ||
+      (configByNode.get(f.id)?.length ?? 0) > 0,
   );
   const titleCounts = new Map<string, number>();
   for (const f of nodesWithFields) {
@@ -286,6 +299,8 @@ export function RunPanel({
       : (inputForm?.fields ?? []).filter((f) =>
           fieldNamesByNode.get(activeNode)?.has(f.name),
         );
+  const visibleConfig =
+    activeNode === "__trigger" ? [] : (configByNode.get(activeNode) ?? []);
 
   const titleOf = (nodeId: string) =>
     nodeId === "trigger"
@@ -610,14 +625,38 @@ export function RunPanel({
                 );
               })}
             </div>
-          ) : useForm && inputMode === "form" ? (
+          ) : (useForm && inputMode === "json") || views.length === 0 ? (
+            <textarea
+              value={input}
+              onChange={(e) => {
+                const json = e.target.value;
+                setInput(json);
+                try {
+                  const parsed = JSON.parse(json);
+                  if (parsed && typeof parsed === "object") {
+                    const fv = { ...formValues };
+                    for (const [k, v] of Object.entries(parsed)) {
+                      fv[k] = v;
+                    }
+                    setFormValues(fv);
+                    persistInput(fv);
+                  }
+                } catch {
+                  void 0;
+                }
+              }}
+              spellCheck={false}
+              placeholder='{ "email": "ada@x.com", "amount": 2000 }'
+              className="min-h-[220px] w-full resize-none rounded-xl border border-border/50 bg-background p-3 font-mono text-xs outline-none transition-colors focus:border-foreground/20"
+            />
+          ) : (
             <div
               className={cn(
                 "space-y-3 rounded-xl border border-border/50 bg-background p-3 transition-opacity",
                 syncing && "pointer-events-none opacity-50",
               )}
             >
-              {visibleFields.map((f) => {
+              {(useForm ? visibleFields : []).map((f) => {
                 if (f.control === "array") {
                   const arr = Array.isArray(formValues[f.name])
                     ? (formValues[f.name] as string[])
@@ -798,31 +837,34 @@ export function RunPanel({
                   </div>
                 );
               })}
+              {visibleConfig.map((p) => {
+                const cur = String(config[activeNode]?.[p.name] ?? "");
+                return (
+                  <div key={`cfg-${p.name}`} className="space-y-1">
+                    <label className="flex items-center gap-2 text-xs">
+                      <span className="font-medium">{p.name}</span>
+                      <span className="font-mono text-[10px] text-muted-foreground/50">
+                        {p.type}
+                      </span>
+                      {p.required && (
+                        <span className="text-[10px] text-amber-300/80">
+                          {t("run.required")}
+                        </span>
+                      )}
+                    </label>
+                    <Input
+                      value={cur}
+                      onChange={(e) =>
+                        onConfigChange(activeNode, p.name, e.target.value)
+                      }
+                      type={p.type === "number" ? "number" : "text"}
+                      placeholder={`${p.name}…`}
+                      className="h-8 w-full rounded-lg bg-background-subtle text-xs"
+                    />
+                  </div>
+                );
+              })}
             </div>
-          ) : (
-            <textarea
-              value={input}
-              onChange={(e) => {
-                const json = e.target.value;
-                setInput(json);
-                try {
-                  const parsed = JSON.parse(json);
-                  if (parsed && typeof parsed === "object") {
-                    const fv = { ...formValues };
-                    for (const [k, v] of Object.entries(parsed)) {
-                      fv[k] = v;
-                    }
-                    setFormValues(fv);
-                    persistInput(fv);
-                  }
-                } catch {
-                  void 0;
-                }
-              }}
-              spellCheck={false}
-              placeholder='{ "email": "ada@x.com", "amount": 2000 }'
-              className="min-h-[220px] w-full resize-none rounded-xl border border-border/50 bg-background p-3 font-mono text-xs outline-none transition-colors focus:border-foreground/20"
-            />
           )}
           </div>
         </div>

@@ -76,6 +76,7 @@ function buildNode(
   status: string | undefined,
   needsConnection: boolean,
   inputs: { name: string; bound: boolean; variable?: boolean }[],
+  needsValue: boolean,
 ): Node {
   return {
     id: f.id,
@@ -87,6 +88,7 @@ function buildNode(
       pure: f.pure,
       status,
       needsConnection,
+      needsValue,
       inputs,
       outputs: outputsOf(f),
     },
@@ -657,6 +659,14 @@ export function App({
         inputs.sort(
           (a, b) => Number(a.variable ?? false) - Number(b.variable ?? false),
         );
+        // a required config left empty blocks the run; flag it on the node so a
+        // collapsed node still shows it needs a value (filled in the input tab).
+        const needsValue = f.inputs.some(
+          (p) =>
+            p.role === "config" &&
+            p.required &&
+            (cfg[p.name] === undefined || cfg[p.name] === ""),
+        );
         return buildNode(
           f,
           prevPos.get(f.id) ??
@@ -664,6 +674,7 @@ export function App({
           runStatus[f.id],
           needsConnection,
           inputs,
+          needsValue,
         );
       });
       // The trigger node only exposes the actual event-data fields it carries —
@@ -1092,6 +1103,7 @@ export function App({
                   funcs={funcs}
                   wires={wires}
                   config={configValues}
+                  onConfigChange={onConfigChange}
                   nodeConnections={nodeConnections}
                   workflowId={workflowId}
                   workflowName={name}

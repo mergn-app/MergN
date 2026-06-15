@@ -192,6 +192,7 @@
     "outputLabel": "output",
     "errorLabel": "error",
     "settings": "Settings",
+    "needsValue": "Needs a value — fill it in the Input tab",
     "inputs": "Inputs",
     "output": "Output",
     "connections": "Connections",

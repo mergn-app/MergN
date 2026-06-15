@@ -192,6 +192,7 @@
     "outputLabel": "sortie",
     "errorLabel": "erreur",
     "settings": "Paramètres",
+    "needsValue": "Nécessite une valeur — à remplir dans l'onglet Entrée",
     "inputs": "Entrées",
     "output": "Sortie",
     "connections": "Connexions",
