@@ -62,6 +62,16 @@ export interface EffectfulFunc extends FuncBase {
 
 export type FuncDefinition = PureFunc | EffectfulFunc;
 
+// A gate makes a node CONDITIONAL: the engine runs the node only when the gate
+// passes, otherwise the node (and everything that depends on it) is skipped.
+// `ref` points at an upstream node's output field ("stepId.output.field");
+// the gate passes when that value equals `equals`, or matches `truthy`.
+export interface Gate {
+  ref: string;
+  equals?: unknown;
+  truthy?: boolean;
+}
+
 export interface FuncNode {
   nodeId: string;
   funcId: string;
@@ -70,4 +80,5 @@ export interface FuncNode {
   connections: Record<string, string>;
   connectionIds?: Record<string, string>;
   dependsOn: string[];
+  gate?: Gate;
 }

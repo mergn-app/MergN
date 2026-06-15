@@ -103,6 +103,27 @@ export const planZ = z.object({
         .describe(
           "inputs that come from an UPSTREAM STEP's output. Inputs NOT listed here are taken from the user's trigger input automatically by the field name the body uses.",
         ),
+      condition: z
+        .object({
+          onStep: z
+            .string()
+            .describe("an EARLIER step id whose output decides whether this step runs"),
+          output: z
+            .string()
+            .describe("that step's output field holding the decision flag"),
+          equals: z
+            .string()
+            .optional()
+            .describe("run this step ONLY when the flag equals this exact string (e.g. 'approved')"),
+          truthy: z
+            .boolean()
+            .optional()
+            .describe("run this step ONLY when the flag is truthy (true) or falsy (false); use INSTEAD of equals for boolean flags like is_duplicate"),
+        })
+        .optional()
+        .describe(
+          "Set ONLY for an action that must run conditionally. The engine SKIPS this step (and every step that depends on it) when the condition is false — no branch node needed. Use for irreversible/one-way actions: refund only when approval_status equals 'approved', create a record only when is_duplicate is falsy (truthy:false), alert only when is_high_risk is truthy. The deciding step must list the flag in its outputs. Omit for steps that always run.",
+        ),
     }),
   ),
 });
@@ -120,6 +141,7 @@ const PLAN_SYSTEM = [
   "For a 'webhook' trigger, the step gets the ENTIRE raw request body as `input.payload` (you don't know the exact shape at design time, and it differs per service — never assume one). For 'forward/format/store the webhook data' goals, the step should just process `input.payload` as-is — do NOT invent flat trigger field names. To pull a SPECIFIC value (e.g. the customer name/email/amount of a payment), extract it INSIDE the step code straight from input.payload using your own knowledge of that service's event shape — try the likely locations (e.g. input.payload.data.object.customer_name ?? input.payload.customer_name). NEVER create a user input that asks the end user for a PATH/field-location into the payload (e.g. a `*_path`, `*_field`, `*_key` input fed to lodash get) — the user must never type 'data.object.customer_name'. The user only provides DESTINATIONS/ACTIONS (a channel, a spreadsheet id, a column name), never a path into the event body. CRITICAL: the webhook body ALREADY contains the event's entity and its details — do NOT add a step that calls the provider's API to RE-FETCH data the webhook already delivered (e.g. for an 'invoice paid' / payment event, the customer name and amount are already inside input.payload; read them from there, do NOT add a 'retrieve customer' step). Default to a SINGLE step that reads what it needs from input.payload; only add an effectful step when the goal genuinely requires an external ACTION (send/write/create somewhere).",
   "For each step give: id (snake_case, e.g. create_customer), title, summary, effectful (true if it calls an external service), provider (for effectful steps, e.g. 'stripe','slack'), a DETAILED intent (say exactly what values the step needs and what it returns — e.g. a Slack message needs a channel and the text), outputs (ONLY the output field names a later step or the final action consumes, plus the step's primary result — do NOT list per-item fields for a step that processes a list, and never list an input name as an output), and deps (ONLY the inputs that come from an UPSTREAM step's output: input name, fromStep id, fromOutput field).",
   "Inputs NOT listed in deps are taken from the user's trigger input automatically by name. Use consistent field names across steps so they wire up.",
+  "CONDITIONAL ACTIONS: when an action must run ONLY in some cases (refund ONLY when approved, create a record ONLY when NOT a duplicate, alert ONLY when risk is high), add a deciding step that outputs the flag (e.g. approval_status, is_duplicate, is_high_risk) and set the action step's `condition` to that step's output (equals 'approved', or truthy:false for is_duplicate, or truthy:true for is_high_risk). The engine then SKIPS the action and everything downstream of it when the condition is false — there is no branch node, so do NOT rely on code guards for this. Use condition for irreversible/one-way actions especially (refunds, charges, creating records, sending messages).",
   "When the user provides a LIST/multiple values (e.g. several channel ids, multiple emails/recipients), do NOT add a separate step to split or parse a delimited string. Instead, let the consuming step read that input DIRECTLY as an array (iterate it with for...of / forEach) — the UI gives the user a proper list editor for array inputs.",
   "FILES: when the user wants to SEND/UPLOAD a picked file to a service (e.g. 'send my file to Discord', 'email this attachment'), use a SINGLE effectful step that takes the file directly as an input and sends it. Do NOT add a separate step to 'read', 'decode', 'parse' or 'process' the file first — the file's bytes are delivered to the step automatically. Only add a processing step when the goal genuinely transforms the file's CONTENT (e.g. 'count rows in the CSV', 'extract text'). A file passed between steps stays the whole file object — never decode it to a string in one step and feed it to a step that expects a file.",
 ].join("\n");
@@ -470,8 +492,40 @@ export async function designWorkflow(
       idempotency: step.effectful
         ? { key: "runId+funcId", mechanism: body.idempotencyMechanism ?? "none" }
         : null,
+      ...(step.condition
+        ? {
+            gate: {
+              ref: `${step.condition.onStep}.output.${step.condition.output}`,
+              ...(step.condition.equals !== undefined
+                ? { equals: step.condition.equals }
+                : {}),
+              ...(step.condition.truthy !== undefined
+                ? { truthy: step.condition.truthy }
+                : {}),
+            },
+          }
+        : {}),
     });
     onProgress?.({ kind: "step", id: step.id, label: stepLabel, status: "done" });
+  }
+
+  // Validate conditional gates against the real graph: the planner can name a
+  // wrong/absent decision flag. The gate's source step must exist, not be the
+  // step itself, expose that output, and actually express a condition. Drop an
+  // invalid gate so the step runs unconditionally instead of waiting forever on
+  // a phantom node (same philosophy as the wire fromOutput validation).
+  for (const f of funcs) {
+    if (!f.gate) continue;
+    const parts = String(f.gate.ref).split(".");
+    const srcId = parts[0];
+    const srcField = parts.slice(2).join(".");
+    const src = funcs.find((x) => x.id === srcId);
+    const srcOutputs = src ? Object.keys(src.outputSchema?.properties ?? {}) : [];
+    const noCondition = f.gate.equals === undefined && f.gate.truthy === undefined;
+    if (!src || srcId === f.id || !srcOutputs.includes(srcField) || noCondition) {
+      console.log(`[gate] dropped invalid gate on ${f.id} (ref ${f.gate.ref})`);
+      delete f.gate;
+    }
   }
 
   // Deterministically detect step inputs the planner left unconnected (and

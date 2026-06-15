@@ -74,6 +74,7 @@ interface RunFunc {
   requires: { name: string; provider: string; scopes: string[] }[];
   dangerClass: string | null;
   idempotency: { key: string; mechanism: string } | null;
+  gate?: { ref: string; equals?: unknown; truthy?: boolean };
 }
 
 interface RunWire {
@@ -199,6 +200,7 @@ function toNode(
     connections,
     connectionIds,
     dependsOn: [],
+    ...(f.gate ? { gate: f.gate } : {}),
   };
 }
 
