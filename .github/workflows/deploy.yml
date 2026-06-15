@@ -37,6 +37,10 @@ jobs:
           VITE_POSTHOG_KEY: ${{ secrets.VITE_POSTHOG_KEY }}
           VITE_POSTHOG_HOST: ${{ secrets.VITE_POSTHOG_HOST }}
         run: |
+          cat > web/.env <<EOF
+          VITE_POSTHOG_KEY=${VITE_POSTHOG_KEY}
+          VITE_POSTHOG_HOST=${VITE_POSTHOG_HOST:-https://us.i.posthog.com}
+          EOF
           cp /opt/workflow-builder/docker-compose.yml docker-compose.prod.yml
           docker compose -f docker-compose.prod.yml up -d --build
 
