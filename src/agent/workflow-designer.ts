@@ -118,7 +118,7 @@ const PLAN_SYSTEM = [
   "When triggerKind is 'schedule', ALSO fill `schedule`: for 'every N <unit>' use mode 'interval' with intervalValue=N AND ALWAYS intervalUnit — match the user's wording exactly: saniye/seconds=second, dakika/minutes=minute, saat/hours=hour, gün/days=day (e.g. '30 saniyede bir' => intervalValue=30, intervalUnit='second'). Never omit intervalUnit for interval mode. For specific clock times use mode 'cron' with a 5-field cron in the user's LOCAL wall-clock time and set `timezone` to the IANA zone when they name one — do NOT convert the time to UTC yourself. Examples: 'every day at 9am' => cron '0 9 * * *'; 'her cuma 19:21 Türkiye saati' => cron '21 19 * * 5', timezone 'Europe/Istanbul'.",
   "Use triggerKind 'poll' when the goal is to WATCH a service for NEW items and act on each ('when a new Discord message arrives', 'watch a channel for new messages', 'new emails'). Such services CANNOT webhook here. Fill `poll` (provider, a clear intent of what counts as new, intervalValue+intervalUnit). The steps then receive EACH new item as the trigger input — make the steps read that item's fields (e.g. input.content). Do NOT add a step that 'lists' or 'fetches' messages; the poll itself fetches new items.",
   "For a 'webhook' trigger, the step gets the ENTIRE raw request body as `input.payload` (you don't know the exact shape at design time, and it differs per service — never assume one). For 'forward/format/store the webhook data' goals, the step should just process `input.payload` as-is — do NOT invent flat trigger field names. To pull a SPECIFIC value (e.g. the customer name/email/amount of a payment), extract it INSIDE the step code straight from input.payload using your own knowledge of that service's event shape — try the likely locations (e.g. input.payload.data.object.customer_name ?? input.payload.customer_name). NEVER create a user input that asks the end user for a PATH/field-location into the payload (e.g. a `*_path`, `*_field`, `*_key` input fed to lodash get) — the user must never type 'data.object.customer_name'. The user only provides DESTINATIONS/ACTIONS (a channel, a spreadsheet id, a column name), never a path into the event body. CRITICAL: the webhook body ALREADY contains the event's entity and its details — do NOT add a step that calls the provider's API to RE-FETCH data the webhook already delivered (e.g. for an 'invoice paid' / payment event, the customer name and amount are already inside input.payload; read them from there, do NOT add a 'retrieve customer' step). Default to a SINGLE step that reads what it needs from input.payload; only add an effectful step when the goal genuinely requires an external ACTION (send/write/create somewhere).",
-  "For each step give: id (snake_case, e.g. create_customer), title, summary, effectful (true if it calls an external service), provider (for effectful steps, e.g. 'stripe','slack'), a DETAILED intent (say exactly what values the step needs and what it returns — e.g. a Slack message needs a channel and the text), outputs (its output field names), and deps (ONLY the inputs that come from an UPSTREAM step's output: input name, fromStep id, fromOutput field).",
+  "For each step give: id (snake_case, e.g. create_customer), title, summary, effectful (true if it calls an external service), provider (for effectful steps, e.g. 'stripe','slack'), a DETAILED intent (say exactly what values the step needs and what it returns — e.g. a Slack message needs a channel and the text), outputs (ONLY the output field names a later step or the final action consumes, plus the step's primary result — do NOT list per-item fields for a step that processes a list, and never list an input name as an output), and deps (ONLY the inputs that come from an UPSTREAM step's output: input name, fromStep id, fromOutput field).",
   "Inputs NOT listed in deps are taken from the user's trigger input automatically by name. Use consistent field names across steps so they wire up.",
   "When the user provides a LIST/multiple values (e.g. several channel ids, multiple emails/recipients), do NOT add a separate step to split or parse a delimited string. Instead, let the consuming step read that input DIRECTLY as an array (iterate it with for...of / forEach) — the UI gives the user a proper list editor for array inputs.",
   "FILES: when the user wants to SEND/UPLOAD a picked file to a service (e.g. 'send my file to Discord', 'email this attachment'), use a SINGLE effectful step that takes the file directly as an input and sends it. Do NOT add a separate step to 'read', 'decode', 'parse' or 'process' the file first — the file's bytes are delivered to the step automatically. Only add a processing step when the goal genuinely transforms the file's CONTENT (e.g. 'count rows in the CSV', 'extract text'). A file passed between steps stays the whole file object — never decode it to a string in one step and feed it to a step that expects a file.",
@@ -153,6 +153,12 @@ const stepBodyZ = z.object({
       "input field names you read as an ARRAY/list (i.e. input.x is iterated with map/forEach/for-of or indexed). Empty if none.",
     )
     .optional(),
+  configInputs: z
+    .array(z.string())
+    .describe(
+      "input field names that are a fixed per-step SETTING the user configures once (a destination or location, not flowing data): e.g. a spreadsheet id, sheet name, a column name, a Slack channel / Discord channel id, a Trello board/list id, an Asana project id, a Mailchimp audience id, an Airtable table name, an API/webhook URL, a numeric threshold. These are entered on the step, kept per-step (two steps can each have their OWN spreadsheet id), and never come from the trigger or an upstream step. Do NOT list here any value that is DATA flowing from input.payload or from an upstream step's output (an email, amount, name, score, the parsed item). Empty if none.",
+    )
+    .optional(),
   fileInputs: z
     .array(z.string())
     .describe(
@@ -171,7 +177,10 @@ const BODY_SYSTEM = [
   "Read EVERY value you need from input.<field>. For values that come from the user, use natural field names (amount, email, channel, text). For values that come from an upstream step, use the input names listed as upstream-provided.",
   "WEBHOOK triggers: the ENTIRE raw request body the external service POSTs is available as `input.payload` (already-parsed JSON). Do NOT invent flat trigger field names — they won't exist. To format/forward/store the webhook data, work with `input.payload` directly (e.g. `JSON.stringify(input.payload, null, 2)`, or iterate Object.entries(input.payload)). To pull a SPECIFIC value, extract it RIGHT HERE in code from input.payload — navigate its likely structure yourself (e.g. const name = input.payload?.data?.object?.customer_name ?? input.payload?.customer_name). NEVER add a config input that makes the user supply a PATH/field-location (no `*_path`/`*_field`/`*_key` input passed to lodash get) — the user must never type 'data.object.customer_name'. If unsure of the exact location, try a few sensible paths or fall back to processing the whole input.payload — but do the navigation in CODE, not via a user input.",
   "Include ALL values the step needs — especially every required parameter of the external call (e.g. a Slack message needs input.channel AND input.text).",
-  "Return an object containing EXACTLY the required output fields. You may use top-level `import` for npm packages; list each in `dependencies`.",
+  "SETTINGS vs DATA: a fixed per-step SETTING the user configures once — a destination or location, not flowing data (a spreadsheet id, sheet name, column name, a Slack/Discord channel id, a Trello board/list id, an Asana project id, a Mailchimp audience id, an Airtable table name, an API/webhook URL, a numeric threshold) — MUST be listed in `configInputs`. Do NOT list there anything that flows from input.payload or from an upstream step (an email, amount, name, score, the parsed item). When several steps each need their own location (e.g. two steps writing to different sheets), give each its OWN config input — they are kept per-step and will not collide.",
+  "Return an object with ONLY the outputs a later step or the final action actually consumes, plus the step's primary result. Do NOT echo an input straight back as an output (never return input.sheetName as an output). If the step processes a LIST/batch, return the list (or the enriched list) as ONE output — do NOT emit per-item scalar fields (category, sentiment, sla) as step outputs; those live inside the items.",
+  "When a step's job is to RECORD/LOG/store many values somewhere (append a row, create an Airtable/Notion record), prefer reading from the few upstream result OBJECTS it needs rather than declaring dozens of separate scalar inputs.",
+  "You may use top-level `import` for npm packages; list each in `dependencies`.",
   "If you read any input as a LIST (input.x.map/forEach/for-of or input.x[i]), list those field names in `arrayInputs` so the UI offers a list editor.",
   "A user-provided list ARRIVES AS A REAL ARRAY — iterate input.x directly with for...of/forEach. Do NOT String.split() it and do NOT expect a comma-separated string.",
   "If the step processes an UPLOADED FILE (a CSV/JSON/image/etc. the user picks), declare that input in `fileInputs`. It arrives as { name, mime, size, base64 }: for text use Buffer.from(input.x.base64,'base64').toString('utf8'), for bytes use Buffer.from(input.x.base64,'base64'). Do NOT expect a path or a URL.",
@@ -400,8 +409,15 @@ export async function designWorkflow(
       ...(body.fileInputs ?? []),
       ...extractFileInputs(body.bodySource),
     ]);
+    const declaredConfig = new Set(body.configInputs ?? []);
     const depByInput = new Map(step.deps.map((d) => [d.input, d]));
 
+    // per-step set of inputs that resolve to a fixed config setting (an unbound
+    // input the author flagged as configInputs). Config is per-step, so two
+    // steps can each have their own spreadsheet id without colliding — unlike a
+    // form field, which is global by name. Wired/event inputs are flowing data
+    // and can never be config.
+    const stepConfig = new Set<string>();
     for (const name of usedInputs) {
       const dep = depByInput.get(name);
       if (dep && stepIds.has(dep.fromStep)) {
@@ -413,6 +429,8 @@ export async function designWorkflow(
         });
       } else if (eventFields.includes(name)) {
         wires.push({ from: "trigger", fromOutput: name, to: step.id, toInput: name });
+      } else if (declaredConfig.has(name)) {
+        stepConfig.add(name); // per-step setting, not a global form field
       } else {
         variableFieldSet.add(name);
       }
@@ -427,7 +445,7 @@ export async function designWorkflow(
       pure: !step.effectful,
       inputs: usedInputs.map((name) => ({
         name,
-        role: "input",
+        role: stepConfig.has(name) ? "config" : "input",
         type: fileInputs.has(name)
           ? "file"
           : arrayInputs.has(name)
