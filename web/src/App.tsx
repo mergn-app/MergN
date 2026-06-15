@@ -13,7 +13,14 @@ import {
   type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Sun, Moon, Zap, Wand2, Loader2, Network } from "lucide-react";
+import {
+  Sun,
+  Moon,
+  Zap,
+  Wand2,
+  Loader2,
+  Network,
+} from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
 import { LogsPanel } from "./LogsPanel";
 import { FilesPanel } from "./FilesPanel";
@@ -26,13 +33,12 @@ import { layoutPositions } from "./layout";
 import { TriggerNode } from "./TriggerNode";
 import { NodePanel } from "./NodePanel";
 import { RightPanel, type RightTab } from "./RightPanel";
-import { WorkflowsPanel } from "./WorkflowsPanel";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { PlanChip } from "./PlanChip";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { LegalLinks } from "./LegalLinks";
 import { EnterpriseDialog } from "./EnterpriseDialog";
-import { ConnectionsPanel } from "./ConnectionsPanel";
+import { LeftSidebar } from "./LeftSidebar";
 import { triggerIntervalMs } from "./schedule-display";
 import { ChatPanel } from "./ChatPanel";
 import { RunPanel } from "./RunPanel";
@@ -204,6 +210,13 @@ export function App({
   const [inputForm, setInputForm] = useState<InputForm | null>(null);
   const [formSyncing, setFormSyncing] = useState(false);
   const [autoSave, setAutoSave] = useState(false);
+  const [leftPanelMinimized, setLeftPanelMinimized] = useState(() => {
+    try {
+      return localStorage.getItem("leftPanelMinimized") === "true";
+    } catch {
+      return false;
+    }
+  });
   const [theme, setTheme] = useState<"dark" | "light">(() =>
     typeof document !== "undefined" &&
     document.documentElement.classList.contains("dark")
@@ -219,6 +232,14 @@ export function App({
       void 0;
     }
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("leftPanelMinimized", String(leftPanelMinimized));
+    } catch {
+      void 0;
+    }
+  }, [leftPanelMinimized]);
   const [runStatus, setRunStatus] = useState<Record<string, string>>({});
   const [runData, setRunData] = useState<Record<string, RunStepData>>({});
   const [configValues, setConfigValues] = useState<
@@ -890,11 +911,6 @@ export function App({
     }
   };
 
-  const requestSave = () => {
-    if (!requireAuth(() => void save())) return;
-    void save();
-  };
-
   const applyVariables = useCallback((vars: Record<string, unknown>) => {
     setVariables(vars);
     setAutoSave(true);
@@ -1030,21 +1046,20 @@ export function App({
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         {user && (
-          <div className="flex w-60 shrink-0 flex-col gap-2">
-            <div className="min-h-0 flex-1">
-              <WorkflowsPanel
-                currentId={workflowId}
-                onLoad={openWorkflow}
-                name={name}
-                onName={setName}
-                onSave={requestSave}
-                saving={saveMutation.isPending}
-                canSave={funcs.length > 0}
-                onNew={newWorkflow}
-              />
-            </div>
-            <ConnectionsPanel missing={missingProviders} />
-          </div>
+          <LeftSidebar
+            minimized={leftPanelMinimized}
+            onMinimize={() => setLeftPanelMinimized(true)}
+            onExpand={() => setLeftPanelMinimized(false)}
+            currentId={workflowId}
+            onLoad={openWorkflow}
+            name={name}
+            onName={(value) => {
+              setName(value);
+              setAutoSave(true);
+            }}
+            onNew={newWorkflow}
+            missing={missingProviders}
+          />
         )}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/40 bg-card">
           <div className="absolute left-3 top-3 z-10 flex items-center gap-2">

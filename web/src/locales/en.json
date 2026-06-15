@@ -135,7 +135,9 @@
     "saved": "Saved",
     "newWorkflow": "New workflow",
     "empty": "No saved workflows yet.",
-    "meta": "{{n}} funcs · {{date}}"
+    "meta": "{{n}} funcs · {{date}}",
+    "minimizePanel": "Minimize panel",
+    "expandPanel": "Expand panel"
   },
   "spaces": {
     "title": "Spaces",
