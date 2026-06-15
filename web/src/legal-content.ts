@@ -124,6 +124,14 @@ export const LEGAL_CONTENT = {
         ],
       },
       {
+        heading: "Product analytics",
+        paragraphs: [
+          "We use PostHog to collect product analytics on our hosted service. This may include page views, page navigation, session duration, and basic device or browser information (such as user agent and screen size).",
+          "PostHog data helps us understand how the product is used and improve the service. Analytics are processed by PostHog (US cloud). See PostHog's privacy policy at https://posthog.com/privacy for how they handle data.",
+          "We do not use PostHog to sell your data or for third-party advertising. Identified user profiles in PostHog are created only when you are signed in and we associate analytics with your account.",
+        ],
+      },
+      {
         heading: "AI and third-party processing",
         paragraphs: [
           "Your chat messages, workflow definitions, file excerpts (when referenced), error details, and related context are sent to configured AI model providers (such as Google Gemini, OpenAI, or Anthropic) to power chat, workflow authoring, and repair features.",
