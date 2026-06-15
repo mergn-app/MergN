@@ -3,7 +3,7 @@ services:
     # Prebuilt image from the registry — `docker compose up -d` pulls the latest
     # version (download progress shown by Docker). Override the tag with
     # APP_IMAGE in .env, or run `docker compose up -d --build` to build locally.
-    image: ${APP_IMAGE:-ghcr.io/flowbaker/mergn:latest}
+    image: ${APP_IMAGE:-ghcr.io/mergn-app/mergn:latest}
     pull_policy: always
     build: .
     ports:
