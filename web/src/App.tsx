@@ -78,6 +78,7 @@ const normalizeFunc = (f: AuthoredFunc): AuthoredFunc => ({
 });
 
 const NO_CONNECTIONS: ConnectionMeta[] = [];
+const LEFT_PANEL_MINIMIZED_KEY = "leftPanelMinimized";
 
 const nodeTypes = { func: FuncNode, trigger: TriggerNode };
 const edgeTypes = { deletable: DeletableEdge };
@@ -239,7 +240,21 @@ export function App({
   const [chatPrompt, setChatPrompt] = useState<string | null>(null);
   const [loadedConvId, setLoadedConvId] = useState<string | null>(null);
   const [view, setView] = useState<"story" | "pipeline" | "graph">("story");
-  const [leftMinimized, setLeftMinimized] = useState(false);
+  const [leftMinimized, setLeftMinimized] = useState<boolean>(() => {
+    try {
+      if (typeof window === "undefined") return false;
+      return localStorage.getItem(LEFT_PANEL_MINIMIZED_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    try {
+      localStorage.setItem(LEFT_PANEL_MINIMIZED_KEY, String(leftMinimized));
+    } catch {
+      void 0;
+    }
+  }, [leftMinimized]);
   const [bottomHeight, setBottomHeight] = useState(256);
   const [building, setBuilding] = useState(false);
   const [repairing, setRepairing] = useState(false);
