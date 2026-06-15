@@ -666,7 +666,10 @@ export function App({
           inputs,
         );
       });
-      const triggerOut = [...new Set([...triggerFields, ...variableFields])];
+      // The trigger node only exposes the actual event-data fields it carries —
+      // NOT the user-provided form values (those are global state, entered by the
+      // user, never emitted by the trigger).
+      const triggerOut = [...new Set(triggerFields)];
       if (
         trigger.kind === "manual" ||
         (funcs.length === 0 && triggerOut.length === 0)
@@ -740,12 +743,17 @@ export function App({
         style: { stroke: "#6ea8ff" },
       }));
     // Trigger-fed inputs are implicit bindings (not wires) — draw them as edges
-    // from the trigger node so a webhook/schedule visibly connects to its steps.
+    // from the trigger node. ONLY the actual event-data fields (trigger.eventFields,
+    // e.g. `payload` for a webhook) come from the trigger. Every OTHER unwired
+    // input is a user-provided value (global state / input form) and must NOT be
+    // wired to the trigger.
+    const eventFields = trigger.eventFields ?? [];
     const triggerEdges: Edge[] = [];
     if (showTrigger) {
       for (const f of funcs) {
         for (const p of f.inputs) {
           if (p.role === "config") continue;
+          if (!eventFields.includes(p.name)) continue;
           if (wires.some((w) => w.to === f.id && w.toInput === p.name)) continue;
           triggerEdges.push({
             id: `trigger.${p.name}->${f.id}.${p.name}`,
@@ -760,7 +768,7 @@ export function App({
       }
     }
     return [...wireEdges, ...triggerEdges];
-  }, [wires, funcs, trigger.kind]);
+  }, [wires, funcs, trigger.kind, trigger.eventFields]);
 
   const reset = () => {
     setFuncs([]);
