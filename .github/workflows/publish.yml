@@ -33,7 +33,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/flowbaker/mergn
+          images: ghcr.io/mergn-app/mergn
           tags: |
             type=raw,value=latest
             type=sha,format=short
