@@ -23,7 +23,7 @@ export function layoutPositions(
   trigger: TriggerConfig,
 ): Record<string, { x: number; y: number }> {
   const g = new dagre.graphlib.Graph();
-  g.setGraph({ rankdir: "LR", nodesep: 36, ranksep: 96, marginx: 24, marginy: 24 });
+  g.setGraph({ rankdir: "LR", nodesep: 22, ranksep: 56, marginx: 16, marginy: 16 });
   g.setDefaultEdgeLabel(() => ({}));
 
   const ids = new Set(funcs.map((f) => f.id));
