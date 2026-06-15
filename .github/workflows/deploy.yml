@@ -35,6 +35,9 @@ jobs:
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
           LANGFUSE_BASE_URL: ${{ secrets.LANGFUSE_BASE_URL }}
         run: |
+          set -a
+          [ -f /opt/workflow-builder/.env ] && . /opt/workflow-builder/.env
+          set +a
           cp /opt/workflow-builder/docker-compose.yml docker-compose.prod.yml
           docker compose -f docker-compose.prod.yml up -d --build
 
