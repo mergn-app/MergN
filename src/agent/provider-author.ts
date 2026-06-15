@@ -97,8 +97,13 @@ export const providerDraftZ = z.object({
     ),
 });
 
+// Shared rule: how to pick a credential method (this system has NO OAuth flow).
+const CREDENTIAL_RULES =
+  "CREDENTIAL METHOD — this system does NOT support an OAuth authorization/redirect flow. Choose the SIMPLEST credential the service offers that works WITHOUT OAuth, preferring in this order: (1) a long-lived API key / token / bot token, (2) a service-account JSON key, (3) a client id + client secret used for a server-to-server (client-credentials) token exchange. Declare the matching credential.fields AND write clientSource that ACTUALLY implements that auth inside the factory — e.g. for a service-account JSON key, parse it and sign a JWT then exchange it for an access token before calling the API; for client id+secret, do the client-credentials token request. NEVER ask the user for an OAuth 'authorize'/redirect step or set copyRedirectUrl. Whatever method you choose, ALWAYS include a service-specific setupGuide telling the user exactly where to get that credential. Unless the user says otherwise, ask the user for the credential (do not assume an env var).";
+
 const SYSTEM = [
   "You author an external service 'provider' for a workflow automation system.",
+  CREDENTIAL_RULES,
   "A provider is a typed client over a real service. Funcs call it via ctx.connections.<name>.<method>(...).",
   "clientSource is an ES module that `export default`s a factory `(cred, fetch) => ({ ...asyncMethods })`. You MAY use top-level `import` for npm client libraries — list every imported package in `dependencies`. Prefer the injected `fetch` for simple HTTP; use a library when it is clearly the right tool.",
   "The factory receives the credential as `cred`, an object keyed by the field names you declare in `credential.fields`. You MUST co-author `credential.fields` and the clientSource that consumes them: declare one field per secret/config value the client needs. For an HTTP API that is usually a single `apiKey` (used in headers, e.g. Authorization: `Bearer ${cred.apiKey}`). For a database it is a single `connectionString`, or a set of `host`/`port`/`user`/`password`/`database`. Read each value as `cred.<fieldName>`.",
@@ -118,6 +123,19 @@ const REPAIR_SYSTEM = [
   "Common fixes: request body encoding (e.g. Stripe wants application/x-www-form-urlencoded, with arrays as key[]=value, or use automatic_payment_methods[enabled]=true), headers, field names, endpoints, response parsing.",
   "FILE UPLOADS: if the call site sends a file (an argument shaped { name, mime, base64 }), the method MUST upload via multipart/form-data, not JSON. Build it with the runtime globals: const fd = new FormData(); fd.append('file', new Blob([Buffer.from(file.base64,'base64')], { type: file.mime }), file.name); fetch(url, { method:'POST', headers:{ Authorization: ... }, body: fd }) — never set Content-Type for multipart. Discord: fd.append('payload_json', JSON.stringify({ content })); fd.append('files[0]', new Blob([Buffer.from(file.base64,'base64')], { type: file.mime }), file.name); POST https://discord.com/api/channels/{id}/messages with Authorization `Bot ${cred.apiKey}`.",
   "clientSource is an ES module that `export default`s a factory `(cred, fetch) => ({ ...asyncMethods })`, where `cred` is keyed by credential.fields names (e.g. cred.apiKey, cred.connectionString). Keep dependencies in sync with any top-level imports.",
+].join("\n");
+
+// Intentional edit of an existing provider per a user instruction (e.g. change
+// the credential method, add a setup guide, rename a field). Unlike repair (bug
+// fix), this MAY change credential.fields / setupGuide — keeping the three
+// (fields, guide, clientSource) consistent.
+const UPDATE_SYSTEM = [
+  "You edit an EXISTING external-service provider for a workflow system according to a user instruction.",
+  "You are given the current provider (id, name, credential.fields, setupGuide, apiDoc, sandbox, clientSource) and an instruction describing the change.",
+  "Apply the requested change and keep everything else intact. Keep the SAME id. When the instruction changes the CREDENTIAL METHOD (e.g. switch to a service-account JSON key, or to client id + secret), you MUST update credential.fields, setupGuide AND clientSource together so they stay consistent.",
+  CREDENTIAL_RULES,
+  "FILE UPLOADS: if the service handles file attachments, keep/author a multipart method (a file is { name, mime, base64 }; use Blob+FormData, never JSON, never set Content-Type for multipart).",
+  "clientSource is an ES module that `export default`s a factory `(cred, fetch) => ({ ...asyncMethods })`; `cred` is keyed by credential.fields names. Keep dependencies in sync with top-level imports. Keep sandbox egress consistent with the credential (egressFromField only for fully user-supplied hosts).",
 ].join("\n");
 
 const providerRepairZ = providerDraftZ.extend({
@@ -167,6 +185,36 @@ export async function repairProvider(
     },
     changeNote,
   };
+}
+
+// Edit an existing provider per a natural-language instruction. Returns the full
+// updated draft (same id) + a changeNote. May change credential.fields/setupGuide
+// (unlike repair, which only fixes the clientSource).
+export async function updateProvider(
+  draft: ProviderDraft,
+  instruction: string,
+  meta?: AgentMeta,
+): Promise<{ draft: ProviderDraft; changeNote: string }> {
+  const output = await genObject({
+    schema: providerRepairZ,
+    system: UPDATE_SYSTEM,
+    telemetry: trace("update-provider", { ...meta, provider: draft.id }),
+    spaceId: meta?.spaceId,
+    prompt: [
+      "CURRENT PROVIDER:",
+      `id: ${draft.id}`,
+      `name: ${draft.name}`,
+      `credential.fields: ${JSON.stringify(draft.credential?.fields ?? [])}`,
+      `setupGuide: ${JSON.stringify(draft.setupGuide ?? null)}`,
+      `apiDoc: ${draft.apiDoc}`,
+      `sandbox: ${JSON.stringify(draft.sandbox ?? {})}`,
+      `clientSource:\n${draft.clientSource}`,
+      `INSTRUCTION: ${instruction}`,
+      "Return the full updated provider (keep id, name unless asked) plus a changeNote.",
+    ].join("\n\n"),
+  });
+  const { changeNote, ...rest } = output;
+  return { draft: { ...rest, id: draft.id }, changeNote };
 }
 
 export async function authorProvider(

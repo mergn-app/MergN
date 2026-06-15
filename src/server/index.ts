@@ -45,7 +45,11 @@ import {
   recordTokens,
   usageCapExceeded,
 } from "../store/usage-cap";
-import { authorProvider, repairProvider } from "../agent/provider-author";
+import {
+  authorProvider,
+  repairProvider,
+  updateProvider,
+} from "../agent/provider-author";
 import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
 import { reconcileWiring } from "../agent/wiring-repair";
 import { probeModel } from "../agent/probe";
@@ -86,6 +90,7 @@ const SYSTEM = [
   "- Look at the step's resolved input. If it is empty ({}) or missing the field the error is about (e.g. the error says 'amount required' and the resolved input has no amount), then the step is NOT receiving its data. That is a FLOW problem — a missing input declaration on the func, or a missing wire / missing trigger value — NOT the provider. In that case do NOT call repair_provider. Tell the user clearly that the problem is in the flow, point at the missing input, and suggest the fix (declare the input on the step, or wire it / add it to the trigger input).",
   "- Only if the resolved input clearly contains the data but the provider still rejects it, call repair_provider (with provider id, error, call site, sample input) and say what you fixed.",
   "CONNECTIONS (credentials/secrets) are separate from providers: a provider is the code that calls a service, a connection is the user's stored credential for it. To answer whether the user has a credential for a service (e.g. 'do I have Slack connected?'), call list_connections — it returns metadata only, never the secret value. When the user wants to connect a service, or a workflow needs a provider that has no connection yet, call request_connection with the provider id to open the secure setup dialog where the user enters the secret themselves. NEVER ask the user to type or paste an API key, token, password, or any secret into the chat — you must not handle secret values; always route them through request_connection.",
+  "EDITING A CONNECTION — this product has NO OAuth flow; every provider uses a non-OAuth credential (an API key/token, a service-account JSON key, or a client id+secret for a server-to-server token exchange). If the user wants to CHANGE how a connection is set up — a different credential method (e.g. 'Google Sheets should ask for a Service Account JSON key, or client id+secret'), a missing/wrong setup guide, or a credential field with no explanation — call update_provider with the provider id and a one-line instruction. It re-authors the provider's credential fields + setup guide + client code together, and the updated dialog shows next time the connection is opened. Do NOT tell the user a connection can't be changed; fix it with update_provider.",
   "The user may have uploaded FILES to this space (CSV/JSON/text/etc.). Use list_files to see them and read_file to inspect content before building a workflow that processes a file. A workflow step can receive a file's content via a 'file' input the user picks.",
   "Keep replies short. After building, briefly summarize the steps and how they connect.",
 ].join("\n");
@@ -690,6 +695,34 @@ function makeTools(
       registry.registerProviderFromDraft(spaceId, repaired);
       await registry.persistProvider(spaceId, repaired);
       return { ok: true, providerId: repaired.id, changeNote };
+    },
+  }),
+  update_provider: tool({
+    description:
+      "Edit an existing AI-authored provider per a user request — e.g. switch its credential to a Service Account JSON key or client id+secret, add/fix the setup guide, add help text to a field, or rename a credential field. Use this (NOT repair_provider) when the user wants to CHANGE how a connection is set up or what credential it asks for. After it returns, the next time the user opens that provider's connection dialog they'll see the updated fields + guide.",
+    inputSchema: z.object({
+      providerId: z.string().describe("the provider id to edit, e.g. 'google_sheets'"),
+      instruction: z
+        .string()
+        .describe(
+          "what to change, in one sentence — e.g. 'use a Service Account JSON key instead', 'add a setup guide explaining where to get the Slack bot token', 'the token field needs help text'",
+        ),
+    }),
+    execute: async ({ providerId, instruction }) => {
+      const draft = await registry.getProviderDraft(spaceId, providerId);
+      if (!draft)
+        return {
+          ok: false,
+          message: `provider '${providerId}' not found (only AI-authored providers can be edited)`,
+        };
+      const { draft: updated, changeNote } = await updateProvider(
+        draft,
+        instruction,
+        meta,
+      );
+      registry.registerProviderFromDraft(spaceId, updated);
+      await registry.persistProvider(spaceId, updated);
+      return { ok: true, providerId: updated.id, changeNote };
     },
   }),
   wire: tool({
