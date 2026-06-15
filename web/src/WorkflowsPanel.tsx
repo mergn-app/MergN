@@ -28,12 +28,7 @@ export function WorkflowsPanel({
   const del = useDeleteWorkflow();
 
   return (
-    <div
-      className={cn(
-        "flex h-full shrink-0 flex-col overflow-hidden rounded-2xl border border-border/40 bg-muted/40",
-        minimized ? "w-16" : "w-60",
-      )}
-    >
+    <div className="flex h-full w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-border/40 bg-muted/40">
       <div
         className={cn(
           "flex items-center gap-1 border-b border-border/40 px-3 py-2.5",

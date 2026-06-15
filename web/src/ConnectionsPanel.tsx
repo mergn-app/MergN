@@ -26,32 +26,16 @@ export function ConnectionsPanel({
     ...missing.map((p) => ({ provider: p, connection: undefined })),
     ...items.map((c) => ({ provider: c.provider, connection: c })),
   ];
-  const detail = (hidden?: boolean) =>
-    cn(
-      "overflow-hidden transition-[opacity,max-width] duration-300 ease-in-out motion-reduce:transition-none",
-      hidden ? "max-w-0 opacity-0" : "max-w-full opacity-100",
-    );
 
   return (
     <div className="flex h-64 w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-border/40 bg-muted/40">
       <div className="px-2 pt-2">
-        <div className="relative flex min-h-9 items-center justify-center rounded-lg bg-background-subtle px-2.5 py-1.5">
-          <Link2
-            className={cn(
-              "size-3.5 shrink-0 text-foreground/80 transition-[opacity,transform] duration-300 ease-in-out motion-reduce:transition-none",
-              minimized
-                ? "scale-100 opacity-100"
-                : "pointer-events-none absolute scale-95 opacity-0",
-            )}
-          />
-          <div
-            className={cn(
-              "flex w-full items-center gap-2 transition-[opacity,transform] duration-300 ease-in-out motion-reduce:transition-none",
-              minimized
-                ? "pointer-events-none scale-95 opacity-0"
-                : "scale-100 opacity-100",
-            )}
-          >
+        {minimized ? (
+          <div className="flex items-center justify-center rounded-lg bg-background-subtle px-2.5 py-2.5">
+            <Link2 className="size-3.5 shrink-0 text-foreground/80" />
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-lg bg-background-subtle px-2.5 py-1.5">
             <span className="text-xs font-medium text-foreground/80">
               {t("connections.title")}
             </span>
@@ -59,7 +43,7 @@ export function ConnectionsPanel({
               {items.length}
             </span>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="min-h-0 flex-1 space-y-0.5 overflow-auto p-2">
@@ -72,9 +56,11 @@ export function ConnectionsPanel({
                 minimized && "justify-center",
               )}
             >
-              <Skeleton className="size-2 shrink-0 rounded-full" />
-              {!minimized && (
+              {minimized ? (
+                <Skeleton className="size-8 shrink-0 rounded-lg" />
+              ) : (
                 <>
+                  <Skeleton className="size-2 shrink-0 rounded-full" />
                   <Skeleton className="h-3 flex-1" />
                   <Skeleton className="h-2.5 w-12" />
                 </>
@@ -96,43 +82,56 @@ export function ConnectionsPanel({
               onClick={() => setOpen(r)}
               title={label}
               className={cn(
-                "flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-[colors,justify-content] duration-300 ease-in-out hover:bg-background-subtle",
-                minimized && "justify-center",
+                "flex w-full rounded-xl px-2 transition-colors hover:bg-background-subtle",
+                minimized
+                  ? "justify-center py-1"
+                  : "items-center gap-2.5 py-2 text-left",
               )}
             >
-              <span
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  connected ? "bg-emerald-500" : "bg-amber-500",
-                )}
-              />
-              <div className={cn(detail(minimized), "min-w-0 flex-1")}>
-                <span
-                  className={cn(
-                    "block truncate text-xs font-medium",
-                    !r.connection?.account && "font-mono",
-                  )}
-                >
-                  {label}
+              {minimized ? (
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-lg">
+                  <span
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      connected ? "bg-emerald-500" : "bg-amber-500",
+                    )}
+                  />
                 </span>
-                {r.connection?.account && (
-                  <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                    {r.provider}
+              ) : (
+                <>
+                  <span
+                    className={cn(
+                      "size-2 shrink-0 rounded-full",
+                      connected ? "bg-emerald-500" : "bg-amber-500",
+                    )}
+                  />
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span
+                      className={cn(
+                        "truncate text-xs font-medium",
+                        !r.connection?.account && "font-mono",
+                      )}
+                    >
+                      {label}
+                    </span>
+                    {r.connection?.account && (
+                      <span className="truncate font-mono text-[11px] text-muted-foreground">
+                        {r.provider}
+                      </span>
+                    )}
                   </span>
-                )}
-              </div>
-              <div className={detail(minimized)}>
-                <span
-                  className={cn(
-                    "whitespace-nowrap text-[11px]",
-                    connected ? "text-muted-foreground" : "text-amber-300/80",
-                  )}
-                >
-                  {connected
-                    ? t("connections.connected")
-                    : t("connections.connect")}
-                </span>
-              </div>
+                  <span
+                    className={cn(
+                      "text-[11px]",
+                      connected ? "text-muted-foreground" : "text-amber-300/80",
+                    )}
+                  >
+                    {connected
+                      ? t("connections.connected")
+                      : t("connections.connect")}
+                  </span>
+                </>
+              )}
             </button>
           );
         })}
