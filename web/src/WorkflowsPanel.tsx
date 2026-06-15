@@ -74,7 +74,7 @@ export function WorkflowsPanel({
           <button
             onClick={onNew}
             title={t("workflows.newWorkflow")}
-            className="mx-auto flex size-9 items-center justify-center rounded-lg bg-background-subtle text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="mx-auto flex size-10 items-center justify-center rounded-lg bg-background-subtle text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
             <Plus className="size-5" />
           </button>
