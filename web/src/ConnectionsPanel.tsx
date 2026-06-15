@@ -4,13 +4,20 @@ import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useConnections, type ConnectionMeta } from "./queries";
 import { ConnectionDialog } from "./ConnectionDialog";
+import { Plug } from "lucide-react";
 
 interface Row {
   provider: string;
   connection?: ConnectionMeta;
 }
 
-export function ConnectionsPanel({ missing }: { missing: string[] }) {
+export function ConnectionsPanel({
+  missing,
+  minimized,
+}: {
+  missing: string[];
+  minimized: boolean;
+}) {
   const { t } = useTranslation();
   const { data: items = [], isLoading } = useConnections();
   const [open, setOpen] = useState<Row | null>(null);
@@ -23,10 +30,12 @@ export function ConnectionsPanel({ missing }: { missing: string[] }) {
   return (
     <div className="flex h-64 shrink-0 flex-col overflow-hidden rounded-2xl border border-border/40 bg-muted/40">
       <div className="px-2 pt-2">
-        <div className="flex items-center gap-2 rounded-lg bg-background-subtle px-2.5 py-1.5">
-          <span className="text-xs font-medium text-foreground/80">
-            {t("connections.title")}
-          </span>
+        <div className={cn("flex items-center rounded-lg bg-background-subtle px-2.5 py-1.5", minimized ? "justify-center gap-1" : "gap-2")}>
+          {!minimized && (
+            <span className="text-xs font-medium text-foreground/80">
+              {t("connections.title")}
+            </span>
+          )}
           <span className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/70">
             {items.length}
           </span>
@@ -54,39 +63,51 @@ export function ConnectionsPanel({ missing }: { missing: string[] }) {
             <button
               key={`${r.provider}-${r.connection?.id ?? i}`}
               onClick={() => setOpen(r)}
-              className="flex w-full items-center gap-2.5 rounded-xl px-2 py-2 text-left transition-colors hover:bg-background-subtle"
+              title={r.connection?.account ?? r.provider}
+              className={cn(
+                "flex w-full items-center rounded-xl px-2 py-2 text-left transition-colors hover:bg-background-subtle",
+                minimized ? "justify-center gap-0" : "gap-2.5",
+              )}
             >
               <span
                 className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  connected ? "bg-emerald-500" : "bg-amber-500",
-                )}
-              />
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span
-                  className={cn(
-                    "truncate text-xs font-medium",
-                    !r.connection?.account && "font-mono",
-                  )}
-                >
-                  {r.connection?.account ?? r.provider}
-                </span>
-                {r.connection?.account && (
-                  <span className="truncate font-mono text-[11px] text-muted-foreground">
-                    {r.provider}
-                  </span>
-                )}
-              </span>
-              <span
-                className={cn(
-                  "text-[11px]",
-                  connected ? "text-muted-foreground" : "text-amber-300/80",
+                  "flex size-5 shrink-0 items-center justify-center rounded-md",
+                  connected
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : "bg-amber-500/15 text-amber-400",
                 )}
               >
-                {connected
-                  ? t("connections.connected")
-                  : t("connections.connect")}
+                <Plug className="size-3" />
               </span>
+              {!minimized && (
+                <>
+                  <span className="flex min-w-0 flex-1 flex-col">
+                    <span
+                      className={cn(
+                        "truncate text-xs font-medium",
+                        !r.connection?.account && "font-mono",
+                      )}
+                    >
+                      {r.connection?.account ?? r.provider}
+                    </span>
+                    {r.connection?.account && (
+                      <span className="truncate font-mono text-[11px] text-muted-foreground">
+                        {r.provider}
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={cn(
+                      "text-[11px]",
+                      connected ? "text-muted-foreground" : "text-amber-300/80",
+                    )}
+                  >
+                    {connected
+                      ? t("connections.connected")
+                      : t("connections.connect")}
+                  </span>
+                </>
+              )}
             </button>
           );
         })}

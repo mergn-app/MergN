@@ -13,7 +13,14 @@ import {
   type Connection,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
-import { Sun, Moon, Zap, Wand2, Loader2 } from "lucide-react";
+import {
+  Sun,
+  Moon,
+  Zap,
+  Wand2,
+  Loader2,
+  LogOut,
+} from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
 import { LogsPanel } from "./LogsPanel";
 import { FilesPanel } from "./FilesPanel";
@@ -64,7 +71,6 @@ import { summarizeWorkflow, outputsOf } from "./lineage";
 import { useAuth } from "./authContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { LogOut } from "lucide-react";
 
 const wireKey = (w: Wire) => `${w.from}.${w.fromOutput}->${w.to}.${w.toInput}`;
 const normalizeFunc = (f: AuthoredFunc): AuthoredFunc => ({
@@ -234,6 +240,7 @@ export function App({
   const [chatPrompt, setChatPrompt] = useState<string | null>(null);
   const [loadedConvId, setLoadedConvId] = useState<string | null>(null);
   const [view, setView] = useState<"story" | "pipeline" | "graph">("story");
+  const [leftMinimized, setLeftMinimized] = useState(false);
   const [bottomHeight, setBottomHeight] = useState(256);
   const [building, setBuilding] = useState(false);
   const [repairing, setRepairing] = useState(false);
@@ -1070,11 +1077,6 @@ export function App({
     }
   };
 
-  const requestSave = () => {
-    if (!requireAuth(() => void save())) return;
-    void save();
-  };
-
   const applyVariables = useCallback((vars: Record<string, unknown>) => {
     setVariables(vars);
     setAutoSave(true);
@@ -1210,20 +1212,24 @@ export function App({
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         {user && (
-          <div className="flex w-60 shrink-0 flex-col gap-2">
+          <div
+            className={
+              "flex shrink-0 flex-col gap-2 transition-[width] duration-200 " +
+              (leftMinimized ? "w-12" : "w-60")
+            }
+          >
             <div className="min-h-0 flex-1">
               <WorkflowsPanel
                 currentId={workflowId}
                 onLoad={openWorkflow}
                 name={name}
                 onName={setName}
-                onSave={requestSave}
-                saving={saveMutation.isPending}
-                canSave={funcs.length > 0}
                 onNew={newWorkflow}
+                minimized={leftMinimized}
+                onToggleMinimized={() => setLeftMinimized((prev) => !prev)}
               />
             </div>
-            <ConnectionsPanel missing={missingProviders} />
+            <ConnectionsPanel missing={missingProviders} minimized={leftMinimized} />
           </div>
         )}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/40 bg-card">
