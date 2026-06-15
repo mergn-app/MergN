@@ -94,4 +94,6 @@ export interface AuthoredFunc {
   requires: { name: string; provider: string; scopes: string[] }[];
   dangerClass: string | null;
   idempotency: { key: string; mechanism: string } | null;
+  // conditional gate: the step runs only when an upstream decision output matches
+  gate?: { ref: string; equals?: unknown; truthy?: boolean };
 }

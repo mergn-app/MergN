@@ -16,6 +16,7 @@ interface FuncNodeData {
   status?: string;
   needsConnection?: boolean;
   needsValue?: boolean;
+  gated?: boolean;
   inputs: Port[];
   outputs: string[];
 }
@@ -50,7 +51,9 @@ export function FuncNode({ data, selected }: NodeProps) {
         ? "ring-2 ring-rose-500/60"
         : d.status === "pending"
           ? "ring-2 ring-amber-500/70 animate-pulse"
-          : "";
+          : d.status === "skipped"
+            ? "opacity-50 ring-2 ring-muted-foreground/30"
+            : "";
 
   return (
     <div
@@ -79,9 +82,19 @@ export function FuncNode({ data, selected }: NodeProps) {
             )}
           </div>
           <div className="flex min-w-0 flex-1 flex-col items-start gap-1 px-1 py-0.5">
-            <h3 className="w-full truncate text-base font-medium leading-none">
-              {d.title}
-            </h3>
+            <div className="flex w-full items-center gap-1.5">
+              <h3 className="min-w-0 flex-1 truncate text-base font-medium leading-none">
+                {d.title}
+              </h3>
+              {d.gated && (
+                <span
+                  title={t("node.conditional")}
+                  className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wide text-amber-500 ring-1 ring-amber-500/30"
+                >
+                  if
+                </span>
+              )}
+            </div>
             <p className="w-full truncate text-xs leading-tight text-muted-foreground">
               {d.summary}
             </p>

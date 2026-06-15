@@ -38,6 +38,7 @@ const STATUS_DOT: Record<string, string> = {
   done: "bg-emerald-500",
   failed: "bg-rose-500",
   pending: "bg-amber-500 animate-pulse",
+  skipped: "bg-muted-foreground/40",
 };
 
 function pretty(v: unknown): string {

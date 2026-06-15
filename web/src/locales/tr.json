@@ -200,7 +200,8 @@
     "optional": "isteğe bağlı",
     "none": "yok",
     "danger": "tehlike",
-    "idempotency": "idempotency"
+    "idempotency": "idempotency",
+    "conditional": "Koşullu — yalnızca koşulu sağlanınca çalışır"
   },
   "connectionDialog": {
     "notConnected": "bağlı değil",

@@ -89,6 +89,7 @@ function buildNode(
       status,
       needsConnection,
       needsValue,
+      gated: !!f.gate,
       inputs,
       outputs: outputsOf(f),
     },
@@ -778,7 +779,33 @@ export function App({
         }
       }
     }
-    return [...wireEdges, ...triggerEdges];
+    // Conditional gate edges: a gated step runs only when an upstream decision
+    // output matches. Draw a dashed amber edge from the decision to the gated
+    // step, labelled with the condition, so the branch is visible.
+    const gateEdges: Edge[] = [];
+    for (const f of funcs) {
+      if (!f.gate?.ref) continue;
+      const [srcId, , field] = String(f.gate.ref).split(".");
+      if (!ids.has(srcId)) continue;
+      const label =
+        f.gate.equals !== undefined
+          ? `if ${field} = ${String(f.gate.equals)}`
+          : f.gate.truthy === false
+            ? `if not ${field}`
+            : `if ${field}`;
+      gateEdges.push({
+        id: `gate.${srcId}.${field}->${f.id}`,
+        source: srcId,
+        target: f.id,
+        sourceHandle: field || undefined,
+        animated: false,
+        label,
+        labelStyle: { fill: "#f59e0b", fontSize: 10, fontWeight: 600 },
+        labelBgStyle: { fill: "#1c1917", fillOpacity: 0.85 },
+        style: { stroke: "#f59e0b", strokeDasharray: "5 4" },
+      });
+    }
+    return [...wireEdges, ...triggerEdges, ...gateEdges];
   }, [wires, funcs, trigger.kind, trigger.eventFields]);
 
   const reset = () => {

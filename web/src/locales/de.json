@@ -200,7 +200,8 @@
     "optional": "optional",
     "none": "keine",
     "danger": "Gefahr",
-    "idempotency": "Idempotenz"
+    "idempotency": "Idempotenz",
+    "conditional": "Bedingt — läuft nur, wenn die Bedingung erfüllt ist"
   },
   "connectionDialog": {
     "notConnected": "nicht verbunden",
