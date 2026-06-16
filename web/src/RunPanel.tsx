@@ -596,7 +596,7 @@ export function RunPanel({
           {activeNode === "__trigger" ? (
             <div className="space-y-2 rounded-xl border border-border/50 bg-background p-3">
               <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                Trigger settings
+                {t("trigger.title")}
               </div>
               {(trigger.poll?.paramNames ?? []).map((name) => {
                 const cur = String(trigger.poll?.params?.[name] ?? "");
@@ -609,7 +609,7 @@ export function RunPanel({
                         {name}
                       </span>
                       <span className="text-[10px] uppercase tracking-wide text-rose-400/80">
-                        required
+                        {t("run.required")}
                       </span>
                     </label>
                     <div className="relative">

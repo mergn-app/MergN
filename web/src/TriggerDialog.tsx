@@ -371,8 +371,8 @@ export function TriggerDialog({
         {(trigger.kind === "schedule" || trigger.kind === "poll") && (
           <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
             <div className="flex items-center justify-between">
-              <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-                {trigger.kind === "schedule" ? "Schedule" : "Polling"}
+              <div className="text-[10px] font-semibold tracking-widest text-muted-foreground/70">
+                {trigger.kind === "schedule" ? "SCHEDULE" : "POLLING"}
               </div>
               {activation === "loading" ? (
                 <span className="text-[11px] text-muted-foreground">…</span>

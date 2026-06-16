@@ -84,8 +84,8 @@ export function WebhookSecurity({ workflowId }: { workflowId: string }) {
   return (
     <div className="mt-4 space-y-2 border-t border-border/50 pt-4">
       <div className="flex items-center gap-2">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-          Security
+        <span className="text-[10px] font-semibold tracking-widest text-muted-foreground/70">
+          SECURITY
         </span>
         {secured && (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-500">

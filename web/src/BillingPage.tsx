@@ -52,8 +52,8 @@ function InvoicesSection({ spaceId }: { spaceId: string }) {
 
   return (
     <div className="mt-6">
-      <h2 className="mb-2 px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Invoices
+      <h2 className="mb-2 px-1 text-xs font-medium tracking-wide text-muted-foreground">
+        INVOICES
       </h2>
       <div className="divide-y divide-border/40 overflow-hidden rounded-2xl border border-border/50 bg-card">
         {invoices.map((inv: Invoice) => {

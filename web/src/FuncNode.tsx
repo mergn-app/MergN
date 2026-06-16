@@ -89,9 +89,9 @@ export function FuncNode({ data, selected }: NodeProps) {
               {d.gated && (
                 <span
                   title={t("node.conditional")}
-                  className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold uppercase tracking-wide text-amber-500 ring-1 ring-amber-500/30"
+                  className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold tracking-wide text-amber-500 ring-1 ring-amber-500/30"
                 >
-                  if
+                  IF
                 </span>
               )}
             </div>

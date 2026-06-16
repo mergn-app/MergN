@@ -43,7 +43,7 @@ function Row({ e }: { e: LogEntry }) {
             <span className="font-mono text-[10px] text-muted-foreground">
               {fmtTime(e.ts)}
             </span>
-            <span className="rounded bg-muted px-1.5 py-px text-[10px] uppercase tracking-wide text-muted-foreground">
+            <span className="rounded bg-muted px-1.5 py-px text-[10px] tracking-wide text-muted-foreground">
               {e.source}
             </span>
           </div>
