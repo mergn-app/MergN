@@ -1224,7 +1224,10 @@ app.post("/api/chat", async (c) => {
       402,
     );
   }
-  if (isNewChat) void usage.recordChat(spaceId);
+  // NOTE: the chat is counted in onFinish (below), NOT here — so a chat is only
+  // billed once it actually completes and is saved. Counting up-front would burn
+  // a chat on a failed/empty response, and double-count a retry of a first
+  // message that errored before it was ever persisted (previous stays []).
 
   const messages = [...(previous as UIMessage[]), message];
   const modelMessages = await convertToModelMessages(messages);
@@ -1295,6 +1298,11 @@ app.post("/api/chat", async (c) => {
     },
     onFinish: async ({ messages }) => {
       await chats.saveConversation(spaceId, userId, conversationId, messages);
+      // Count the chat only now that it completed and was persisted. Fires once
+      // per new conversation; consumeStream() guarantees this runs even if the
+      // client disconnected mid-stream, so a completed-but-disconnected chat is
+      // still counted, while a failed one (onError, no onFinish) is not.
+      if (isNewChat) await usage.recordChat(spaceId);
     },
     onError: (error) => {
       console.error("STREAM ERROR:", error);
