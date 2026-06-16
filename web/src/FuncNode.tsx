@@ -86,14 +86,6 @@ export function FuncNode({ data, selected }: NodeProps) {
               <h3 className="min-w-0 flex-1 truncate text-base font-medium leading-none">
                 {d.title}
               </h3>
-              {d.gated && (
-                <span
-                  title={t("node.conditional")}
-                  className="shrink-0 rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[9px] font-semibold tracking-wide text-amber-500 ring-1 ring-amber-500/30"
-                >
-                  IF
-                </span>
-              )}
             </div>
             <p className="w-full truncate text-xs leading-tight text-muted-foreground">
               {d.summary}

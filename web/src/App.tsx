@@ -30,6 +30,7 @@ import { TriggerDialog } from "./TriggerDialog";
 import { Pipeline } from "./Pipeline";
 import { Story } from "./Story";
 import { FuncNode } from "./FuncNode";
+import { GateEdge } from "./GateEdge";
 import { layoutPositions } from "./layout";
 import { TriggerNode } from "./TriggerNode";
 import { NodePanel } from "./NodePanel";
@@ -79,6 +80,7 @@ const wireKey = (w: Wire) => `${w.from}.${w.fromOutput}->${w.to}.${w.toInput}`;
 const NO_CONNECTIONS: ConnectionMeta[] = [];
 
 const nodeTypes = { func: FuncNode, trigger: TriggerNode };
+const edgeTypes = { gate: GateEdge };
 
 function buildNode(
   f: AuthoredFunc,
@@ -132,6 +134,7 @@ function Canvas({
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
       fitView
       fitViewOptions={{ padding: 0.28 }}
@@ -866,22 +869,21 @@ export function App({
       if (!f.gate?.ref) continue;
       const [srcId, , field] = String(f.gate.ref).split(".");
       if (!ids.has(srcId)) continue;
+      // The "if" prefix is rendered by the GateEdge chip itself.
       const label =
         f.gate.equals !== undefined
-          ? `if ${field} = ${String(f.gate.equals)}`
+          ? `${field} = ${String(f.gate.equals)}`
           : f.gate.truthy === false
-            ? `if not ${field}`
-            : `if ${field}`;
+            ? `not ${field}`
+            : field;
       gateEdges.push({
         id: `gate.${srcId}.${field}->${f.id}`,
         source: srcId,
         target: f.id,
         sourceHandle: field || undefined,
+        type: "gate",
         animated: false,
-        label,
-        labelStyle: { fill: "#f59e0b", fontSize: 10, fontWeight: 600 },
-        labelBgStyle: { fill: "#1c1917", fillOpacity: 0.85 },
-        style: { stroke: "#f59e0b", strokeDasharray: "5 4" },
+        data: { label },
       });
     }
     return [...wireEdges, ...triggerEdges, ...gateEdges];
