@@ -2037,6 +2037,20 @@ app.all("/mcp", async (c) => {
 
   const sid = c.req.header("mcp-session-id") ?? undefined;
   let entry = sid ? mcpSessions.get(sid) : undefined;
+  // A session id we don't recognise — almost always because the app restarted
+  // (deploy / --force-recreate) and wiped the in-memory session map while the
+  // client still holds the old id. Per the MCP spec, replying 404 to a request
+  // carrying Mcp-Session-Id makes the client re-initialise (a new request with
+  // NO session id), which falls into the create branch below. Without this we'd
+  // build a fresh transport that rejects the stale id, surfacing to the client
+  // as a generic "tool execution" error before any tool handler runs.
+  if (sid && !entry) {
+    console.error(`[mcp] unknown session ${sid} — asking client to re-initialize`);
+    return c.json(
+      { jsonrpc: "2.0", error: { code: -32001, message: "Session not found" }, id: null },
+      404,
+    );
+  }
   if (!entry) {
     const server = createRemoteMcpServer(t.spaceId, remoteMcpDeps);
     const transport: WebStandardStreamableHTTPServerTransport =
