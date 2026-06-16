@@ -24,6 +24,38 @@ const WORK_DIR = process.env.DOCKER_WORK_DIR ?? join(tmpdir(), "fb-docker");
 const VOLUME = process.env.DOCKER_VOLUME;
 const MARKER = "__FB_RESULT__";
 
+// Run step containers on an ISOLATED docker network with PUBLIC DNS. Combined
+// with the host egress firewall (scripts/egress-firewall.sh, which DROPs traffic
+// from RUN_SUBNET to internal/metadata ranges), this is the REAL SSRF boundary —
+// the sandboxed code cannot route packets to internal services or 169.254.169.254
+// regardless of what it does in JS. Public DNS so resolution still works once the
+// container is cut off from docker's internal resolver.
+const RUN_NETWORK = process.env.RUN_NETWORK ?? "fb-runs";
+const RUN_SUBNET = process.env.RUN_SUBNET ?? "10.88.0.0/24";
+const RUN_DNS = (process.env.RUN_DNS ?? "1.1.1.1,8.8.8.8")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+let networkReady: Promise<void> | null = null;
+function ensureRunNetwork(): Promise<void> {
+  // create the isolated run network once (idempotent — ignore "already exists")
+  if (!networkReady) {
+    networkReady = new Promise<void>((resolve) => {
+      const p = spawn("docker", [
+        "network",
+        "create",
+        "--subnet",
+        RUN_SUBNET,
+        RUN_NETWORK,
+      ]);
+      p.on("error", () => resolve());
+      p.on("close", () => resolve()); // already-exists is fine
+    });
+  }
+  return networkReady;
+}
+
 function mountFor(cacheDir: string): string {
   return VOLUME ? `${VOLUME}:${WORK_DIR}` : `${cacheDir}:${cacheDir}`;
 }
@@ -31,17 +63,60 @@ function mountFor(cacheDir: string): string {
 const ENTRY = `import { pathToFileURL } from "node:url";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
+import dns from "node:dns/promises";
+import net from "node:net";
 const here = dirname(fileURLToPath(import.meta.url));
 let raw = "";
 for await (const chunk of process.stdin) raw += chunk;
 const payload = JSON.parse(raw);
+// --- egress firewall (SSRF guard): block requests that resolve to internal,
+// loopback, link-local (incl. cloud metadata 169.254.169.254) or private ranges.
+function ipBlocked(ip) {
+  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
+  const v = net.isIP(ip);
+  if (v === 4) {
+    const o = ip.split(".").map(Number);
+    if (o[0] === 0 || o[0] === 127 || o[0] === 10) return true;
+    if (o[0] === 169 && o[1] === 254) return true;
+    if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+    if (o[0] === 192 && o[1] === 168) return true;
+    if (o[0] === 100 && o[1] >= 64 && o[1] <= 127) return true;
+    return false;
+  }
+  if (v === 6) {
+    const lo = ip.toLowerCase();
+    if (lo === "::1" || lo === "::") return true;
+    if (lo.startsWith("fc") || lo.startsWith("fd")) return true;
+    if (lo.startsWith("fe8") || lo.startsWith("fe9") || lo.startsWith("fea") || lo.startsWith("feb")) return true;
+    return false;
+  }
+  return true;
+}
+async function assertPublicHost(host) {
+  const h = host.replace(/:[0-9]+$/, "").replace(/^\\[|\\]$/g, "");
+  if (net.isIP(h)) { if (ipBlocked(h)) throw new Error("egress blocked: internal address " + h); return; }
+  let addrs;
+  try { addrs = await dns.lookup(h, { all: true }); } catch { throw new Error("egress blocked: cannot resolve " + h); }
+  for (const a of addrs) if (ipBlocked(a.address)) throw new Error("egress blocked: " + h + " resolves to internal " + a.address);
+}
+const _rawFetch = globalThis.fetch;
+async function safeFetch(i, init) {
+  const url = typeof i === "string" ? i : i instanceof URL ? i.href : i instanceof Request ? i.url : String(i);
+  let u; try { u = new URL(url); } catch { throw new Error("egress blocked: invalid url"); }
+  if (u.protocol !== "http:" && u.protocol !== "https:") throw new Error("egress blocked: protocol " + u.protocol);
+  await assertPublicHost(u.host);
+  return _rawFetch(i, init);
+}
+// step code that calls fetch() directly is guarded too (still allows public APIs)
+globalThis.fetch = safeFetch;
 function guardedFetch(domain) {
   return async (i, init) => {
     const url = typeof i === "string" ? i : i instanceof URL ? i.href : i instanceof Request ? i.url : String(i);
     let host;
     try { host = new URL(url).host; } catch { throw new Error("egress blocked: invalid url"); }
-    if (domain && host !== domain && !host.endsWith("." + domain)) throw new Error("egress blocked: " + host);
-    return fetch(url, init);
+    const bare = host.replace(/:[0-9]+$/, "");
+    if (domain && bare !== domain && !host.endsWith("." + domain)) throw new Error("egress blocked: " + host);
+    return safeFetch(url, init);
   };
 }
 const connections = {};
@@ -232,6 +307,7 @@ export class DockerRuntime implements Runtime {
       });
 
       const containerName = `fb-${runId}`;
+      await ensureRunNetwork();
       const r = await docker(
         [
           "run",
@@ -239,6 +315,11 @@ export class DockerRuntime implements Runtime {
           "-i",
           "--name",
           containerName,
+          // isolated network + public DNS; the host firewall blocks this subnet
+          // from reaching internal/metadata ranges (real SSRF boundary).
+          "--network",
+          RUN_NETWORK,
+          ...RUN_DNS.flatMap((d) => ["--dns", d]),
           "--memory",
           "512m",
           "--cpus",

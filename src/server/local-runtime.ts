@@ -4,8 +4,50 @@ import { join } from "node:path";
 import { randomUUID, createHash } from "node:crypto";
 import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
+import dns from "node:dns/promises";
+import net from "node:net";
 import type { FuncDefinition, FuncContext } from "../atoms/index";
 import type { Runtime } from "../engine/index";
+
+// Block requests that resolve to internal/loopback/link-local/private ranges
+// (SSRF guard — e.g. cloud metadata 169.254.169.254 or an internal service).
+function ipBlocked(ip: string): boolean {
+  if (ip.startsWith("::ffff:")) ip = ip.slice(7);
+  const v = net.isIP(ip);
+  if (v === 4) {
+    const o = ip.split(".").map(Number);
+    if (o[0] === 0 || o[0] === 127 || o[0] === 10) return true;
+    if (o[0] === 169 && o[1] === 254) return true;
+    if (o[0] === 172 && o[1] >= 16 && o[1] <= 31) return true;
+    if (o[0] === 192 && o[1] === 168) return true;
+    if (o[0] === 100 && o[1] >= 64 && o[1] <= 127) return true;
+    return false;
+  }
+  if (v === 6) {
+    const lo = ip.toLowerCase();
+    if (lo === "::1" || lo === "::") return true;
+    if (lo.startsWith("fc") || lo.startsWith("fd")) return true;
+    if (/^fe[89ab]/.test(lo)) return true;
+    return false;
+  }
+  return true;
+}
+async function assertPublicHost(host: string): Promise<void> {
+  const h = host.replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+  if (net.isIP(h)) {
+    if (ipBlocked(h)) throw new Error(`egress blocked: internal address ${h}`);
+    return;
+  }
+  let addrs;
+  try {
+    addrs = await dns.lookup(h, { all: true });
+  } catch {
+    throw new Error(`egress blocked: cannot resolve ${h}`);
+  }
+  for (const a of addrs)
+    if (ipBlocked(a.address))
+      throw new Error(`egress blocked: ${h} resolves to internal ${a.address}`);
+}
 
 interface Carrier {
   __remoteProvider?: boolean;
@@ -38,9 +80,11 @@ function guardedFetch(domain?: string) {
     } catch {
       throw new Error("egress blocked: invalid url");
     }
-    if (domain && host !== domain && !host.endsWith(`.${domain}`)) {
+    const bare = host.replace(/:\d+$/, "");
+    if (domain && bare !== domain && !host.endsWith(`.${domain}`)) {
       throw new Error(`egress blocked: ${host} (allowed: ${domain})`);
     }
+    await assertPublicHost(host);
     return fetch(url, init as RequestInit | undefined);
   };
 }
