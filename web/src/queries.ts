@@ -596,3 +596,45 @@ export function useRepairProvider() {
       ),
   });
 }
+
+// --- Remote MCP tokens (CLI / Claude Code) --------------------------------
+export interface McpTokenMeta {
+  id: string;
+  name: string;
+  createdAt: string;
+  lastUsedAt?: string;
+}
+
+export function useMcpTokens(enabled: boolean) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["mcp-tokens", getSpace()],
+    queryFn: () => json<McpTokenMeta[]>("/api/mcp/tokens"),
+    enabled: !!user && enabled,
+  });
+}
+
+export function useCreateMcpToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    // 403 (plan gate) surfaces as a thrown error the dialog can show.
+    mutationFn: (name: string) =>
+      json<McpTokenMeta & { token: string }>("/api/mcp/tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["mcp-tokens", getSpace()] }),
+  });
+}
+
+export function useRevokeMcpToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      json<{ ok: boolean }>(`/api/mcp/tokens/${id}`, { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["mcp-tokens", getSpace()] }),
+  });
+}

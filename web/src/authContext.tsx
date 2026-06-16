@@ -30,6 +30,7 @@ interface AuthContextValue {
   authDisabled: boolean | null;
   managed: boolean | null;
   maxSpaces: number | null; // workspaces allowed per account (server-configured)
+  remoteMcp: boolean; // remote MCP endpoint enabled (ENABLE_REMOTE_MCP)
   requireAuth: (action?: () => void) => boolean;
   withAuth: <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => void;
   signOut: () => void;
@@ -41,6 +42,7 @@ const Ctx = createContext<AuthContextValue>({
   authDisabled: null,
   managed: null,
   maxSpaces: null,
+  remoteMcp: false,
   requireAuth: () => false,
   withAuth: (fn) => fn,
   signOut: () => {},
@@ -99,6 +101,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [authDisabled, setAuthDisabled] = useState<boolean | null>(null);
   const [managed, setManaged] = useState<boolean | null>(null);
   const [maxSpaces, setMaxSpaces] = useState<number | null>(null);
+  const [remoteMcp, setRemoteMcp] = useState(false);
   const [requireVerify, setRequireVerify] = useState(false);
   const [apiUnreachable, setApiUnreachable] = useState(false);
   const [configAttempt, setConfigAttempt] = useState(0);
@@ -113,6 +116,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           authDisabled?: boolean;
           managed?: boolean;
           maxSpaces?: number;
+          remoteMcp?: boolean;
           requireEmailVerification?: boolean;
         }>;
       })
@@ -121,6 +125,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAuthDisabled(!!c.authDisabled);
         setManaged(!!c.managed);
         setMaxSpaces(typeof c.maxSpaces === "number" ? c.maxSpaces : null);
+        setRemoteMcp(!!c.remoteMcp);
         setRequireVerify(!!c.requireEmailVerification);
       })
       .catch(() => {
@@ -258,6 +263,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         authDisabled,
         managed,
         maxSpaces,
+        remoteMcp,
         requireAuth,
         withAuth,
         signOut: doSignOut,

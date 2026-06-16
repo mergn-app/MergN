@@ -224,11 +224,15 @@ const MCP_ENABLED = !MANAGED && /^(1|true)$/i.test(process.env.ENABLE_MCP ?? "")
 const LLM_SETTINGS_DISABLED = /^(1|true|yes)$/i.test(
   process.env.DISABLE_LLM_SETTINGS ?? "",
 );
-// Remote MCP endpoint (/mcp) for Pro+ users to drive workflows from Claude /
-// ChatGPT / Gemini. Opt-in; in managed/prod also plan-gated (Pro/Test/Ent).
-const REMOTE_MCP_ENABLED = /^(1|true|yes)$/i.test(
-  process.env.ENABLE_REMOTE_MCP ?? "",
-);
+// Remote MCP endpoint (/mcp) to drive workflows from Claude / ChatGPT / Gemini.
+// Self-host: ON by default (zero-config — no .env needed). Managed/prod: OFF by
+// default and plan-gated (Pro/Test/Ent). Either way an explicit ENABLE_REMOTE_MCP
+// env value wins, so self-host can turn it OFF with ENABLE_REMOTE_MCP=0.
+const REMOTE_MCP_ENABLED = (() => {
+  const env = process.env.ENABLE_REMOTE_MCP;
+  if (env != null && env.trim() !== "") return /^(1|true|yes)$/i.test(env);
+  return !MANAGED;
+})();
 // OAuth issuer (= this server's public origin). Prefer APP_URL; else derive from
 // the request so self-host behind any host still serves correct metadata.
 const issuerFrom = (reqUrl: string): string =>

@@ -20,6 +20,7 @@ import {
   Wand2,
   Loader2,
   Network,
+  Plug,
 } from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
 import { LogsPanel } from "./LogsPanel";
@@ -38,6 +39,7 @@ import { PlanChip } from "./PlanChip";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { LegalLinks } from "./LegalLinks";
 import { EnterpriseDialog } from "./EnterpriseDialog";
+import { McpConnectDialog } from "./McpConnectDialog";
 import { LeftSidebar } from "./LeftSidebar";
 import { triggerIntervalMs } from "./schedule-display";
 import { ChatPanel } from "./ChatPanel";
@@ -287,7 +289,8 @@ export function App({
 
   const { t } = useTranslation();
   const saveMutation = useSaveWorkflow();
-  const { user, requireAuth, signOut, managed } = useAuth();
+  const { user, requireAuth, signOut, managed, remoteMcp } = useAuth();
+  const [mcpOpen, setMcpOpen] = useState(false);
   const { data: connections = NO_CONNECTIONS } = useConnections();
   const conversationsQuery = useConversations();
   const deleteConversation = useDeleteConversation();
@@ -1027,6 +1030,18 @@ export function App({
             <Badge variant="secondary" className="font-normal">
               {t("header.funcCount", { n: funcs.length })}
             </Badge>
+            {user && remoteMcp && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-8 gap-1.5 px-2"
+                title={t("mcp.title")}
+                onClick={() => setMcpOpen(true)}
+              >
+                <Plug className="h-4 w-4" />
+                <span className="hidden text-xs sm:inline">{t("mcp.title")}</span>
+              </Button>
+            )}
             <LanguageSwitcher />
             <Button
               size="icon"
@@ -1073,6 +1088,8 @@ export function App({
           </div>
         </header>
       </div>
+
+      {mcpOpen && <McpConnectDialog onClose={() => setMcpOpen(false)} />}
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         {user && (

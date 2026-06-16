@@ -142,6 +142,46 @@ To disable update checks on startup, **set this on .env**:
 UPDATE_CHECK=0
 ```
 
+## Connect an AI chat app (MCP)
+
+Drive your workflows from **Claude Code, Claude.ai, ChatGPT or Gemini** — the
+chat app becomes the brain: you describe what you want and it builds and runs
+the workflow for you, using MergN's tools (no extra LLM key on MergN's side).
+
+MergN exposes a [Model Context Protocol](https://modelcontextprotocol.io)
+endpoint at `/mcp`. On self-host it's **on by default — no `.env`, no config.**
+Just connect:
+
+> To turn it **off**, set `ENABLE_REMOTE_MCP=0`. (On a managed/multi-tenant
+> deployment with `MANAGED=1` it's the reverse: off until you set
+> `ENABLE_REMOTE_MCP=1`, and then restricted to paid plans.)
+
+**Claude Code (CLI)** — easiest, works on localhost:
+
+```bash
+claude mcp add --transport http mergn http://localhost:8787/mcp
+```
+The first time, your browser opens a one-click approval page; allow it and
+you're connected. Then just ask Claude Code in plain language:
+
+```
+> list my workflows
+> create a workflow that posts a Slack message when a webhook arrives
+```
+
+**Claude.ai / ChatGPT (web connectors)** — need a **public HTTPS URL**
+(localhost won't work for a cloud app; put MergN behind a domain + TLS). In the
+chat app: **Settings → Connectors → Add custom connector**, paste
+`https://your-domain/mcp`, click **Connect**, and approve.
+
+**Find the URL & manage tokens in the app:** click the **Connect Claude / ChatGPT**
+button (plug icon, top-right) — it shows your `/mcp` URL, the ready-to-paste CLI
+command, and lets you generate/revoke tokens for CLI clients that take a bearer
+header instead of the sign-in flow.
+
+> On self-host every signed-in user can connect. On a managed/multi-tenant
+> deployment (`MANAGED=1`) it's restricted to paid plans.
+
 ## Troubleshooting & Advanced Setup
 
 Workflow steps run in throwaway Docker containers on your host — no extra setup.

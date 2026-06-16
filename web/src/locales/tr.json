@@ -277,5 +277,26 @@
   },
   "canvas": {
     "autoArrange": "Otomatik diz"
+  },
+  "mcp": {
+    "title": "Claude / ChatGPT Bağla",
+    "subtitle": "Workflow'larını bir yapay zeka sohbet uygulamasından yönet — senin için kurar ve çalıştırır.",
+    "endpoint": "MCP adresi",
+    "copy": "Kopyala",
+    "copied": "Kopyalandı",
+    "chatHeading": "Claude.ai · ChatGPT · Gemini",
+    "chatHelp": "Sohbet uygulamanda Ayarlar → Connectors → Add custom connector'a gir, yukarıdaki adresi yapıştır, sonra Connect deyip onayla. Token gerekmez — kendi hesabınla giriş yaparsın.",
+    "cliHeading": "Claude Code (CLI)",
+    "cliHelp": "Aşağıdan bir token üret, sonra terminalde şunu çalıştır:",
+    "tokensHeading": "Erişim token'ları",
+    "tokensHelp": "Giriş akışını yapmayan CLI istemcileri için. Token yalnızca bir kez gösterilir.",
+    "namePlaceholder": "Token adı (örn. laptop)",
+    "generate": "Token üret",
+    "tokenOnce": "Şimdi kopyala — tekrar gösterilmeyecek.",
+    "revoke": "Sil",
+    "empty": "Henüz token yok.",
+    "created": "{{date}} tarihinde oluşturuldu",
+    "planLocked": "Uzaktan MCP ücretli planlarda. Bağlanmak için yükselt.",
+    "error": "Token oluşturulamadı. Tekrar dene."
   }
 }

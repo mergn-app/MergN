@@ -277,5 +277,26 @@
   },
   "canvas": {
     "autoArrange": "Auto-disposer"
+  },
+  "mcp": {
+    "title": "Connecter Claude / ChatGPT",
+    "subtitle": "Pilotez vos workflows depuis une app de chat IA — elle les crée et les exécute pour vous.",
+    "endpoint": "Point de terminaison MCP",
+    "copy": "Copier",
+    "copied": "Copié",
+    "chatHeading": "Claude.ai · ChatGPT · Gemini",
+    "chatHelp": "Dans votre app de chat, ouvrez Paramètres → Connectors → Add custom connector, collez l'URL ci-dessus, puis Connect et approuvez. Aucun token requis — vous vous connectez avec votre compte.",
+    "cliHeading": "Claude Code (CLI)",
+    "cliHelp": "Générez un token ci-dessous, puis exécutez ceci dans votre terminal :",
+    "tokensHeading": "Tokens d'accès",
+    "tokensHelp": "Pour les clients CLI sans flux de connexion. Le token n'est affiché qu'une fois.",
+    "namePlaceholder": "Nom du token (ex. ordinateur)",
+    "generate": "Générer un token",
+    "tokenOnce": "Copiez-le maintenant — il ne sera plus affiché.",
+    "revoke": "Révoquer",
+    "empty": "Aucun token pour l'instant.",
+    "created": "Créé le {{date}}",
+    "planLocked": "Le MCP distant est disponible sur les forfaits payants. Mettez à niveau pour vous connecter.",
+    "error": "Impossible de créer le token. Veuillez réessayer."
   }
 }

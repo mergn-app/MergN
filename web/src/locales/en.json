@@ -277,5 +277,26 @@
   },
   "canvas": {
     "autoArrange": "Auto-arrange"
+  },
+  "mcp": {
+    "title": "Connect Claude / ChatGPT",
+    "subtitle": "Drive your workflows from an AI chat app — it builds and runs them for you.",
+    "endpoint": "MCP endpoint",
+    "copy": "Copy",
+    "copied": "Copied",
+    "chatHeading": "Claude.ai · ChatGPT · Gemini",
+    "chatHelp": "In your chat app open Settings → Connectors → Add custom connector, paste the URL above, then Connect and approve. No token needed — you sign in with your account.",
+    "cliHeading": "Claude Code (CLI)",
+    "cliHelp": "Generate a token below, then run this in your terminal:",
+    "tokensHeading": "Access tokens",
+    "tokensHelp": "For CLI clients that don't do the sign-in flow. The token is shown once.",
+    "namePlaceholder": "Token name (e.g. laptop)",
+    "generate": "Generate token",
+    "tokenOnce": "Copy this now — it won't be shown again.",
+    "revoke": "Revoke",
+    "empty": "No tokens yet.",
+    "created": "Created {{date}}",
+    "planLocked": "Remote MCP is available on paid plans. Upgrade to connect.",
+    "error": "Could not create token. Please try again."
   }
 }
