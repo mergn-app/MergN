@@ -47,6 +47,7 @@ const CONVENTIONS = `MergN workflow conventions (build steps to match these):
 - A step is an ES module: export default async (ctx, input) => { ... return {...}; }.
 - PORTS ARE DERIVED FROM THE CODE. An input port exists for each input.<field> the body reads (e.g. input.payload). A destructured 2nd param — (ctx, { payload }) => — also works. If derivation is wrong, pass explicit inputs:[...] / outputs:[...] to add_step (these override). Reading input.x is the most reliable.
 - Effectful steps call ctx.connections.<providerId>.<method>(...). Pass the provider id to add_step.
+- NEED AN INTEGRATION THAT ISN'T IN list_providers (email, a SaaS API, etc.)? register_provider a proper one for it — give it credential fields so the user can enter their key/token in the app. Do NOT fall back to the generic 'http' provider for an AUTHENTICATED service: 'http' has NO credential storage, so there's nowhere to put the API key and the step can't authenticate. 'http' is only for public, auth-less URLs. Example: for email, register a 'resend' (or 'sendgrid'/'smtp') provider with an apiKey field, not http.
 - Return only outputs a later step or the final action consumes; never echo an input as an output; for a list step return the list, not per-item scalars.
 - Webhook events wrap the entity: unwrap with const obj = input.payload?.data?.object ?? input.payload?.object ?? input.payload, then read fields off obj.
 - Fixed per-step settings (sheet id, channel, column, threshold) go in add_step's configInputs (kept per step, filled by the user in the app). Flowing data is a normal input.
@@ -232,12 +233,12 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  tool("list_providers", "List integrations (id, name, apiDoc, auth).", {}, async () => {
+  tool("list_providers", "List integrations the space has (id, name, apiDoc, auth). 'http' is a generic AUTH-LESS client for public URLs only — for any authenticated service not listed here, register_provider a new one instead of using http.", {}, async () => {
     await deps.registry.ensureSpace(spaceId);
     return json(deps.registry.searchProviders(spaceId, "").map((p) => { const a = publicAuth(p); return { id: p.id, name: p.name, apiDoc: p.apiDoc, auth: a.type }; }));
   });
 
-  tool("register_provider", "Register a new integration by writing its client (export default (cred, fetch) => ({...})). Declare credential fields the user fills in the app.",
+  tool("register_provider", "Author a new integration whenever a step needs a service not in list_providers (email/Resend, a SaaS API, etc.) — this is the normal way to add integrations, not a fallback. Write its client (export default (cred, fetch) => ({...}); read keys from cred.<field>) and declare credentialFields so the user enters their key/token in the app. Set egressDomain to the API host.",
     { id: z.string(), name: z.string().optional(), apiDoc: z.string(), clientSource: z.string(), egressDomain: z.string().optional(),
       credentialFields: z.array(z.object({ name: z.string(), label: z.string(), type: z.enum(["text", "password", "number"]).default("password"), required: z.boolean().default(true) })).optional() },
     async ({ id, name, apiDoc, clientSource, egressDomain, credentialFields }) => {
