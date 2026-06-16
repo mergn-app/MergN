@@ -73,7 +73,8 @@ WIRING / DATA:
 - Pass the provider id to add_step for an effectful step.
 - Mark fixed per-step settings as add_step configInputs — the user fills them in the app; at runtime you STILL read them as input.<field>.
 - Return only outputs a later step or the final action consumes; never echo an input as an output; for a list return the list, not per-item scalars.
-- Webhook trigger: the whole body arrives as input.payload (reserved name). Unwrap: const obj = input.payload?.data?.object ?? input.payload?.object ?? input.payload.
+- Webhook trigger: input.payload (reserved name) = the ENTIRE trigger body. Read fields off it: const obj = input.payload?.data?.object ?? input.payload?.object ?? input.payload; const name = obj.name.
+- TEST INPUT for run_workflow IS the trigger body itself. For a webhook flow pass the raw body directly, e.g. { name, email, budget } — do NOT wrap it as { payload: {...} }. Wrapping double-nests it (input.payload becomes { payload: {...} }). A real webhook delivers the bare body, so test with the bare body too.
 
 PROVIDERS:
 - Need a service not in list_providers (email, a SaaS API)? register_provider one with credentialFields — this is the normal way to add an integration. NEVER use the generic 'http' provider for an AUTHENTICATED service: 'http' has no credential storage, so the key has nowhere to go and the step can't auth. 'http' is for public, auth-less URLs only. For email, register e.g. a 'resend' provider with an apiKey field.
@@ -244,7 +245,7 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  tool("run_workflow", "Run the workflow once with an optional trigger input; returns each step's status/output. Note: a test run uses the live connections — a step calling an unconnected provider fails until its credential is added in the app.",
+  tool("run_workflow", "Run the workflow once. 'input' IS the trigger body itself — for a webhook flow pass the raw body directly (e.g. { name, email, budget }), NOT wrapped as { payload: {...} } (a step's input.payload already = this whole object; wrapping double-nests it). Returns each step's status/output. A step calling an unconnected provider fails until its credential is added in the app.",
     { workflowId: z.string(), input: z.record(z.string(), z.unknown()).optional() },
     async ({ workflowId, input }) => {
       const wf = await get(workflowId);
@@ -260,7 +261,14 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
             : undefined;
         return { nodeId: x.nodeId, status: x.status, output: x.output, error: x.error, ...(hint ? { hint } : {}) };
       });
-      return json(steps);
+      // Detect the common double-wrap: input passed as { payload: {...} } when it
+      // should be the bare body (a step's input.payload already = the whole body).
+      const inObj = (input ?? {}) as Record<string, unknown>;
+      const doubleWrapped =
+        Object.keys(inObj).length === 1 &&
+        "payload" in inObj &&
+        typeof inObj.payload === "object";
+      return json(doubleWrapped ? { warning: "input looks double-wrapped — you passed { payload: {...} }; pass the bare body instead (input.payload already = the whole body you pass).", steps } : steps);
     },
   );
 
