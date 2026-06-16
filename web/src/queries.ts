@@ -433,6 +433,8 @@ export interface LlmSettings {
   hasApiKey: boolean;
   configured: boolean;
   locked: boolean;
+  usingOwn?: boolean;
+  lockReason?: "instance" | "plan" | null;
 }
 
 export function saveLlmSettings(body: {

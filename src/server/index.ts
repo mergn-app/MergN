@@ -21,6 +21,9 @@ import {
   getModel,
   setLlmConfig,
   getLlmConfig,
+  setSpaceLlmConfig,
+  getSpaceLlmConfig,
+  spaceUsesOwnKey,
   type LlmConfig,
 } from "../agent/model";
 import { z } from "zod";
@@ -37,7 +40,7 @@ import {
 } from "./ratelimit";
 import { runWorkflow } from "./run";
 import { emitRun, onRun } from "./run-events";
-import { createRegistry, publicAuth } from "../providers/registry";
+import { createRegistry, publicAuth, type ProviderDraft } from "../providers/registry";
 import { assertSpace, type DocStore } from "../store/docstore";
 import { createStorage } from "../store/factory";
 import {
@@ -208,6 +211,9 @@ function withResultLimits(tools: ToolSet): ToolSet {
 
 const MANAGED =
   process.env.MANAGED === "1" || process.env.MANAGED === "true";
+// MCP support is a SELF-HOST-only feature: never on a managed/prod instance, and
+// even self-host must opt in with ENABLE_MCP. Gates the /api/mcp/* endpoints.
+const MCP_ENABLED = !MANAGED && /^(1|true)$/i.test(process.env.ENABLE_MCP ?? "");
 
 const { store, vault } = createStorage();
 initUsageCap(store);
@@ -251,9 +257,41 @@ const webhookAuth = createWebhookAuthStore(store, vault);
 // what stops a single design_workflow (planWorkflow + N step bodies + provider
 // + wiring + form) — or the standalone repair/probe endpoints — from running up
 // an unbounded Gemini bill outside the chat loop's caps.
+// Lazily load a space's own LLM config (managed/prod: a Pro space can set its own
+// model + key) into the model factory, once per process. In self-host the single
+// global override already covers every space, so this is a managed-only concern.
+const llmLoaded = new Set<string>();
+async function ensureSpaceLlm(spaceId: string): Promise<void> {
+  if (!MANAGED || llmLoaded.has(spaceId)) return;
+  llmLoaded.add(spaceId);
+  try {
+    const cfg = await settings.getLlm(spaceId);
+    if (cfg) setSpaceLlmConfig(spaceId, cfg);
+  } catch (e) {
+    console.error("space llm load failed", spaceId, e);
+  }
+}
+
+// Plans allowed to bring their own model/key in managed/prod: Pro, the internal
+// Test plan, and Enterprise (everyone except Free). Self-host has no plan gate.
+// DISABLE_LLM_SETTINGS hard-locks everyone.
+const OWN_MODEL_PLANS = new Set(["pro", "test", "enterprise"]);
+async function canUseOwnModel(spaceId: string): Promise<boolean> {
+  if (process.env.DISABLE_LLM_SETTINGS) return false;
+  if (!MANAGED) return true; // self-host
+  if (!billing.enabled()) return false;
+  const plan = await billing.planOf(spaceId);
+  return OWN_MODEL_PLANS.has(plan.slug);
+}
+
 setLlmBudgetHooks({
-  record: (spaceId, tokens) => void usage.addTokens(spaceId, tokens),
+  // a space on its OWN key pays for its own tokens — don't count them as ours
+  record: (spaceId, tokens) => {
+    if (spaceUsesOwnKey(spaceId)) return;
+    void usage.addTokens(spaceId, tokens);
+  },
   guard: async (spaceId) => {
+    if (spaceUsesOwnKey(spaceId)) return; // own key → no caps
     if (await usageCapExceeded())
       throw new Error("The AI usage limit for this deployment has been reached.");
     if (!billing.enabled()) return; // self-host: no per-space plan enforcement
@@ -281,6 +319,9 @@ const HOOK_LIMIT = min(LIMITS.hookPerMin);
 const LLM_DIRECT_USER_LIMIT = min(LIMITS.llmDirectPerUserPerMin);
 
 async function llmRateLimit(c: Context): Promise<Response | null> {
+  // own-key spaces aren't rate limited (they pay for their own tokens)
+  await ensureSpaceLlm(c.get("spaceId"));
+  if (spaceUsesOwnKey(c.get("spaceId"))) return null;
   const u = await rateLimiter.take(
     `llm:user:${c.get("userId")}`,
     LLM_DIRECT_USER_LIMIT,
@@ -895,6 +936,7 @@ app.get("/api/config", (c) =>
   c.json({
     authDisabled: DISABLE_AUTH,
     managed: MANAGED,
+    mcpEnabled: MCP_ENABLED,
     maxSpaces: LIMITS.maxSpacesPerUser,
     requireEmailVerification: emailVerificationRequired,
   }),
@@ -978,35 +1020,42 @@ app.post("/api/chat", async (c) => {
   if (!/^[A-Za-z0-9_-]+$/.test(conversationId ?? ""))
     return c.json({ error: "bad conversation id" }, 400);
 
-  const userLimit = await rateLimiter.take(
-    `chat:user:${userId}`,
-    CHAT_USER_LIMIT,
-  );
-  const limit: RateLimitResult = userLimit.ok
-    ? await rateLimiter.take("chat:global", CHAT_GLOBAL_LIMIT)
-    : userLimit;
-  if (!limit.ok) {
-    return c.json(
-      {
-        error: "rate_limited",
-        message:
-          "You're sending messages a bit too fast. Please wait a moment and try again.",
-        retryAfterMs: limit.retryAfterMs,
-      },
-      429,
-      { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) },
-    );
-  }
+  // a space on its OWN api key pays for its own tokens, so it bypasses our rate
+  // limits + usage caps and is not counted toward our usage.
+  await ensureSpaceLlm(spaceId);
+  const ownKey = spaceUsesOwnKey(spaceId);
 
-  if (await usageCapExceeded()) {
-    return c.json(
-      {
-        error: "usage_cap",
-        message:
-          "The AI usage limit for this deployment has been reached. Please try again later.",
-      },
-      402,
+  if (!ownKey) {
+    const userLimit = await rateLimiter.take(
+      `chat:user:${userId}`,
+      CHAT_USER_LIMIT,
     );
+    const limit: RateLimitResult = userLimit.ok
+      ? await rateLimiter.take("chat:global", CHAT_GLOBAL_LIMIT)
+      : userLimit;
+    if (!limit.ok) {
+      return c.json(
+        {
+          error: "rate_limited",
+          message:
+            "You're sending messages a bit too fast. Please wait a moment and try again.",
+          retryAfterMs: limit.retryAfterMs,
+        },
+        429,
+        { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) },
+      );
+    }
+
+    if (await usageCapExceeded()) {
+      return c.json(
+        {
+          error: "usage_cap",
+          message:
+            "The AI usage limit for this deployment has been reached. Please try again later.",
+        },
+        402,
+      );
+    }
   }
 
   const message = clampUserMessage(rawMessage);
@@ -1039,6 +1088,7 @@ app.post("/api/chat", async (c) => {
     );
   }
   if (
+    !ownKey &&
     MANAGED &&
     billing.enabled() &&
     plan.limits.aiTokens >= 0 &&
@@ -1076,16 +1126,17 @@ app.post("/api/chat", async (c) => {
     generateId: createIdGenerator({ prefix: "msg", size: 16 }),
     execute: ({ writer }) => {
       const result = streamText({
-        model: getModel(),
+        model: getModel(spaceId),
         system,
         messages: modelMessages,
         stopWhen: [
           stepCountIs(20),
-          // stop the multi-step loop once this prompt's cumulative token usage
-          // crosses the per-prompt cap (bounds a runaway prompt)
+          // bound a runaway prompt — but a space on its own key pays for its own
+          // tokens, so don't cap its per-prompt usage.
           ({ steps }) =>
+            !ownKey &&
             steps.reduce((sum, s) => sum + (s.usage?.totalTokens ?? 0), 0) >=
-            LIMITS.promptTokenCap,
+              LIMITS.promptTokenCap,
         ],
         maxOutputTokens: LIMITS.maxOutputTokens,
         tools: withResultLimits(
@@ -1097,8 +1148,11 @@ app.post("/api/chat", async (c) => {
         experimental_telemetry: trace("builder-chat", { spaceId, sessionId }),
         onFinish: (event) => {
           const t = event.totalUsage?.totalTokens ?? 0;
-          void recordTokens(t);
-          void usage.addTokens(spaceId, t);
+          // own-key spaces pay their own way — don't count their tokens as ours
+          if (!ownKey) {
+            void recordTokens(t);
+            void usage.addTokens(spaceId, t);
+          }
           void flushTraces();
         },
       });
@@ -1431,8 +1485,10 @@ app.post("/api/input-form", async (c) => {
   return c.json(form);
 });
 
-app.get("/api/settings/llm", (c) => {
-  const cfg = getLlmConfig();
+app.get("/api/settings/llm", async (c) => {
+  const spaceId = c.get("spaceId");
+  await ensureSpaceLlm(spaceId);
+  const cfg = getLlmConfig(spaceId);
   const p = cfg.provider;
   // "configured" = a usable model is actually set: local needs a model name,
   // cloud providers need a key (google can also use the GEMINI env key).
@@ -1442,23 +1498,50 @@ app.get("/api/settings/llm", (c) => {
       : p === "google"
         ? !!cfg.apiKey || !!process.env.GOOGLE_GENERATIVE_AI_API_KEY
         : !!cfg.apiKey;
+  // built-in "MergN" default = our gemini, used when the space has no own config
+  const usingOwn = !!getSpaceLlmConfig(spaceId) || (!MANAGED && !!getLlmConfig().apiKey);
+  const canSet = await canUseOwnModel(spaceId);
+  // why it's locked: 'instance' = the deployment forces its model (hide the
+  // picker); 'plan' = a Free space that can pick MergN but must upgrade to bring
+  // its own model (show MergN + upgrade hint).
+  const lockReason: "instance" | "plan" | null = process.env.DISABLE_LLM_SETTINGS
+    ? "instance"
+    : !canSet
+      ? "plan"
+      : null;
   return c.json({
-    provider: cfg.provider,
-    model: cfg.model ?? "",
+    provider: usingOwn ? cfg.provider : "mergn",
+    model: usingOwn ? (cfg.model ?? "") : "MergN",
     baseURL: cfg.baseURL ?? "",
     hasApiKey: !!cfg.apiKey,
     configured,
-    locked: !!process.env.DISABLE_LLM_SETTINGS,
+    usingOwn,
+    locked: !canSet,
+    lockReason,
   });
 });
 
 app.post("/api/settings/llm", async (c) => {
-  if (process.env.DISABLE_LLM_SETTINGS)
-    return c.json({ error: "llm settings are locked on this instance" }, 403);
+  const spaceId = c.get("spaceId");
+  if (!(await canUseOwnModel(spaceId)))
+    return c.json(
+      { error: "llm settings require a Pro plan on this instance" },
+      403,
+    );
   const body = (await c.req.json()) as Partial<LlmConfig>;
   const provider = String(body.provider ?? "").toLowerCase();
-  if (!provider) return c.json({ error: "provider required" }, 400);
-  const current = await settings.getLlm();
+  // empty or the built-in "mergn"/"default" => revert to the built-in MergN model
+  if (!provider || provider === "mergn" || provider === "default") {
+    if (MANAGED) {
+      await settings.clearLlm(spaceId);
+      setSpaceLlmConfig(spaceId, null);
+    } else {
+      await settings.clearLlm("_global");
+      setLlmConfig(null);
+    }
+    return c.json({ ok: true, usingOwn: false });
+  }
+  const current = MANAGED ? getSpaceLlmConfig(spaceId) : await settings.getLlm();
   const cfg: LlmConfig = {
     provider,
     model: body.model || undefined,
@@ -1467,9 +1550,14 @@ app.post("/api/settings/llm", async (c) => {
     // "keep the existing one".
     apiKey: body.apiKey || current?.apiKey || undefined,
   };
-  await settings.setLlm(cfg);
-  setLlmConfig(cfg);
-  return c.json({ ok: true });
+  if (MANAGED) {
+    await settings.setLlm(spaceId, cfg);
+    setSpaceLlmConfig(spaceId, cfg);
+  } else {
+    await settings.setLlm("_global", cfg);
+    setLlmConfig(cfg);
+  }
+  return c.json({ ok: true, usingOwn: true });
 });
 
 // Capability probe for the active model. Detects a model too weak to produce
@@ -1478,8 +1566,10 @@ app.post("/api/settings/llm", async (c) => {
 app.post("/api/settings/llm/probe", async (c) => {
   const rl = await llmRateLimit(c);
   if (rl) return rl;
-  const cfg = getLlmConfig();
-  const r = await probeModel();
+  const spaceId = c.get("spaceId");
+  await ensureSpaceLlm(spaceId);
+  const cfg = getLlmConfig(spaceId);
+  const r = await probeModel(spaceId);
   const local = cfg.provider === "local" || cfg.provider === "openai-compatible";
   const weak = !r.structured || !r.accurate;
   return c.json({
@@ -1757,6 +1847,54 @@ app.get("/api/providers/:id/source", async (c) => {
       label: f.label,
     })),
   });
+});
+
+// --- MCP (self-host only) -------------------------------------------------
+// LLM-free provider list + registration for the MCP server. Gated: 404 unless
+// MCP_ENABLED (off on managed/prod, opt-in on self-host). The client writes the
+// provider client code; we just register it — no LLM.
+app.get("/api/mcp/providers", async (c) => {
+  if (!MCP_ENABLED) return c.json({ error: "mcp disabled" }, 404);
+  const spaceId = c.get("spaceId");
+  await registry.ensureSpace(spaceId);
+  const all = registry.searchProviders(spaceId, "");
+  return c.json(
+    all.map((p) => {
+      const auth = publicAuth(p);
+      return {
+        id: p.id,
+        name: p.name,
+        apiDoc: p.apiDoc,
+        aiWritten: p.aiWritten ?? false,
+        auth: auth.type,
+        credentialFields: (auth.fields ?? []).map((f) => f.name),
+      };
+    }),
+  );
+});
+
+app.post("/api/mcp/providers", async (c) => {
+  if (!MCP_ENABLED) return c.json({ error: "mcp disabled" }, 404);
+  const spaceId = c.get("spaceId");
+  await registry.ensureSpace(spaceId);
+  const b = (await c.req.json()) as Partial<ProviderDraft> & { egressDomain?: string };
+  if (!b.id || !b.clientSource)
+    return c.json({ error: "id and clientSource are required" }, 400);
+  const draft: ProviderDraft = {
+    id: b.id,
+    name: b.name ?? b.id,
+    keywords: b.keywords ?? [],
+    authEnv: b.authEnv ?? "",
+    sandbox: b.sandbox ?? (b.egressDomain ? { egressDomain: b.egressDomain } : {}),
+    apiDoc: b.apiDoc ?? "",
+    clientSource: b.clientSource,
+    dependencies: b.dependencies ?? [],
+    credential: b.credential,
+    setupGuide: b.setupGuide,
+  };
+  registry.registerProviderFromDraft(spaceId, draft);
+  await registry.persistProvider(spaceId, draft);
+  return c.json({ id: draft.id, name: draft.name, registered: true });
 });
 
 app.get("/api/providers/:id/oauth-config", async (c) => {

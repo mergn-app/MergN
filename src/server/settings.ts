@@ -1,28 +1,33 @@
 import type { DocStore } from "../store/docstore";
 import type { LlmConfig } from "../agent/model";
 
-const SPACE = "_global";
+// "_global" holds the self-host single config; managed/prod stores one per spaceId.
+const GLOBAL = "_global";
 const COLLECTION = "settings";
 const LLM_ID = "llm";
 
 export interface SettingsStore {
-  getLlm(): Promise<LlmConfig | null>;
-  setLlm(cfg: LlmConfig): Promise<void>;
+  getLlm(spaceId?: string): Promise<LlmConfig | null>;
+  setLlm(spaceId: string, cfg: LlmConfig): Promise<void>;
+  clearLlm(spaceId: string): Promise<void>;
 }
 
 export function createSettingsStore(store: DocStore): SettingsStore {
   return {
-    async getLlm() {
-      const doc = await store.get(SPACE, COLLECTION, LLM_ID);
+    async getLlm(spaceId = GLOBAL) {
+      const doc = await store.get(spaceId, COLLECTION, LLM_ID);
       return doc ? (doc as unknown as LlmConfig) : null;
     },
-    async setLlm(cfg) {
+    async setLlm(spaceId, cfg) {
       await store.put(
-        SPACE,
+        spaceId,
         COLLECTION,
         LLM_ID,
         cfg as unknown as Record<string, unknown>,
       );
+    },
+    async clearLlm(spaceId) {
+      await store.remove(spaceId, COLLECTION, LLM_ID);
     },
   };
 }

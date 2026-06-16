@@ -20,6 +20,7 @@ import {
 import { useAuth } from "./authContext";
 
 const PROVIDERS = [
+  { value: "mergn", label: "MergN (built-in)" },
   { value: "google", label: "Google (Gemini)" },
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic (Claude)" },
@@ -43,7 +44,7 @@ function LlmForm({
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [provider, setProvider] = useState(current.provider || "google");
+  const [provider, setProvider] = useState(current.provider || "mergn");
   const [model, setModel] = useState(current.model || "");
   const [baseURL, setBaseURL] = useState(current.baseURL || "");
   const [apiKey, setApiKey] = useState("");
@@ -53,6 +54,7 @@ function LlmForm({
   const [error, setError] = useState<string | null>(null);
 
   const isLocal = provider === "local";
+  const isMergn = provider === "mergn";
   const fieldCls =
     "w-full rounded-lg border border-border/60 bg-background-subtle px-2 py-1 text-xs outline-none focus:border-border";
 
@@ -102,28 +104,38 @@ function LlmForm({
         </SelectContent>
       </Select>
 
-      <input
-        className={fieldCls}
-        value={model}
-        onChange={(e) => setModel(e.target.value)}
-        placeholder={MODEL_PLACEHOLDER[provider] ?? ""}
-      />
-
-      {isLocal ? (
-        <input
-          className={`${fieldCls} font-mono`}
-          value={baseURL}
-          onChange={(e) => setBaseURL(e.target.value)}
-          placeholder="http://host.docker.internal:11434/v1"
-        />
+      {isMergn ? (
+        <p className="rounded-lg bg-secondary/50 px-2 py-1.5 text-[11px] text-muted-foreground">
+          MergN's built-in model. No API key needed — usage counts toward your plan.
+        </p>
       ) : (
-        <input
-          type="password"
-          className={`${fieldCls} font-mono`}
-          value={apiKey}
-          onChange={(e) => setApiKey(e.target.value)}
-          placeholder={current.hasApiKey ? t("llm.keyUnchanged") : "sk-…"}
-        />
+        <>
+          <input
+            className={fieldCls}
+            value={model}
+            onChange={(e) => setModel(e.target.value)}
+            placeholder={MODEL_PLACEHOLDER[provider] ?? ""}
+          />
+          {isLocal ? (
+            <input
+              className={`${fieldCls} font-mono`}
+              value={baseURL}
+              onChange={(e) => setBaseURL(e.target.value)}
+              placeholder="http://host.docker.internal:11434/v1"
+            />
+          ) : (
+            <input
+              type="password"
+              className={`${fieldCls} font-mono`}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={current.hasApiKey ? t("llm.keyUnchanged") : "sk-…"}
+            />
+          )}
+          <p className="px-0.5 text-[10px] text-muted-foreground/70">
+            Your own key — usage is billed to you, not counted toward your plan limits.
+          </p>
+        </>
       )}
 
       {error && <p className="text-[11px] text-destructive">{error}</p>}
@@ -209,8 +221,11 @@ export function ModelPicker() {
   // model — the user must sign in first. In self-host (DISABLE_AUTH) the auth
   // context synthesizes a LOCAL_USER, so the picker still renders there.
   if (!user) return null;
-  if (data?.locked) return null;
+  // the deployment forces its model (DISABLE_LLM_SETTINGS) → no picker at all
+  if (data?.lockReason === "instance") return null;
 
+  // a Free space can use MergN but must upgrade to bring its own model/key
+  const planLocked = data?.lockReason === "plan";
   const configured = !!data?.configured;
   const current = data ?? EMPTY;
 
@@ -263,13 +278,29 @@ export function ModelPicker() {
               <X className="size-3.5" />
             </button>
           </div>
-          <LlmForm
-            current={current}
-            onRefresh={() =>
-              qc.invalidateQueries({ queryKey: ["llm-settings"] })
-            }
-            onClose={() => setOpen(false)}
-          />
+          {planLocked ? (
+            <div className="space-y-2">
+              <p className="rounded-lg bg-secondary/50 px-2 py-1.5 text-[11px] text-muted-foreground">
+                You're on <b className="text-foreground">MergN</b>, the built-in model.
+                Upgrade to Pro to use your own model and API key — your own usage isn't
+                counted toward your plan limits.
+              </p>
+              <a
+                href="/billing"
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-2 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90"
+              >
+                <Sparkles className="size-3.5" /> Upgrade to Pro
+              </a>
+            </div>
+          ) : (
+            <LlmForm
+              current={current}
+              onRefresh={() =>
+                qc.invalidateQueries({ queryKey: ["llm-settings"] })
+              }
+              onClose={() => setOpen(false)}
+            />
+          )}
         </div>
       )}
     </div>

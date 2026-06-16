@@ -7,6 +7,7 @@ import { authorPollSource } from "./poll-author";
 import { reconcileWiring } from "./wiring-repair";
 import { trace, type AgentMeta } from "../observability";
 import { LIMITS } from "../limits";
+import { extractInputs, extractOutputs, extractFileInputs } from "./extract";
 
 export const planZ = z.object({
   name: z
@@ -235,86 +236,6 @@ async function authorStepBody(
       .filter(Boolean)
       .join("\n\n"),
   });
-}
-
-function splitTopLevel(s: string): string[] {
-  const out: string[] = [];
-  let depth = 0;
-  let cur = "";
-  for (const ch of s) {
-    if (ch === "{" || ch === "[" || ch === "(") depth++;
-    else if (ch === "}" || ch === "]" || ch === ")") depth--;
-    if (ch === "," && depth === 0) {
-      out.push(cur);
-      cur = "";
-    } else cur += ch;
-  }
-  if (cur.trim()) out.push(cur);
-  return out;
-}
-
-// Derives the output field names a step actually returns by reading the top-level
-// keys of its `return { ... }` object(s). The planner's declared `step.outputs`
-// is unreliable on weak models (often empty), so the real return shape — which is
-// what downstream steps read and what the wiring repair must bridge from — is
-// extracted from the authored body instead.
-function extractOutputs(src: string): string[] {
-  const keys = new Set<string>();
-  const re = /\breturn\b/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src))) {
-    let j = m.index + 6;
-    while (j < src.length && /\s/.test(src[j])) j++;
-    if (src[j] !== "{") continue;
-    let depth = 0;
-    let k = j;
-    for (; k < src.length; k++) {
-      if (src[k] === "{") depth++;
-      else if (src[k] === "}") {
-        depth--;
-        if (depth === 0) {
-          k++;
-          break;
-        }
-      }
-    }
-    const inner = src.slice(j + 1, k - 1);
-    for (const part of splitTopLevel(inner)) {
-      const raw = part.split(":")[0].trim().replace(/^\.\.\./, "").trim();
-      const km = raw.match(/^["'`]?([A-Za-z_$][\w$]*)["'`]?$/);
-      if (km) keys.add(km[1]);
-    }
-  }
-  return [...keys];
-}
-
-// Deterministically detect which inputs are uploaded FILES by how the body
-// reads them — input.x.base64 / .mime / .content_type (the injected file shape).
-// Reliable regardless of whether the model filled `fileInputs`.
-function extractFileInputs(src: string): string[] {
-  const set = new Set<string>();
-  for (const m of src.matchAll(
-    /\binput\.([A-Za-z_$][\w$]*)\.(?:base64|mime|content_type|contentType)\b/g,
-  ))
-    set.add(m[1]);
-  return [...set];
-}
-
-function extractInputs(src: string): string[] {
-  const set = new Set<string>();
-  for (const m of src.matchAll(/\binput\.([A-Za-z_$][\w$]*)/g)) set.add(m[1]);
-  for (const m of src.matchAll(/\binput\s*\[\s*["'`]([^"'`]+)["'`]\s*\]/g))
-    set.add(m[1]);
-  for (const m of src.matchAll(
-    /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*input\b/g,
-  )) {
-    for (const part of m[1].split(",")) {
-      const key = part.trim().split(":")[0].split("=")[0].trim();
-      if (key && !key.startsWith("...") && /^[A-Za-z_$][\w$]*$/.test(key))
-        set.add(key);
-    }
-  }
-  return [...set];
 }
 
 export type DesignProgress = (ev: {

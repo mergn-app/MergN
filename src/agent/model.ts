@@ -23,14 +23,39 @@ export interface LlmConfig {
   apiKey?: string;
 }
 
-// Runtime override set from the in-app settings (DB). Takes precedence over env.
+// Self-host global override (from in-app settings, loaded at boot).
 let override: LlmConfig | null = null;
+// Per-space configs (managed/prod: a Pro space can bring its own model + key).
+const spaceConfigs = new Map<string, LlmConfig>();
 
 export function setLlmConfig(cfg: LlmConfig | null): void {
   override = cfg && cfg.provider ? cfg : null;
 }
 
-export function getLlmConfig(): LlmConfig {
+// Set/clear a space's own model config. A config with `provider` set is stored;
+// anything else clears it (the space falls back to the built-in "MergN" model).
+export function setSpaceLlmConfig(spaceId: string, cfg: LlmConfig | null): void {
+  if (cfg && cfg.provider) spaceConfigs.set(spaceId, cfg);
+  else spaceConfigs.delete(spaceId);
+}
+
+export function getSpaceLlmConfig(spaceId: string): LlmConfig | null {
+  return spaceConfigs.get(spaceId) ?? null;
+}
+
+// True when this space brings its OWN api key — it pays for its own tokens, so it
+// must bypass our rate limits / usage caps and not count toward our usage.
+export function spaceUsesOwnKey(spaceId: string): boolean {
+  return !!spaceConfigs.get(spaceId)?.apiKey;
+}
+
+// Resolve the active config: a space's own config first (prod Pro), then the
+// self-host global override, then env (the built-in "MergN" default).
+export function getLlmConfig(spaceId?: string): LlmConfig {
+  if (spaceId) {
+    const c = spaceConfigs.get(spaceId);
+    if (c) return c;
+  }
   if (override) return override;
   return {
     provider: (process.env.LLM_PROVIDER ?? "google").toLowerCase(),
@@ -40,8 +65,8 @@ export function getLlmConfig(): LlmConfig {
   };
 }
 
-export function getModel(): LanguageModel {
-  const { provider, model, baseURL, apiKey } = getLlmConfig();
+export function getModel(spaceId?: string): LanguageModel {
+  const { provider, model, baseURL, apiKey } = getLlmConfig(spaceId);
 
   switch (provider) {
     case "local":

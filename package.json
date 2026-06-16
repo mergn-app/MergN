@@ -12,7 +12,8 @@
     "slack": "node --env-file=.env --import tsx src/examples/slack-live.ts",
     "author": "node --env-file=.env --import tsx src/agent/run-author.ts",
     "server": "node --env-file-if-exists=.env --import tsx src/server/index.ts",
-    "start": "node --import tsx src/server/index.ts"
+    "start": "node --import tsx src/server/index.ts",
+    "mcp": "node --import tsx src/mcp/server.ts"
   },
   "keywords": [],
   "author": "",
@@ -30,6 +31,7 @@
     "@hono/node-server": "^2.0.4",
     "@langfuse/otel": "^5.4.1",
     "@langfuse/tracing": "^5.4.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@nats-io/jetstream": "^3.4.0",
     "@nats-io/transport-node": "^3.4.0",
     "@opentelemetry/sdk-node": "^0.218.0",

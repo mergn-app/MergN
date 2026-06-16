@@ -83,7 +83,7 @@ export async function genObject<S extends z.ZodTypeAny>(args: {
   await assertLlmBudget(args.spaceId);
   return withRetry(async () => {
     const { output, usage } = await generateText({
-      model: getModel(),
+      model: getModel(args.spaceId),
       output: Output.object({ schema: args.schema }),
       system: args.system,
       prompt: args.prompt,

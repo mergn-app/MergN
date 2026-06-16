@@ -24,11 +24,11 @@ export interface ProbeResult {
  * result reflects the model's raw capability, and reports whether it both
  * followed the schema (`structured`) and got the values right (`accurate`).
  */
-export async function probeModel(): Promise<ProbeResult> {
+export async function probeModel(spaceId?: string): Promise<ProbeResult> {
   const start = Date.now();
   try {
     const { output } = await generateText({
-      model: getModel(),
+      model: getModel(spaceId),
       output: Output.object({ schema: probeZ }),
       system: "Return ONLY the requested structured object, nothing else.",
       prompt: "Set ok=true, sum = 17 + 25, label = 'ping'.",
