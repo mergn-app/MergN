@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { useSession, signOut } from "./auth";
 import { AuthForm } from "./AuthForm";
 import { EmailVerify } from "./EmailVerify";
+import { syncAnalyticsUser } from "./analytics";
 
 export interface AuthUser {
   id: string;
@@ -147,6 +148,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     writeCachedUser(resolvedUser);
     setCachedUser(resolvedUser);
   }, [authDisabled, isPending, resolvedUser]);
+
+  useEffect(() => {
+    if (pending) return;
+    if (authDisabled) {
+      syncAnalyticsUser(null);
+      return;
+    }
+    syncAnalyticsUser(
+      user
+        ? {
+            id: user.id,
+            email: user.email,
+            name: user.name,
+          }
+        : null,
+    );
+  }, [authDisabled, pending, user]);
 
   const [open, setOpen] = useState(false);
   const [closing, setClosing] = useState(false);
