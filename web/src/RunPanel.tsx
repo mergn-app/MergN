@@ -104,6 +104,7 @@ export function RunPanel({
   onRepair: (
     provider: string,
     ctx: {
+      nodeId: string;
       error: string;
       callSite: string;
       sampleInput: string;
@@ -1052,6 +1053,7 @@ export function RunPanel({
                           onClick={() => {
                             const f = funcs.find((x) => x.id === r.nodeId);
                             onRepair(provider, {
+                              nodeId: r.nodeId,
                               error: r.error ?? "",
                               callSite: f?.bodySource ?? "",
                               sampleInput:

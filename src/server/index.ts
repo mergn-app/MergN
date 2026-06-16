@@ -495,7 +495,7 @@ function makeTools(
   const triggerHint = ((): string | undefined => {
     const kind = triggerCtx?.kind;
     if (kind === "webhook") {
-      return "This workflow's trigger is a WEBHOOK: the entire raw request body the external service POSTs arrives as `input.payload` (already-parsed JSON). To use a value from the event (e.g. a customer name/email/amount), READ IT FROM input.payload IN CODE — navigate its likely structure yourself (e.g. input.payload?.data?.object?.customer_name ?? input.payload?.customer_name). NEVER invent a flat trigger input like input.customerName for event data, and NEVER create a user input that asks for a PATH/field-location (no `*_path`/`*_field`/`*_key` input + lodash get). The user only provides destinations/actions.";
+      return "This workflow's trigger is a WEBHOOK: the entire raw request body the external service POSTs arrives as `input.payload` (already-parsed JSON). To use a value from the event, READ IT FROM input.payload IN CODE. Webhook events commonly wrap the entity in an envelope, so unwrap the common shapes first (e.g. input.payload?.data?.object ?? input.payload?.data ?? input.payload?.object ?? input.payload) and read fields off that. NEVER invent a flat trigger input like input.customerName for event data, and NEVER create a user input that asks for a PATH/field-location (no `*_path`/`*_field`/`*_key` input + lodash get). The user only provides destinations/actions.";
     }
     if (kind === "poll" && triggerCtx?.eventFields?.length) {
       return `This workflow's trigger POLLS for new items; each item arrives with these EXACT fields: ${triggerCtx.eventFields.join(", ")}. Read event data from those input names directly. Do NOT invent other trigger field names.`;

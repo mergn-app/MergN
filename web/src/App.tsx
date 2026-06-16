@@ -560,6 +560,7 @@ export function App({
     (
       provider: string,
       ctx: {
+        nodeId: string;
         error: string;
         callSite: string;
         sampleInput: string;
@@ -567,12 +568,41 @@ export function App({
       },
     ) => {
       setActiveTab("chat");
+      // Find declared inputs that are MISSING from the resolved input, and for
+      // each, surface its upstream PRODUCER (its last output + code). A missing
+      // wired input usually means the producer returned undefined (e.g. a wrong
+      // payload path) — giving the AI the producer's actual output + body lets it
+      // fix the real culprit instead of looping asking the user for data the
+      // workflow already received.
+      let resolved: Record<string, unknown> = {};
+      try {
+        resolved = JSON.parse(ctx.sampleInput) as Record<string, unknown>;
+      } catch {
+        void 0;
+      }
+      const missing = ctx.declaredInputs.filter((n) => !(n in resolved));
+      const upstream: string[] = [];
+      for (const inp of missing) {
+        const w = wires.find((x) => x.to === ctx.nodeId && x.toInput === inp);
+        if (!w || w.from === "trigger") continue;
+        const prod = funcs.find((f) => f.id === w.from);
+        const out = runData[w.from]?.output;
+        upstream.push(
+          `- input "${inp}" is wired from ${w.from}.${w.fromOutput}. ${w.from}'s last output was: ${
+            out !== undefined ? JSON.stringify(out) : "(no output recorded)"
+          }.${prod?.bodySource ? `\n  ${w.from} code:\n${prod.bodySource}` : ""}`,
+        );
+      }
       const msg = [
         `A workflow step failed.`,
         `Error: "${ctx.error}"`,
         `Provider: "${provider}".`,
         `The step declares these inputs: ${ctx.declaredInputs.length ? ctx.declaredInputs.join(", ") : "(none)"}.`,
         `The step's resolved input was: ${ctx.sampleInput}`,
+        missing.length
+          ? `MISSING inputs (declared but absent from the resolved input): ${missing.join(", ")}. These are wired from upstream steps, so the producer likely returned undefined — inspect the producer(s) below and fix the step whose output is empty (often a wrong payload/field path). Do NOT ask the user for data the workflow already received.`
+          : "",
+        upstream.length ? `Upstream producers feeding the missing inputs:\n${upstream.join("\n")}` : "",
         ctx.callSite ? `It calls the provider like this:\n${ctx.callSite}` : "",
         `Diagnose whether this is a provider bug or a flow problem (the step not receiving its input), then act per your rules.`,
       ]
@@ -580,7 +610,7 @@ export function App({
         .join("\n\n");
       sendChatRef.current?.(msg);
     },
-    [],
+    [wires, funcs, runData],
   );
 
   const onConfigChange = useCallback(
