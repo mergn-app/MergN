@@ -27,14 +27,32 @@ const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
 const outsOf = (f: any) => Object.keys(f?.outputSchema?.properties ?? {});
 
+// Canonical gate ref is `<stepId>.output.<field>` (the engine + validator parse
+// index 0 and the LAST segment). Accept fromStep+output, or normalise a
+// free-form ref: a 2-part `step.field` is the common mistake and is expanded.
+function normalizeGateRef(o: { fromStep?: string; output?: string; ref?: string }): string | null {
+  if (o.fromStep && o.output) return `${o.fromStep}.output.${o.output}`;
+  const p = (o.ref ?? "").split(".").filter(Boolean);
+  if (p.length >= 2) return `${p[0]}.output.${p[p.length - 1]}`;
+  return null;
+}
+// Parse a stored gate ref tolerantly: first segment = step, last = field. Works
+// for both `a.output.b` and a loose `a.b`.
+const gateParts = (ref: string): { src: string; fld: string } => {
+  const p = String(ref).split(".").filter(Boolean);
+  return { src: p[0] ?? "", fld: p[p.length - 1] ?? "" };
+};
+
 const CONVENTIONS = `MergN workflow conventions (build steps to match these):
-- A step is an ES module: export default async (ctx, input) => { ... return {...}; }. Read values from input.<field> (this is how ports are derived).
+- A step is an ES module: export default async (ctx, input) => { ... return {...}; }.
+- PORTS ARE DERIVED FROM THE CODE. An input port exists for each input.<field> the body reads (e.g. input.payload). A destructured 2nd param — (ctx, { payload }) => — also works. If derivation is wrong, pass explicit inputs:[...] / outputs:[...] to add_step (these override). Reading input.x is the most reliable.
 - Effectful steps call ctx.connections.<providerId>.<method>(...). Pass the provider id to add_step.
 - Return only outputs a later step or the final action consumes; never echo an input as an output; for a list step return the list, not per-item scalars.
 - Webhook events wrap the entity: unwrap with const obj = input.payload?.data?.object ?? input.payload?.object ?? input.payload, then read fields off obj.
-- Fixed per-step settings (sheet id, channel, column, threshold) go in add_step's configInputs (kept per step). Flowing data is a normal input.
-- Conditional actions: there is no branch node. set_gate an action on an earlier step's decision flag; the engine skips it (and its dependents) when the condition is false. Use for irreversible actions.
-- Before running, call validate_workflow; fix wiringErrors/echoedInputs; then run_workflow.`;
+- Fixed per-step settings (sheet id, channel, column, threshold) go in add_step's configInputs (kept per step, filled by the user in the app). Flowing data is a normal input.
+- Conditional actions: there is no branch node. Call set_gate with step + fromStep + output (+ equals OR truthy). The gate ref is <fromStep>.output.<field>; the engine skips the gated step (and its dependents) when the condition is false. Use for irreversible actions. A boolean decision step returning { allowed: true/false } + truthy:true is the cleanest pattern.
+- Re-adding a step with add_step KEEPS its gate and wires; you don't need to re-wire after editing a step's code (unless you renamed its ports).
+- Before running, call validate_workflow; fix wiringErrors/gateErrors (these break the run) and echoedInputs; configToFill/formFields are filled by the user in the app, not blockers. Then run_workflow.`;
 
 export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): McpServer {
   const server = new McpServer({ name: "mergn", version: "0.1.0" });
@@ -98,28 +116,36 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  tool("add_step", "Add/replace a step from its code; ports are derived from the code. provider=id for an effectful step; configInputs=fixed settings.",
-    { workflowId: z.string(), id: z.string(), code: z.string(), provider: z.string().optional(), configInputs: z.array(z.string()).optional(), arrayInputs: z.array(z.string()).optional() },
-    async ({ workflowId, id, code, provider, configInputs, arrayInputs }) => {
+  tool("add_step", "Add/replace a step. Ports are derived from the code (reads of input.<field>, or a destructured 2nd param). Override with explicit inputs/outputs if derivation is wrong. provider=id for an effectful step; configInputs=fixed settings. Re-adding a step KEEPS its existing gate and wires.",
+    { workflowId: z.string(), id: z.string(), code: z.string(), provider: z.string().optional(), configInputs: z.array(z.string()).optional(), arrayInputs: z.array(z.string()).optional(), inputs: z.array(z.string()).optional(), outputs: z.array(z.string()).optional() },
+    async ({ workflowId, id, code, provider, configInputs, arrayInputs, inputs, outputs }) => {
       const wf = await get(workflowId);
       if (!wf) throw new Error("workflow not found");
-      const used = extractInputs(code);
-      const outs = [...new Set(extractOutputs(code))];
+      // Explicit inputs/outputs win over static derivation — the escape hatch
+      // when a signature the parser can't read (e.g. nested destructuring) would
+      // otherwise yield zero ports.
+      const used: string[] = inputs && inputs.length ? inputs : extractInputs(code);
+      const outs: string[] = [...new Set<string>(outputs && outputs.length ? outputs : extractOutputs(code))];
       const files = new Set(extractFileInputs(code));
       const cfg = new Set(configInputs ?? []);
       const arr = new Set(arrayInputs ?? []);
+      // Preserve the existing step's gate when replacing it, so iterating on a
+      // step's code doesn't silently drop a conditional set earlier. Wires live
+      // in wf.wires (untouched here) and survive as long as the port names match.
+      const prev = (wf.funcs as any[]).find((f) => f.id === id);
       const func = {
         id, title: id, summary: "", version: 1, kind: provider ? "library" : "adapter", pure: !provider,
         inputs: used.map((name) => ({ name, role: cfg.has(name) ? "config" : "input", type: files.has(name) ? "file" : arr.has(name) ? "array" : "string", required: true })),
         outputSchema: { type: "object", properties: Object.fromEntries(outs.map((o) => [o, { type: "string" }])), required: outs },
         bodySource: code, dependencies: [], requires: provider ? [{ name: provider, provider, scopes: [] }] : [],
         dangerClass: provider ? "benign" : null, idempotency: provider ? { key: "runId+funcId", mechanism: "none" } : null,
+        ...(prev?.gate ? { gate: prev.gate } : {}),
       };
       const funcs = [...(wf.funcs as any[]).filter((f) => f.id !== id), func];
       const n = funcs.length - 1;
-      const positions = { ...wf.positions, [id]: { x: 340 + (n % 4) * 340, y: 60 + Math.floor(n / 4) * 200 } };
+      const positions = { ...wf.positions, [id]: prev ? wf.positions?.[id] ?? { x: 340 + (n % 4) * 340, y: 60 + Math.floor(n / 4) * 200 } : { x: 340 + (n % 4) * 340, y: 60 + Math.floor(n / 4) * 200 } };
       await save({ ...base(wf), funcs, positions });
-      return json({ id, inputs: func.inputs.map((p) => `${p.name}:${p.role}`), outputs: outs });
+      return json({ id, inputs: func.inputs.map((p: { name: string; role: string }) => `${p.name}:${p.role}`), outputs: outs, gateKept: !!prev?.gate });
     },
   );
 
@@ -134,15 +160,27 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  tool("set_gate", "Make a step conditional: runs only when an upstream output matches. equals (string) OR truthy (boolean).",
-    { workflowId: z.string(), step: z.string(), ref: z.string(), equals: z.string().optional(), truthy: z.boolean().optional() },
-    async ({ workflowId, step, ref, equals, truthy }) => {
+  tool("set_gate", "Make 'step' conditional: it (and its dependents) run only when an upstream step's output matches. Give fromStep + output (preferred) — the ref is built as <fromStep>.output.<field>. equals (string) OR truthy (boolean) is the condition.",
+    { workflowId: z.string(), step: z.string(), fromStep: z.string().optional(), output: z.string().optional(), ref: z.string().optional(), equals: z.string().optional(), truthy: z.boolean().optional() },
+    async ({ workflowId, step, fromStep, output, ref, equals, truthy }) => {
       const wf = await get(workflowId);
       if (!wf) throw new Error("workflow not found");
-      const funcs = (wf.funcs as any[]).map((f) => (f.id === step ? { ...f, gate: { ref, ...(equals !== undefined ? { equals } : {}), ...(truthy !== undefined ? { truthy } : {}) } } : f));
-      if (!funcs.some((f) => f.id === step)) throw new Error("step not found");
+      // Canonical gate ref is `<stepId>.output.<field>` (engine + validator parse
+      // it that way). Build it from fromStep+output, or normalise a free-form ref
+      // — a 2-part `step.field` is auto-expanded so the common mistake just works.
+      const fullRef = normalizeGateRef({ fromStep, output, ref });
+      if (!fullRef) throw new Error("provide fromStep + output (or a ref like '<fromStep>.output.<field>')");
+      if (equals === undefined && truthy === undefined)
+        throw new Error("provide a condition: equals (string) or truthy (boolean)");
+      const byId = new Map((wf.funcs as any[]).map((f) => [f.id, f]));
+      if (!byId.has(step)) throw new Error(`step '${step}' not found`);
+      const [src, , fld] = fullRef.split(".");
+      const sf = byId.get(src);
+      if (!sf) throw new Error(`gate source step '${src}' not found`);
+      if (!outsOf(sf).includes(fld)) throw new Error(`step '${src}' has no output '${fld}' (it outputs: ${outsOf(sf).join(", ") || "none"})`);
+      const funcs = (wf.funcs as any[]).map((f) => (f.id === step ? { ...f, gate: { ref: fullRef, ...(equals !== undefined ? { equals } : {}), ...(truthy !== undefined ? { truthy } : {}) } } : f));
       await save({ ...base(wf), funcs });
-      return json({ step, gate: { ref, equals, truthy } });
+      return json({ step, gate: { ref: fullRef, equals, truthy } });
     },
   );
 
@@ -162,10 +200,10 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
         if (w.from === "trigger") { if (w.fromOutput && !ef.includes(w.fromOutput)) wiringErrors.push(`trigger has no event field '${w.fromOutput}'`); }
         else { const sf = byId.get(w.from); if (!sf) wiringErrors.push(`wire from unknown step '${w.from}'`); else if (w.fromOutput && !outsOf(sf).includes(w.fromOutput)) wiringErrors.push(`'${w.from}' has no output '${w.fromOutput}'`); }
       }
-      for (const f of funcs) { if (!f.gate?.ref) continue; const [sid, , fld] = String(f.gate.ref).split("."); const sf = byId.get(sid); if (!sf || !outsOf(sf).includes(fld)) gateErrors.push(`'${f.id}' gate ref '${f.gate.ref}' missing output`); if (f.gate.equals === undefined && f.gate.truthy === undefined) gateErrors.push(`'${f.id}' gate has no condition`); }
+      for (const f of funcs) { if (!f.gate?.ref) continue; const { src, fld } = gateParts(f.gate.ref); const sf = byId.get(src); if (!sf) gateErrors.push(`'${f.id}' gate references unknown step '${src}' (ref '${f.gate.ref}'; expected <stepId>.output.<field>)`); else if (!outsOf(sf).includes(fld)) gateErrors.push(`'${f.id}' gate output '${fld}' not produced by '${src}' (it outputs: ${outsOf(sf).join(", ") || "none"})`); if (f.gate.equals === undefined && f.gate.truthy === undefined) gateErrors.push(`'${f.id}' gate has no condition (equals or truthy)`); }
       const sat = new Set(wires.map((w) => `${w.to} ${w.toInput}`));
       const used = new Set(wires.map((w) => `${w.from} ${w.fromOutput}`));
-      for (const f of funcs) { if (f.gate?.ref) { const [sid, , fld] = String(f.gate.ref).split("."); used.add(`${sid} ${fld}`); } }
+      for (const f of funcs) { if (f.gate?.ref) { const { src, fld } = gateParts(f.gate.ref); used.add(`${src} ${fld}`); } }
       const formFields: string[] = [], configToFill: string[] = [];
       for (const f of funcs) for (const p of f.inputs ?? []) { if (sat.has(`${f.id} ${p.name}`) || ef.includes(p.name)) continue; (p.role === "config" ? configToFill : formFields).push(`${f.id}.${p.name}`); }
       const echoedInputs: string[] = [], unusedOutputs: string[] = [];
@@ -174,13 +212,23 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  tool("run_workflow", "Run the workflow once with an optional trigger input; returns each step's status/output.",
+  tool("run_workflow", "Run the workflow once with an optional trigger input; returns each step's status/output. Note: a test run uses the live connections — a step calling an unconnected provider fails until its credential is added in the app.",
     { workflowId: z.string(), input: z.record(z.string(), z.unknown()).optional() },
     async ({ workflowId, input }) => {
       const wf = await get(workflowId);
       if (!wf) throw new Error("workflow not found");
       const r = await deps.runSaved(spaceId, { id: wf.id, name: wf.name, funcs: wf.funcs, wires: wf.wires, config: wf.config, variables: wf.variables }, input ?? {});
-      return json(r.records.map((x) => ({ nodeId: x.nodeId, status: x.status, output: x.output, error: x.error })));
+      const steps = r.records.map((x) => {
+        // A common test-run failure is calling a provider the user hasn't
+        // connected yet (ctx.connections.<id> is undefined). Flag it so it isn't
+        // mistaken for a code bug.
+        const hint =
+          x.status === "failed" && /connections?\.[a-z0-9_]+|is not a function|undefined/i.test(String(x.error ?? ""))
+            ? "this step may call a provider that isn't connected yet — add its credential in the app, then retry"
+            : undefined;
+        return { nodeId: x.nodeId, status: x.status, output: x.output, error: x.error, ...(hint ? { hint } : {}) };
+      });
+      return json(steps);
     },
   );
 

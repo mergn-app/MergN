@@ -74,12 +74,23 @@ export function extractInputs(src: string): string[] {
     set.add(m[1]);
   for (const m of src.matchAll(
     /(?:const|let|var)\s*\{([^}]*)\}\s*=\s*input\b/g,
-  )) {
-    for (const part of m[1].split(",")) {
-      const key = part.trim().split(":")[0].split("=")[0].trim();
-      if (key && !key.startsWith("...") && /^[A-Za-z_$][\w$]*$/.test(key))
-        set.add(key);
-    }
-  }
+  ))
+    addDestructured(set, m[1]);
+  // signature destructuring of the 2nd parameter: `(ctx, { a, b }) => ...` —
+  // a very natural way to write a step that otherwise derived ZERO ports (the
+  // body never says `input.x`). First param must be a plain identifier (ctx).
+  const sig =
+    /export\s+default\s+(?:async\s+)?(?:function\b[^(]*)?\(\s*[A-Za-z_$][\w$]*\s*,\s*\{([^}]*)\}/.exec(
+      src,
+    );
+  if (sig) addDestructured(set, sig[1]);
   return [...set];
+}
+
+function addDestructured(set: Set<string>, inner: string): void {
+  for (const part of inner.split(",")) {
+    const key = part.trim().split(":")[0].split("=")[0].trim();
+    if (key && !key.startsWith("...") && /^[A-Za-z_$][\w$]*$/.test(key))
+      set.add(key);
+  }
 }
