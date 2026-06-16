@@ -146,7 +146,7 @@ function Canvas({
               setTimeout(() => fitView({ duration: 400, padding: 0.28 }), 60);
             }}
             title={t("canvas.autoArrange")}
-            className="flex items-center gap-1.5 rounded-lg border border-border/60 bg-background/90 px-2.5 py-1.5 text-xs font-medium text-foreground/80 shadow-sm backdrop-blur transition-colors hover:text-foreground"
+            className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-foreground/90 transition-colors hover:border-border"
           >
             <Network className="h-3.5 w-3.5" />
             {t("canvas.autoArrange")}
