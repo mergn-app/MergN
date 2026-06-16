@@ -33,6 +33,10 @@ import { authorFunc } from "../agent/func-author";
 import { createWorkflowStore, type TriggerConfig, type WorkflowStore } from "./store";
 import { createRunStore, type RunDoc } from "./runs";
 import { createSettingsStore } from "./settings";
+import { createMcpTokenStore } from "./mcp-tokens";
+import { createMcpOAuth, OAuthError } from "./mcp-oauth";
+import { createRemoteMcpServer, type RemoteMcpDeps } from "./mcp-remote";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   createMemoryRateLimiter,
   type RateLimitResult,
@@ -220,6 +224,15 @@ const MCP_ENABLED = !MANAGED && /^(1|true)$/i.test(process.env.ENABLE_MCP ?? "")
 const LLM_SETTINGS_DISABLED = /^(1|true|yes)$/i.test(
   process.env.DISABLE_LLM_SETTINGS ?? "",
 );
+// Remote MCP endpoint (/mcp) for Pro+ users to drive workflows from Claude /
+// ChatGPT / Gemini. Opt-in; in managed/prod also plan-gated (Pro/Test/Ent).
+const REMOTE_MCP_ENABLED = /^(1|true|yes)$/i.test(
+  process.env.ENABLE_REMOTE_MCP ?? "",
+);
+// OAuth issuer (= this server's public origin). Prefer APP_URL; else derive from
+// the request so self-host behind any host still serves correct metadata.
+const issuerFrom = (reqUrl: string): string =>
+  process.env.APP_URL?.replace(/\/+$/, "") || new URL(reqUrl).origin;
 
 const { store, vault } = createStorage();
 initUsageCap(store);
@@ -227,6 +240,8 @@ const registry = createRegistry(store);
 const oauth = createOAuth({ store, vault, registry });
 const connections = createConnections({ store, vault, oauth });
 const workflows = createWorkflowStore(store);
+const mcpTokens = createMcpTokenStore(store);
+const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
 const settings = createSettingsStore(store);
 
@@ -289,6 +304,31 @@ async function canUseOwnModel(spaceId: string): Promise<boolean> {
   const plan = await billing.planOf(spaceId);
   return OWN_MODEL_PLANS.has(plan.slug);
 }
+
+// Remote MCP: opt-in per deployment, and in managed/prod only Pro/Test/Enterprise
+// spaces (Free is excluded). Self-host has no plan gate.
+async function canUseRemoteMcp(spaceId: string): Promise<boolean> {
+  if (!REMOTE_MCP_ENABLED) return false;
+  if (!MANAGED) return true; // self-host (opt-in already true here)
+  if (!billing.enabled()) return false;
+  const plan = await billing.planOf(spaceId);
+  return OWN_MODEL_PLANS.has(plan.slug);
+}
+
+const remoteMcpDeps: RemoteMcpDeps = {
+  workflows,
+  registry,
+  registerProvider: async (spaceId, draft) => {
+    const d = draft as unknown as import("../providers/registry").ProviderDraft;
+    const spec = registry.registerProviderFromDraft(spaceId, d);
+    await registry.persistProvider(spaceId, d);
+    return { id: spec.id, name: spec.name };
+  },
+  runSaved: async (spaceId, wf, input) => {
+    const run = await runSavedWorkflow(spaceId, wf, input, "mcp");
+    return { records: run.records };
+  },
+};
 
 setLlmBudgetHooks({
   // a space on its OWN key pays for its own tokens — don't count them as ours
@@ -924,6 +964,74 @@ function oauthResultPage(ok: boolean, detail: string): string {
 </body></html>`;
 }
 
+const esc = (s: string) =>
+  s.replace(/[&<>"']/g, (ch) =>
+    ch === "&"
+      ? "&amp;"
+      : ch === "<"
+        ? "&lt;"
+        : ch === ">"
+          ? "&gt;"
+          : ch === '"'
+            ? "&quot;"
+            : "&#39;",
+  );
+
+const mcpPageShell = (inner: string) =>
+  `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MergN</title>
+<style>body{font-family:ui-sans-serif,system-ui;background:#0f0f12;color:#eaeaea;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0}
+.card{background:#1a1a1f;border:1px solid #2a2a32;border-radius:14px;padding:28px;max-width:380px;width:90%}
+h2{margin:0 0 6px;font-size:18px}p{color:#9a9aa5;font-size:14px;line-height:1.5}
+label{display:block;font-size:12px;color:#9a9aa5;margin:14px 0 6px}
+select{width:100%;padding:9px;border-radius:8px;background:#0f0f12;color:#eaeaea;border:1px solid #2a2a32;font-size:14px}
+.row{display:flex;gap:10px;margin-top:20px}button{flex:1;padding:10px;border-radius:8px;border:0;font-size:14px;cursor:pointer}
+.approve{background:#6d5efc;color:#fff}.deny{background:#26262e;color:#cfcfd6}.app{color:#cfcfd6;font-weight:600}</style></head>
+<body><div class="card">${inner}</div></body></html>`;
+
+function mcpErrorPage(msg: string): string {
+  return mcpPageShell(
+    `<h2>Connection failed</h2><p>${esc(msg)}</p><p style="color:#666;font-size:13px">You can close this window.</p>`,
+  );
+}
+
+function mcpConsentPage(
+  clientName: string | undefined,
+  q: Record<string, string>,
+  spaces: { id: string; name: string }[],
+  email: string,
+): string {
+  const hidden = [
+    "client_id",
+    "redirect_uri",
+    "response_type",
+    "code_challenge",
+    "code_challenge_method",
+    "state",
+    "scope",
+    "resource",
+  ]
+    .filter((k) => q[k] != null)
+    .map((k) => `<input type="hidden" name="${k}" value="${esc(q[k])}">`)
+    .join("");
+  const opts = spaces
+    .map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`)
+    .join("");
+  const who = clientName ? esc(clientName) : "An application";
+  return mcpPageShell(`
+<h2>Connect to MergN</h2>
+<p><span class="app">${who}</span> wants to access your workflows and run them on your behalf.</p>
+<form method="post" action="/authorize">
+${hidden}
+<p style="font-size:12px;color:#6f6f78">Signed in as ${esc(email)}</p>
+<label>Workspace</label>
+<select name="space_id">${opts}</select>
+<div class="row">
+<button class="deny" name="deny" value="1" type="submit">Deny</button>
+<button class="approve" name="approve" value="1" type="submit">Allow</button>
+</div>
+</form>`);
+}
+
 const app = new Hono<{ Variables: { spaceId: string; userId: string } }>();
 
 app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
@@ -943,6 +1051,7 @@ app.get("/api/config", (c) =>
     authDisabled: DISABLE_AUTH,
     managed: MANAGED,
     mcpEnabled: MCP_ENABLED,
+    remoteMcp: REMOTE_MCP_ENABLED,
     maxSpaces: LIMITS.maxSpacesPerUser,
     requireEmailVerification: emailVerificationRequired,
   }),
@@ -1859,6 +1968,205 @@ app.get("/api/providers/:id/source", async (c) => {
 // LLM-free provider list + registration for the MCP server. Gated: 404 unless
 // MCP_ENABLED (off on managed/prod, opt-in on self-host). The client writes the
 // provider client code; we just register it — no LLM.
+// Remote-MCP bearer tokens (Pro+). Session-authed; the raw token is shown ONCE.
+app.post("/api/mcp/tokens", async (c) => {
+  const spaceId = c.get("spaceId");
+  if (!(await canUseRemoteMcp(spaceId)))
+    return c.json({ error: "remote MCP requires a Pro plan" }, 403);
+  const body = (await c.req.json().catch(() => ({}))) as { name?: string };
+  const { token, meta } = await mcpTokens.create(
+    c.get("userId"),
+    spaceId,
+    body.name ?? "MCP token",
+  );
+  return c.json({ token, ...meta });
+});
+app.get("/api/mcp/tokens", async (c) =>
+  c.json(await mcpTokens.list(c.get("spaceId"))),
+);
+app.delete("/api/mcp/tokens/:id", async (c) =>
+  c.json({ ok: await mcpTokens.revoke(c.get("spaceId"), c.req.param("id")) }),
+);
+
+// /mcp — remote MCP over Streamable HTTP (Web Standard). Auth is a per-user
+// bearer token (NOT the app session); NOT under /api so the session middleware
+// doesn't touch it. One MCP server/transport per session, keyed by session id.
+const mcpSessions = new Map<
+  string,
+  {
+    transport: WebStandardStreamableHTTPServerTransport;
+    server: ReturnType<typeof createRemoteMcpServer>;
+  }
+>();
+app.all("/mcp", async (c) => {
+  if (!REMOTE_MCP_ENABLED) return c.json({ error: "not found" }, 404);
+  const token = (c.req.header("authorization") ?? "").replace(/^Bearer\s+/i, "");
+  // Accept either a hand-pasted CLI token (mcp-tokens) or an OAuth access token
+  // (mcp-oauth) minted for claude.ai / ChatGPT connectors. Both → {spaceId}.
+  const t =
+    (await mcpTokens.verify(token)) ?? (await mcpOauth.verifyAccessToken(token));
+  if (!t) {
+    // Point OAuth-capable clients at our resource metadata so they can discover
+    // the authorization server and start the flow (RFC 9728).
+    const meta = `${issuerFrom(c.req.url)}/.well-known/oauth-protected-resource`;
+    c.header("WWW-Authenticate", `Bearer resource_metadata="${meta}"`);
+    return c.json({ error: "unauthorized" }, 401);
+  }
+  if (!(await canUseRemoteMcp(t.spaceId)))
+    return c.json({ error: "remote MCP requires a Pro plan" }, 403);
+
+  const sid = c.req.header("mcp-session-id") ?? undefined;
+  let entry = sid ? mcpSessions.get(sid) : undefined;
+  if (!entry) {
+    const server = createRemoteMcpServer(t.spaceId, remoteMcpDeps);
+    const transport: WebStandardStreamableHTTPServerTransport =
+      new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+        onsessioninitialized: (id) => {
+          mcpSessions.set(id, { transport, server });
+        },
+      });
+    transport.onclose = () => {
+      const id = transport.sessionId;
+      if (id) mcpSessions.delete(id);
+    };
+    await server.connect(transport);
+    entry = { transport, server };
+  }
+  return entry.transport.handleRequest(c.req.raw);
+});
+
+// --- MCP OAuth 2.1 (for claude.ai / ChatGPT connectors) -------------------
+// Lets hosted chat clients connect to /mcp via a standard auth-code + PKCE flow
+// (no hand-pasted token). All routes 404 unless remote MCP is enabled. User
+// authentication during /authorize reuses the better-auth app session.
+app.get("/.well-known/oauth-protected-resource", (c) => {
+  if (!REMOTE_MCP_ENABLED) return c.json({ error: "not found" }, 404);
+  return c.json(mcpOauth.metadataProtectedResource(issuerFrom(c.req.url)));
+});
+// Some clients append the resource path segment.
+app.get("/.well-known/oauth-protected-resource/mcp", (c) => {
+  if (!REMOTE_MCP_ENABLED) return c.json({ error: "not found" }, 404);
+  return c.json(mcpOauth.metadataProtectedResource(issuerFrom(c.req.url)));
+});
+app.get("/.well-known/oauth-authorization-server", (c) => {
+  if (!REMOTE_MCP_ENABLED) return c.json({ error: "not found" }, 404);
+  return c.json(mcpOauth.metadataAuthorizationServer(issuerFrom(c.req.url)));
+});
+
+// Dynamic client registration (RFC 7591) — claude.ai / ChatGPT self-register.
+app.post("/register", async (c) => {
+  if (!REMOTE_MCP_ENABLED) return c.json({ error: "not found" }, 404);
+  try {
+    const body = await c.req.json().catch(() => ({}));
+    const client = await mcpOauth.registerClient(body);
+    return c.json(
+      {
+        client_id: client.client_id,
+        client_name: client.client_name,
+        redirect_uris: client.redirect_uris,
+        token_endpoint_auth_method: client.token_endpoint_auth_method,
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        client_id_issued_at: Math.floor(new Date(client.created_at).getTime() / 1000),
+      },
+      201,
+    );
+  } catch (e) {
+    if (e instanceof OAuthError)
+      return c.json({ error: e.code, error_description: e.description }, 400);
+    return c.json({ error: "server_error" }, 500);
+  }
+});
+
+// Authorization endpoint. GET renders a consent page (requires app login);
+// POST (from that page) issues the code and redirects back to the client.
+app.get("/authorize", async (c) => {
+  if (!REMOTE_MCP_ENABLED) return c.json({ error: "not found" }, 404);
+  const q = Object.fromEntries(new URL(c.req.url).searchParams) as Record<
+    string,
+    string
+  >;
+  let prepared;
+  try {
+    prepared = await mcpOauth.prepareAuthorize(q);
+  } catch (e) {
+    if (e instanceof OAuthError && e.redirectable && q.redirect_uri) {
+      const u = new URL(q.redirect_uri);
+      u.searchParams.set("error", e.code);
+      u.searchParams.set("error_description", e.description);
+      if (q.state) u.searchParams.set("state", q.state);
+      return c.redirect(u.toString());
+    }
+    const msg = e instanceof OAuthError ? e.description : "invalid request";
+    return c.html(mcpErrorPage(msg), 400);
+  }
+  // The user must be signed into MergN in this browser. If not, bounce through
+  // the SPA login and come back to this exact URL.
+  const user = DISABLE_AUTH ? LOCAL_USER : await getSessionUser(c.req.raw.headers);
+  if (!user) {
+    const back = new URL(c.req.url);
+    const next = back.pathname + back.search;
+    return c.redirect(`/?mcpAuthorize=${encodeURIComponent(next)}`);
+  }
+  // Plan gating is per-space and enforced at POST (the user picks a space). We
+  // render the consent page for any signed-in user.
+  const spaces = await membership.listSpaces(user.id);
+  return c.html(mcpConsentPage(prepared.client.client_name, q, spaces, user.email));
+});
+
+app.post("/authorize", async (c) => {
+  if (!REMOTE_MCP_ENABLED) return c.json({ error: "not found" }, 404);
+  const user = DISABLE_AUTH ? LOCAL_USER : await getSessionUser(c.req.raw.headers);
+  if (!user) return c.html(mcpErrorPage("session expired — please sign in again"), 401);
+  const form = await c.req.parseBody();
+  const q = Object.fromEntries(
+    Object.entries(form).map(([k, v]) => [k, String(v)]),
+  ) as Record<string, string>;
+  let prepared;
+  try {
+    prepared = await mcpOauth.prepareAuthorize(q);
+  } catch (e) {
+    const msg = e instanceof OAuthError ? e.description : "invalid request";
+    return c.html(mcpErrorPage(msg), 400);
+  }
+  const redirect = new URL(prepared.req.redirect_uri);
+  if (prepared.req.state) redirect.searchParams.set("state", prepared.req.state);
+  if (form.deny) {
+    redirect.searchParams.set("error", "access_denied");
+    return c.redirect(redirect.toString());
+  }
+  const spaceId = q.space_id || (await membership.ensurePersonalSpace(user)).id;
+  if (!DISABLE_AUTH && !(await membership.canAccess(user.id, spaceId)))
+    return c.html(mcpErrorPage("you don't have access to that workspace"), 403);
+  if (!(await canUseRemoteMcp(spaceId))) {
+    redirect.searchParams.set("error", "access_denied");
+    redirect.searchParams.set("error_description", "remote MCP requires a Pro plan");
+    return c.redirect(redirect.toString());
+  }
+  const code = await mcpOauth.issueCode(prepared.req, user.id, spaceId);
+  redirect.searchParams.set("code", code);
+  return c.redirect(redirect.toString());
+});
+
+// Token endpoint (public client + PKCE). No auth header; identity is the code.
+app.post("/token", async (c) => {
+  if (!REMOTE_MCP_ENABLED) return c.json({ error: "not found" }, 404);
+  const form = await c.req.parseBody();
+  const body = Object.fromEntries(
+    Object.entries(form).map(([k, v]) => [k, String(v)]),
+  ) as Record<string, string>;
+  try {
+    const tokens = await mcpOauth.exchangeToken(body);
+    c.header("Cache-Control", "no-store");
+    return c.json(tokens);
+  } catch (e) {
+    if (e instanceof OAuthError)
+      return c.json({ error: e.code, error_description: e.description }, 400);
+    return c.json({ error: "server_error" }, 500);
+  }
+});
+
 app.get("/api/mcp/providers", async (c) => {
   if (!MCP_ENABLED) return c.json({ error: "mcp disabled" }, 404);
   const spaceId = c.get("spaceId");

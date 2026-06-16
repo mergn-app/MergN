@@ -209,6 +209,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     [requireAuth],
   );
 
+  // MCP OAuth bounce-back: the server-rendered /authorize consent page redirects
+  // an unauthenticated user here with ?mcpAuthorize=<path>. Once signed in, send
+  // them back to finish the connect flow. Guarded to our own /authorize path so
+  // it can't be used as an open redirect.
+  useEffect(() => {
+    if (pending) return;
+    const next = new URLSearchParams(window.location.search).get("mcpAuthorize");
+    if (!next || !next.startsWith("/authorize")) return;
+    if (user) window.location.replace(next);
+    else requireAuth();
+  }, [pending, user, requireAuth]);
+
   const doSignOut = useCallback(() => {
     writeCachedUser(null);
     setCachedUser(null);
