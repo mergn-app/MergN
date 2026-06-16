@@ -46,15 +46,37 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     inputForm: wf.inputForm, variables: wf.variables,
   });
 
+  // Wrap every tool so a thrown error (otherwise swallowed by the SDK and shown
+  // to the client as a generic "tool execution" error) is logged here with the
+  // tool name, args and stack — then re-thrown so client behaviour is unchanged.
+  const tool = (
+    name: string,
+    description: string,
+    schema: Record<string, unknown>,
+    handler: (a: any) => Promise<any>,
+  ) =>
+    (server.tool as any)(name, description, schema, async (a: any) => {
+      console.error(
+        `[mcp:${name}] call space=${spaceId} args=${JSON.stringify(a ?? {}).slice(0, 400)}`,
+      );
+      try {
+        return await handler(a);
+      } catch (e) {
+        const err = e instanceof Error ? e : new Error(String(e));
+        console.error(`[mcp:${name}] FAILED space=${spaceId}:`, err.stack ?? err.message);
+        throw err;
+      }
+    });
+
   server.resource("conventions", "mergn://conventions", async (uri) => ({
     contents: [{ uri: uri.href, text: CONVENTIONS, mimeType: "text/markdown" }],
   }));
 
-  server.tool("list_workflows", "List this space's workflows (id + name).", {}, async () =>
+  tool("list_workflows", "List this space's workflows (id + name).", {}, async () =>
     json((await deps.workflows.listWorkflows(spaceId)).map((w) => ({ id: w.id, name: w.name }))),
   );
 
-  server.tool("get_workflow", "Get a workflow's steps, wires, trigger, gates.", { id: z.string() }, async ({ id }) => {
+  tool("get_workflow", "Get a workflow's steps, wires, trigger, gates.", { id: z.string() }, async ({ id }) => {
     const wf = await get(id);
     if (!wf) throw new Error("workflow not found");
     return json({
@@ -64,7 +86,7 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     });
   });
 
-  server.tool("create_workflow", "Create an empty workflow. triggerKind: manual|webhook|schedule|poll.",
+  tool("create_workflow", "Create an empty workflow. triggerKind: manual|webhook|schedule|poll.",
     { name: z.string(), triggerKind: z.enum(["manual", "webhook", "schedule", "poll"]).default("manual") },
     async ({ name, triggerKind }) => {
       const id = randomUUID();
@@ -76,7 +98,7 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  server.tool("add_step", "Add/replace a step from its code; ports are derived from the code. provider=id for an effectful step; configInputs=fixed settings.",
+  tool("add_step", "Add/replace a step from its code; ports are derived from the code. provider=id for an effectful step; configInputs=fixed settings.",
     { workflowId: z.string(), id: z.string(), code: z.string(), provider: z.string().optional(), configInputs: z.array(z.string()).optional(), arrayInputs: z.array(z.string()).optional() },
     async ({ workflowId, id, code, provider, configInputs, arrayInputs }) => {
       const wf = await get(workflowId);
@@ -101,7 +123,7 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  server.tool("set_wire", "Wire an upstream output to a downstream input (one source per input). from='trigger' for an event field.",
+  tool("set_wire", "Wire an upstream output to a downstream input (one source per input). from='trigger' for an event field.",
     { workflowId: z.string(), from: z.string(), fromOutput: z.string(), to: z.string(), toInput: z.string() },
     async ({ workflowId, from, fromOutput, to, toInput }) => {
       const wf = await get(workflowId);
@@ -112,7 +134,7 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  server.tool("set_gate", "Make a step conditional: runs only when an upstream output matches. equals (string) OR truthy (boolean).",
+  tool("set_gate", "Make a step conditional: runs only when an upstream output matches. equals (string) OR truthy (boolean).",
     { workflowId: z.string(), step: z.string(), ref: z.string(), equals: z.string().optional(), truthy: z.boolean().optional() },
     async ({ workflowId, step, ref, equals, truthy }) => {
       const wf = await get(workflowId);
@@ -124,7 +146,7 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  server.tool("validate_workflow", "Check wiringErrors/gateErrors (break the run), echoedInputs (real issue), formFields/configToFill, unusedOutputs (gate-consumed not counted).",
+  tool("validate_workflow", "Check wiringErrors/gateErrors (break the run), echoedInputs (real issue), formFields/configToFill, unusedOutputs (gate-consumed not counted).",
     { id: z.string() },
     async ({ id }) => {
       const wf = await get(id);
@@ -152,7 +174,7 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  server.tool("run_workflow", "Run the workflow once with an optional trigger input; returns each step's status/output.",
+  tool("run_workflow", "Run the workflow once with an optional trigger input; returns each step's status/output.",
     { workflowId: z.string(), input: z.record(z.string(), z.unknown()).optional() },
     async ({ workflowId, input }) => {
       const wf = await get(workflowId);
@@ -162,12 +184,12 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     },
   );
 
-  server.tool("list_providers", "List integrations (id, name, apiDoc, auth).", {}, async () => {
+  tool("list_providers", "List integrations (id, name, apiDoc, auth).", {}, async () => {
     await deps.registry.ensureSpace(spaceId);
     return json(deps.registry.searchProviders(spaceId, "").map((p) => { const a = publicAuth(p); return { id: p.id, name: p.name, apiDoc: p.apiDoc, auth: a.type }; }));
   });
 
-  server.tool("register_provider", "Register a new integration by writing its client (export default (cred, fetch) => ({...})). Declare credential fields the user fills in the app.",
+  tool("register_provider", "Register a new integration by writing its client (export default (cred, fetch) => ({...})). Declare credential fields the user fills in the app.",
     { id: z.string(), name: z.string().optional(), apiDoc: z.string(), clientSource: z.string(), egressDomain: z.string().optional(),
       credentialFields: z.array(z.object({ name: z.string(), label: z.string(), type: z.enum(["text", "password", "number"]).default("password"), required: z.boolean().default(true) })).optional() },
     async ({ id, name, apiDoc, clientSource, egressDomain, credentialFields }) => {
