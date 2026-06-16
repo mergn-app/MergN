@@ -31,6 +31,11 @@ interface AuthContextValue {
   managed: boolean | null;
   maxSpaces: number | null; // workspaces allowed per account (server-configured)
   remoteMcp: boolean; // remote MCP endpoint enabled (ENABLE_REMOTE_MCP)
+  // Billing is shown as an OVERLAY (not a route) so opening it never unmounts the
+  // builder — the open flow, chat stream and run view keep running underneath.
+  billingSpaceId: string | null;
+  openBilling: (spaceId: string) => void;
+  closeBilling: () => void;
   requireAuth: (action?: () => void) => boolean;
   withAuth: <A extends unknown[]>(fn: (...args: A) => void) => (...args: A) => void;
   signOut: () => void;
@@ -43,6 +48,9 @@ const Ctx = createContext<AuthContextValue>({
   managed: null,
   maxSpaces: null,
   remoteMcp: false,
+  billingSpaceId: null,
+  openBilling: () => {},
+  closeBilling: () => {},
   requireAuth: () => false,
   withAuth: (fn) => fn,
   signOut: () => {},
@@ -102,6 +110,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [managed, setManaged] = useState<boolean | null>(null);
   const [maxSpaces, setMaxSpaces] = useState<number | null>(null);
   const [remoteMcp, setRemoteMcp] = useState(false);
+  const [billingSpaceId, setBillingSpaceId] = useState<string | null>(null);
+  const openBilling = useCallback((sid: string) => setBillingSpaceId(sid), []);
+  const closeBilling = useCallback(() => setBillingSpaceId(null), []);
   const [requireVerify, setRequireVerify] = useState(false);
   const [apiUnreachable, setApiUnreachable] = useState(false);
   const [configAttempt, setConfigAttempt] = useState(0);
@@ -264,6 +275,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         managed,
         maxSpaces,
         remoteMcp,
+        billingSpaceId,
+        openBilling,
+        closeBilling,
         requireAuth,
         withAuth,
         signOut: doSignOut,

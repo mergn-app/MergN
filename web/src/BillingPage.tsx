@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useParams, useNavigate } from "@tanstack/react-router";
 import {
-  ArrowLeft,
+  X,
   Loader2,
   CreditCard,
   Sparkles,
@@ -125,23 +126,26 @@ const STATUS: Record<string, { label: string; cls: string }> = {
   free: { label: "Active", cls: "bg-muted text-muted-foreground" },
 };
 
-export function BillingPage() {
-  const { spaceId } = useParams({ strict: false }) as { spaceId?: string };
-  const navigate = useNavigate();
+// Billing rendered as a modal OVERLAY (via authContext.openBilling) so it never
+// unmounts the builder underneath — the open flow, chat stream and run keep
+// going. Closing it just dismisses the overlay; the URL/flow are untouched.
+export function BillingModal({
+  spaceId,
+  onClose,
+}: {
+  spaceId: string;
+  onClose: () => void;
+}) {
   const { managed } = useAuth();
-  const { data: sub, isLoading } = useSubscription(spaceId ?? "");
+  const { data: sub, isLoading } = useSubscription(spaceId);
   const [managing, setManaging] = useState(false);
   const [enterprise, setEnterprise] = useState(false);
 
   useEffect(() => {
-    if (managed === false) {
-      void navigate({
-        to: spaceId ? "/s/$spaceId" : "/",
-        params: spaceId ? { spaceId } : undefined,
-        replace: true,
-      });
-    }
-  }, [managed, navigate, spaceId]);
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
 
   if (managed !== true) return null;
 
@@ -179,26 +183,28 @@ export function BillingPage() {
   const status = sub ? (STATUS[sub.status] ?? STATUS.free) : STATUS.free;
   const pct = bar ? Math.min(100, Math.round((bar.used / bar.total) * 100)) : 0;
 
-  return (
-    <div className="flex min-h-screen w-full justify-center bg-background px-4 py-12 text-foreground">
-      <div className="w-full max-w-md">
-        <button
-          onClick={() =>
-            void navigate({
-              to: "/s/$spaceId",
-              params: { spaceId: spaceId ?? "" },
-            })
-          }
-          className="mb-8 flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          Back to workspace
-        </button>
-
-        <h1 className="mb-1 text-xl font-semibold tracking-tight">Billing</h1>
-        <p className="mb-6 text-sm text-muted-foreground">
-          Your plan and usage.
-        </p>
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-12"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-start justify-between">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">Billing</h1>
+            <p className="text-sm text-muted-foreground">Your plan and usage.</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            title="Close"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
 
         {isLoading || !sub ? (
           <div className="flex h-48 items-center justify-center rounded-2xl border border-border/50">
@@ -286,7 +292,7 @@ export function BillingPage() {
           </div>
         )}
 
-        {sub && spaceId && <InvoicesSection spaceId={spaceId} />}
+        {sub && <InvoicesSection spaceId={spaceId} />}
 
         <button
           onClick={() => setEnterprise(true)}
@@ -298,6 +304,25 @@ export function BillingPage() {
       </div>
 
       {enterprise && <EnterpriseDialog onClose={() => setEnterprise(false)} />}
-    </div>
+    </div>,
+    document.body,
   );
+}
+
+// Thin route component kept for deep links and the Stripe portal return URL
+// (APP_URL/s/<id>/billing). It opens the billing overlay on top of the builder
+// rather than rendering a bare page, then drops the user back on the workspace.
+export function BillingPage() {
+  const { spaceId } = useParams({ strict: false }) as { spaceId?: string };
+  const navigate = useNavigate();
+  const { openBilling } = useAuth();
+  useEffect(() => {
+    if (spaceId) {
+      openBilling(spaceId);
+      void navigate({ to: "/s/$spaceId", params: { spaceId }, replace: true });
+    } else {
+      void navigate({ to: "/", replace: true });
+    }
+  }, [spaceId, openBilling, navigate]);
+  return null;
 }

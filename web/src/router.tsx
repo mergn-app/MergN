@@ -15,13 +15,22 @@ import { LegalLinks } from "./LegalLinks";
 import { AuthProvider, useAuth } from "./authContext";
 import { useSpaces } from "./queries";
 import { setSpace, getLastSpace } from "./space";
-import { BillingPage } from "./BillingPage";
+import { BillingPage, BillingModal } from "./BillingPage";
 import { LegalPage } from "./LegalPage";
+
+// Billing overlay lives ABOVE the route Outlet so opening it never unmounts the
+// builder (App) underneath — chat, run and the open flow keep going.
+function BillingOverlay() {
+  const { billingSpaceId, closeBilling } = useAuth();
+  if (!billingSpaceId) return null;
+  return <BillingModal spaceId={billingSpaceId} onClose={closeBilling} />;
+}
 
 function RootLayout() {
   return (
     <AuthProvider>
       <Outlet />
+      <BillingOverlay />
     </AuthProvider>
   );
 }

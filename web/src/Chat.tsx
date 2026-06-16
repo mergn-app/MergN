@@ -9,7 +9,6 @@ import { Sparkles, ArrowUpRight, Brain, Loader2, X, ArrowLeft } from "lucide-rea
 import { cn } from "@/lib/utils";
 import { Markdown } from "./Markdown";
 import { spaceHeaders, getSpace } from "./space";
-import { useNavigate } from "@tanstack/react-router";
 import { useSubscription, atPlanLimit } from "./billing";
 import { useAuth } from "./authContext";
 import { useConversation, useConnections, reportLog } from "./queries";
@@ -385,13 +384,12 @@ function ChatThread({
       void qc.invalidateQueries({ queryKey: ["conversation"] });
     },
   });
-  const { requireAuth } = useAuth();
+  const { requireAuth, openBilling } = useAuth();
   const initialIds = useRef(new Set(initialMessages.map((m) => m.id)));
   const [input, setInput] = useState("");
   const [connectProvider, setConnectProvider] = useState<string | null>(null);
   const handledConnects = useRef<Set<string>>(new Set());
   const { data: connectionsData } = useConnections();
-  const billingNav = useNavigate();
   const { data: subscription } = useSubscription(getSpace());
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -667,11 +665,7 @@ function ChatThread({
             className="mt-2 h-7"
             onClick={() => {
               const sid = getSpace();
-              if (sid)
-                void billingNav({
-                  to: "/s/$spaceId/billing",
-                  params: { spaceId: sid },
-                });
+              if (sid) openBilling(sid);
             }}
           >
             {subscription?.plan_slug === "free" ? "Upgrade to Pro" : "Manage plan"}

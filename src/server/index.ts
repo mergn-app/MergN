@@ -1275,6 +1275,14 @@ app.post("/api/chat", async (c) => {
           void flushTraces();
         },
       });
+      // Keep generating + saving even if the client disconnects mid-stream (e.g.
+      // the user navigated away or reloaded). Without this the model stream is
+      // tied to the HTTP response, so a disconnect would drop the in-flight
+      // assistant message before onFinish persists it. consumeStream drains the
+      // model independently; the writer.merge below still streams to the client
+      // while it's connected, and on return useConversation reloads the saved
+      // message.
+      void result.consumeStream();
       writer.merge(
         result.toUIMessageStream({
           sendReasoning: true,

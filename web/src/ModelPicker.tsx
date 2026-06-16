@@ -18,6 +18,7 @@ import {
   type LlmProbe,
 } from "./queries";
 import { useAuth } from "./authContext";
+import { getSpace } from "./space";
 
 const PROVIDERS = [
   { value: "mergn", label: "MergN (built-in)" },
@@ -194,7 +195,7 @@ const EMPTY: LlmSettings = {
 export function ModelPicker() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { user } = useAuth();
+  const { user, openBilling } = useAuth();
   const { data } = useLlmSettings();
   const [open, setOpen] = useState(false);
   const autoOpened = useRef(false);
@@ -285,12 +286,19 @@ export function ModelPicker() {
                 Upgrade to Pro to use your own model and API key — your own usage isn't
                 counted toward your plan limits.
               </p>
-              <a
-                href="/billing"
+              <button
+                type="button"
+                onClick={() => {
+                  const sid = getSpace();
+                  if (sid) {
+                    setOpen(false);
+                    openBilling(sid);
+                  }
+                }}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-2 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90"
               >
                 <Sparkles className="size-3.5" /> Upgrade to Pro
-              </a>
+              </button>
             </div>
           ) : (
             <LlmForm
