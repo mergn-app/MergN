@@ -43,17 +43,47 @@ const gateParts = (ref: string): { src: string; fld: string } => {
   return { src: p[0] ?? "", fld: p[p.length - 1] ?? "" };
 };
 
-const CONVENTIONS = `MergN workflow conventions (build steps to match these):
-- A step is an ES module: export default async (ctx, input) => { ... return {...}; }.
-- PORTS ARE DERIVED FROM THE CODE. An input port exists for each input.<field> the body reads (e.g. input.payload). A destructured 2nd param — (ctx, { payload }) => — also works. If derivation is wrong, pass explicit inputs:[...] / outputs:[...] to add_step (these override). Reading input.x is the most reliable.
-- Effectful steps call ctx.connections.<providerId>.<method>(...). Pass the provider id to add_step.
-- NEED AN INTEGRATION THAT ISN'T IN list_providers (email, a SaaS API, etc.)? register_provider a proper one for it — give it credential fields so the user can enter their key/token in the app. Do NOT fall back to the generic 'http' provider for an AUTHENTICATED service: 'http' has NO credential storage, so there's nowhere to put the API key and the step can't authenticate. 'http' is only for public, auth-less URLs. Example: for email, register a 'resend' (or 'sendgrid'/'smtp') provider with an apiKey field, not http.
-- Return only outputs a later step or the final action consumes; never echo an input as an output; for a list step return the list, not per-item scalars.
-- Webhook events wrap the entity: unwrap with const obj = input.payload?.data?.object ?? input.payload?.object ?? input.payload, then read fields off obj.
-- Fixed per-step settings (sheet id, channel, column, threshold) go in add_step's configInputs (kept per step, filled by the user in the app). Flowing data is a normal input.
-- Conditional actions: there is no branch node. Call set_gate with step + fromStep + output (+ equals OR truthy). The gate ref is <fromStep>.output.<field>; the engine skips the gated step (and its dependents) when the condition is false. Use for irreversible actions. A boolean decision step returning { allowed: true/false } + truthy:true is the cleanest pattern.
-- Re-adding a step with add_step KEEPS its gate and wires; you don't need to re-wire after editing a step's code (unless you renamed its ports).
-- Before running, call validate_workflow; fix wiringErrors/gateErrors (these break the run) and echoedInputs; configToFill/formFields are filled by the user in the app, not blockers. Then run_workflow.`;
+// The runtime ALWAYS calls a step as (ctx, input): ctx first (ctx.connections),
+// input second (the wired values + config). Port derivation scans `input.X`
+// regardless of position, so reversed args still derive ports but read nothing
+// at runtime — the single most expensive mistake. Catch the obvious reversal.
+function signatureWarning(code: string): string | undefined {
+  const m =
+    /export\s+default\s+(?:async\s+)?(?:function\b[^(]*)?\(\s*([^,)]*?)\s*(?:,\s*([^,)]*?)\s*)?\)/.exec(code);
+  if (!m) return undefined;
+  const a1 = (m[1] ?? "").trim();
+  const a2 = (m[2] ?? "").trim();
+  if (/^(input|data|args|payload)$/.test(a1) || a2 === "ctx")
+    return "Signature looks REVERSED. The runtime calls (ctx, input): ctx is the 1st arg (ctx.connections), input is the 2nd (your values + config). Write (ctx, input) and read every value as input.<field>. Reversed args derive ports but receive nothing at runtime.";
+  if (/ctx\.config\b/.test(code))
+    return "There is no ctx.config. Config values arrive in input — read them as input.<field> (e.g. input.channelId), same as data.";
+  return undefined;
+}
+
+const CONVENTIONS = `MergN workflow conventions — follow EXACTLY.
+
+STEP SHAPE & RUNTIME CONTRACT (read this first — it is the #1 source of mistakes):
+- A step is: export default async (ctx, input) => { ...; return { ...outputs }; }
+- TWO args, in THIS order. ctx is ALWAYS the 1st arg, input is ALWAYS the 2nd. NEVER reverse them, never name them otherwise.
+- ctx (1st arg) = { connections, idempotencyKey } and NOTHING else. Call a provider with ctx.connections.<providerId>.<method>(...). There is NO ctx.config, NO ctx.input.
+- input (2nd arg) = EVERY value the step receives, keyed by field name — BOTH wired data AND the step's own config (sheet id, channel id, database id, threshold). Read ALL of them as input.<field>: const id = input.databaseId; const rows = input.rows. Config values live in input too — NOT on ctx.
+- PORTS are derived statically from your code: one input port per input.<field> you read (or per key of a destructured 2nd param: (ctx, { a, b }) =>). Output ports = the keys of the object you return. If add_step's response shows the wrong inputs/outputs, pass explicit inputs:[...] / outputs:[...] to override.
+
+WIRING / DATA:
+- Pass the provider id to add_step for an effectful step.
+- Mark fixed per-step settings as add_step configInputs — the user fills them in the app; at runtime you STILL read them as input.<field>.
+- Return only outputs a later step or the final action consumes; never echo an input as an output; for a list return the list, not per-item scalars.
+- Webhook trigger: the whole body arrives as input.payload (reserved name). Unwrap: const obj = input.payload?.data?.object ?? input.payload?.object ?? input.payload.
+
+PROVIDERS:
+- Need a service not in list_providers (email, a SaaS API)? register_provider one with credentialFields — this is the normal way to add an integration. NEVER use the generic 'http' provider for an AUTHENTICATED service: 'http' has no credential storage, so the key has nowhere to go and the step can't auth. 'http' is for public, auth-less URLs only. For email, register e.g. a 'resend' provider with an apiKey field.
+
+GATES (conditional steps):
+- No branch node. set_gate with step + fromStep + output (+ equals OR truthy). Ref is <fromStep>.output.<field>; the gated step (and its dependents) is skipped when false. Cleanest pattern: a decision step returns { allowed: true/false }, then set_gate truthy:true.
+
+WORKFLOW:
+- Re-adding a step with add_step KEEPS its gate and wires (no need to re-wire after editing code, unless you renamed ports).
+- Before running: validate_workflow; fix wiringErrors/gateErrors and echoedInputs. configToFill/formFields are user-filled, not blockers. Then run_workflow — effectful steps fail until the user connects each provider's credential in the app (this is expected in a test run).`;
 
 export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): McpServer {
   const server = new McpServer({ name: "mergn", version: "0.1.0" });
@@ -146,7 +176,8 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
       const n = funcs.length - 1;
       const positions = { ...wf.positions, [id]: prev ? wf.positions?.[id] ?? { x: 340 + (n % 4) * 340, y: 60 + Math.floor(n / 4) * 200 } : { x: 340 + (n % 4) * 340, y: 60 + Math.floor(n / 4) * 200 } };
       await save({ ...base(wf), funcs, positions });
-      return json({ id, inputs: func.inputs.map((p: { name: string; role: string }) => `${p.name}:${p.role}`), outputs: outs, gateKept: !!prev?.gate });
+      const warn = signatureWarning(code);
+      return json({ id, inputs: func.inputs.map((p: { name: string; role: string }) => `${p.name}:${p.role}`), outputs: outs, gateKept: !!prev?.gate, ...(warn ? { warning: warn } : {}), ...(func.inputs.length === 0 ? { note: "0 input ports derived — read values as input.<field> (or destructure the 2nd param), or pass explicit inputs:[...]" } : {}) });
     },
   );
 
