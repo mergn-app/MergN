@@ -46,9 +46,9 @@ export function GateEdge({
             }}
             className="nodrag nopan pointer-events-none absolute flex items-center gap-1 rounded-md border border-amber-500/40 bg-card px-1.5 py-0.5 text-[11px] font-medium leading-none text-amber-600 shadow-sm dark:text-amber-400"
           >
-            <span className="font-mono text-[10px] uppercase tracking-wide opacity-70">
-              if
-            </span>
+            {/* literal "IF" (not CSS uppercase) — text-transform is locale-aware
+                and turns "if" into "İF" in Turkish */}
+            <span className="font-mono text-[10px] tracking-wide opacity-70">IF</span>
             <span className="text-foreground/80">{label}</span>
           </div>
         </EdgeLabelRenderer>
