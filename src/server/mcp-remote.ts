@@ -83,7 +83,7 @@ GATES (conditional steps):
 - No branch node. set_gate with step + fromStep + output (+ equals OR truthy). Ref is <fromStep>.output.<field>; the gated step (and its dependents) is skipped when false. Cleanest pattern: a decision step returns { allowed: true/false }, then set_gate truthy:true.
 
 WORKFLOW:
-- Re-adding a step with add_step KEEPS its gate and wires (no need to re-wire after editing code, unless you renamed ports).
+- Re-adding a step with add_step KEEPS its gate and wires, and auto-prunes wires that pointed at a port you renamed/removed (so no orphaned wires). To delete a wire explicitly use remove_wire (to + toInput); to delete a step + all its wires use remove_step. Never rebuild a whole workflow to clear a bad wire.
 - Before running: validate_workflow; fix wiringErrors/gateErrors and echoedInputs. configToFill/formFields are user-filled, not blockers. Then run_workflow — effectful steps fail until the user connects each provider's credential in the app (this is expected in a test run).`;
 
 export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): McpServer {
@@ -176,9 +176,21 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
       const funcs = [...(wf.funcs as any[]).filter((f) => f.id !== id), func];
       const n = funcs.length - 1;
       const positions = { ...wf.positions, [id]: prev ? wf.positions?.[id] ?? { x: 340 + (n % 4) * 340, y: 60 + Math.floor(n / 4) * 200 } : { x: 340 + (n % 4) * 340, y: 60 + Math.floor(n / 4) * 200 } };
-      await save({ ...base(wf), funcs, positions });
+      // Prune wires that referenced ports this step no longer has (a renamed/
+      // removed input or output). Otherwise they become un-removable orphans that
+      // fail validate forever — the bug that forced a full workflow rebuild.
+      const inNames = new Set(func.inputs.map((p: { name: string }) => p.name));
+      const outNames = new Set(outs);
+      const wiresBefore = (wf.wires as any[]) ?? [];
+      const wires = wiresBefore.filter((w) => {
+        if (w.to === id && !inNames.has(w.toInput)) return false;
+        if (w.from === id && w.fromOutput && !outNames.has(w.fromOutput)) return false;
+        return true;
+      });
+      const droppedWires = wiresBefore.length - wires.length;
+      await save({ ...base(wf), funcs, positions, wires });
       const warn = signatureWarning(code);
-      return json({ id, inputs: func.inputs.map((p: { name: string; role: string }) => `${p.name}:${p.role}`), outputs: outs, gateKept: !!prev?.gate, ...(warn ? { warning: warn } : {}), ...(func.inputs.length === 0 ? { note: "0 input ports derived — read values as input.<field> (or destructure the 2nd param), or pass explicit inputs:[...]" } : {}) });
+      return json({ id, inputs: func.inputs.map((p: { name: string; role: string }) => `${p.name}:${p.role}`), outputs: outs, gateKept: !!prev?.gate, ...(droppedWires ? { prunedOrphanWires: droppedWires } : {}), ...(warn ? { warning: warn } : {}), ...(func.inputs.length === 0 ? { note: "0 input ports derived — read values as input.<field> (or destructure the 2nd param), or pass explicit inputs:[...]" } : {}) });
     },
   );
 
@@ -190,6 +202,33 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
       const wires = [...(wf.wires as any[]).filter((x) => !(x.to === to && x.toInput === toInput)), { from, fromOutput, to, toInput }];
       await save({ ...base(wf), wires });
       return json({ wired: `${from}.${fromOutput}->${to}.${toInput}` });
+    },
+  );
+
+  tool("remove_wire", "Delete the wire feeding a step's input (to + toInput). Use to clear a stale/orphaned wire validate complains about.",
+    { workflowId: z.string(), to: z.string(), toInput: z.string() },
+    async ({ workflowId, to, toInput }) => {
+      const wf = await get(workflowId);
+      if (!wf) throw new Error("workflow not found");
+      const before = (wf.wires as any[]) ?? [];
+      const wires = before.filter((x) => !(x.to === to && x.toInput === toInput));
+      await save({ ...base(wf), wires });
+      return json({ removed: before.length - wires.length, to, toInput });
+    },
+  );
+
+  tool("remove_step", "Delete a step and every wire touching it (as source or target). Also clears any gate referencing it.",
+    { workflowId: z.string(), id: z.string() },
+    async ({ workflowId, id }) => {
+      const wf = await get(workflowId);
+      if (!wf) throw new Error("workflow not found");
+      const funcs = (wf.funcs as any[]).filter((f) => f.id !== id)
+        .map((f) => (f.gate && gateParts(f.gate.ref).src === id ? (({ gate, ...rest }) => rest)(f) : f));
+      const wires = ((wf.wires as any[]) ?? []).filter((w) => w.from !== id && w.to !== id);
+      const positions = { ...(wf.positions ?? {}) };
+      delete (positions as Record<string, unknown>)[id];
+      await save({ ...base(wf), funcs, wires, positions });
+      return json({ removed: id });
     },
   );
 
