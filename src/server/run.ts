@@ -1,5 +1,6 @@
 import type {
   FuncDefinition,
+  FuncContext,
   FuncNode,
   Binding,
   Schema,
@@ -212,16 +213,43 @@ export interface RemoteProviderCarrier {
   dependencies?: string[];
 }
 
-export function createRuntime(): Runtime {
-  const kind = process.env.CODE_RUNTIME;
-  if (kind === "remote") return new RemoteSandboxRuntime();
-  if (kind === "docker") return new DockerRuntime();
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "refusing to execute code in-process in production: set CODE_RUNTIME=docker (run each step in a local container) or remote",
-    );
+function isDockerInfraError(err: unknown): boolean {
+  const msg = String(err ?? "").toLowerCase();
+  return [
+    "cannot connect to the docker daemon",
+    "is the docker daemon running",
+    "permission denied while trying to connect to the docker daemon socket",
+    "spawn docker enoent",
+    "docker: not found",
+    "docker command not found",
+    "the working directory",
+    "invalid mount config",
+  ].some((s) => msg.includes(s));
+}
+
+class DockerWithLocalFallbackRuntime implements Runtime {
+  private docker = new DockerRuntime();
+  private local = new LocalRuntime();
+
+  async run(
+    def: FuncDefinition,
+    ctx: FuncContext,
+    input: Record<string, unknown>,
+  ): Promise<unknown> {
+    try {
+      return await this.docker.run(def, ctx, input);
+    } catch (err) {
+      if (!isDockerInfraError(err)) throw err;
+      return this.local.run(def, ctx, input);
+    }
   }
-  return new LocalRuntime();
+}
+
+export function createRuntime(): Runtime {
+  const kind = (process.env.CODE_RUNTIME ?? "local").toLowerCase();
+  if (kind === "remote") return new RemoteSandboxRuntime();
+  if (kind === "local") return new DockerWithLocalFallbackRuntime();
+  throw new Error("invalid CODE_RUNTIME: use 'local' (docker->native fallback) or 'remote'");
 }
 
 export async function buildProviderCarrier(
