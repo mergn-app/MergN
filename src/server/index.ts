@@ -214,6 +214,12 @@ const MANAGED =
 // MCP support is a SELF-HOST-only feature: never on a managed/prod instance, and
 // even self-host must opt in with ENABLE_MCP. Gates the /api/mcp/* endpoints.
 const MCP_ENABLED = !MANAGED && /^(1|true)$/i.test(process.env.ENABLE_MCP ?? "");
+// Hard-lock the model picker for the whole deployment. Parsed as a real boolean so
+// DISABLE_LLM_SETTINGS=0 / false / "" all mean OFF — a non-empty string like "0"
+// would otherwise be truthy and stay locked.
+const LLM_SETTINGS_DISABLED = /^(1|true|yes)$/i.test(
+  process.env.DISABLE_LLM_SETTINGS ?? "",
+);
 
 const { store, vault } = createStorage();
 initUsageCap(store);
@@ -277,7 +283,7 @@ async function ensureSpaceLlm(spaceId: string): Promise<void> {
 // DISABLE_LLM_SETTINGS hard-locks everyone.
 const OWN_MODEL_PLANS = new Set(["pro", "test", "enterprise"]);
 async function canUseOwnModel(spaceId: string): Promise<boolean> {
-  if (process.env.DISABLE_LLM_SETTINGS) return false;
+  if (LLM_SETTINGS_DISABLED) return false;
   if (!MANAGED) return true; // self-host
   if (!billing.enabled()) return false;
   const plan = await billing.planOf(spaceId);
@@ -1504,7 +1510,7 @@ app.get("/api/settings/llm", async (c) => {
   // why it's locked: 'instance' = the deployment forces its model (hide the
   // picker); 'plan' = a Free space that can pick MergN but must upgrade to bring
   // its own model (show MergN + upgrade hint).
-  const lockReason: "instance" | "plan" | null = process.env.DISABLE_LLM_SETTINGS
+  const lockReason: "instance" | "plan" | null = LLM_SETTINGS_DISABLED
     ? "instance"
     : !canSet
       ? "plan"
