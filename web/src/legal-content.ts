@@ -69,7 +69,7 @@ export const LEGAL_CONTENT = {
       },
       {
         heading: "Contact",
-        paragraphs: ["Questions about these terms: hq@flowbaker.io"],
+        paragraphs: ["Questions about these terms: mergn@quollhq.com"],
       },
     ] satisfies LegalSection[],
   },
@@ -155,7 +155,7 @@ export const LEGAL_CONTENT = {
       {
         heading: "Your rights",
         paragraphs: [
-          "Depending on your jurisdiction, you may have rights to access, correct, or delete your personal data. Contact us at hq@flowbaker.io.",
+          "Depending on your jurisdiction, you may have rights to access, correct, or delete your personal data. Contact us at mergn@quollhq.com.",
         ],
       },
       {
@@ -166,7 +166,7 @@ export const LEGAL_CONTENT = {
       },
       {
         heading: "Contact",
-        paragraphs: ["Privacy questions: hq@flowbaker.io"],
+        paragraphs: ["Privacy questions: mergn@quollhq.com"],
       },
     ] satisfies LegalSection[],
   },

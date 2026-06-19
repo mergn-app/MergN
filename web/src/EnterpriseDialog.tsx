@@ -3,7 +3,7 @@ import { Mail, MessageCircle, X } from "lucide-react";
 
 // Contact targets for the Enterprise "Contact us" CTA. Edit these to your real
 // addresses.
-const ENTERPRISE_EMAIL = "contact@flowbaker.io";
+const ENTERPRISE_EMAIL = "mergn@quollhq.com";
 const ENTERPRISE_DISCORD = "https://discord.gg/wDxHFkcbhD";
 
 export function EnterpriseDialog({
