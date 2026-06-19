@@ -23,7 +23,24 @@
   "llm": {
     "selectModel": "Select model",
     "pickToStart": "Pick an AI model to start",
-    "keyUnchanged": "•••••• (unchanged)"
+    "keyUnchanged": "•••••• (unchanged)",
+    "modelOptionalHint": "Optional — leave empty for the provider default",
+    "modelInvalidHelp": "This may be a model name issue. Check the provider's official model list:",
+    "modelNameFormatHint": "The name must match exactly — e.g. {{example}}. Even one wrong or missing character will fail.",
+    "modelDocsLink": "View valid model names",
+    "modelDefaultHint": "Or clear the model field to use that provider's default model.",
+    "mergnBuiltIn": "MergN's built-in model. No API key needed — usage counts toward your plan.",
+    "ownKeyHint": "Your own key — usage is billed to you, not counted toward your plan limits.",
+    "probing": "Testing model…",
+    "weakLocalTitle": "⚠ This model looks too weak for the builder",
+    "weakLocalStructuredWrong": "Produced structured output but it was wrong (didn't follow the instruction exactly).",
+    "weakLocalNoSchema": "Could not produce the required JSON schema.",
+    "weakLocalAdvice": "The builder generates every step with forced schema; small/local models often can't. Stronger models recommended: Llama 3.1 70B / Qwen 2.5 32B+ or a cloud model (Gemini / GPT-4o / Claude).",
+    "weakCloudTitle": "⚠ Model test failed",
+    "weakCloudBody": "The provider didn't respond — likely a key, quota, or billing issue.",
+    "probeSuccess": "✓ Model passed structured output test ({{ms}} ms)",
+    "planLockedBody": "You're on <bold>MergN</bold>, the built-in model. Upgrade to Pro to use your own model and API key — your own usage isn't counted toward your plan limits.",
+    "upgradeToPro": "Upgrade to Pro"
   },
   "auth": {
     "welcomeBack": "Welcome back",

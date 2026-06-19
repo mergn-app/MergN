@@ -23,7 +23,24 @@
   "llm": {
     "selectModel": "Model seç",
     "pickToStart": "Başlamak için bir AI modeli seç",
-    "keyUnchanged": "•••••• (değişmedi)"
+    "keyUnchanged": "•••••• (değişmedi)",
+    "modelOptionalHint": "İsteğe bağlı — boş bırakırsan sağlayıcının varsayılan modeli kullanılır",
+    "modelInvalidHelp": "Sorun büyük ihtimalle model adından kaynaklanıyor. Sağlayıcının resmi model listesine bak:",
+    "modelNameFormatHint": "Model adı birebir uymalı — örn. {{example}}. Tek harf bile eksik, fazla veya yanlış olmamalı.",
+    "modelDocsLink": "Geçerli model adlarını gör",
+    "modelDefaultHint": "Ya da model alanını boş bırakıp o sağlayıcının varsayılan modelini kullan.",
+    "mergnBuiltIn": "MergN'nin yerleşik modeli. API anahtarı gerekmez — kullanım planına sayılır.",
+    "ownKeyHint": "Kendi anahtarın — kullanım sana faturalanır, plan limitlerine sayılmaz.",
+    "probing": "Model test ediliyor…",
+    "weakLocalTitle": "⚠ Bu model builder için zayıf görünüyor",
+    "weakLocalStructuredWrong": "Yapılandırılmış çıktıyı üretti ama yanlış (talimatı tam izleyemedi).",
+    "weakLocalNoSchema": "Gerekli JSON şemasını üretemedi.",
+    "weakLocalAdvice": "Builder her adımı şema-zorlamalı üretir; küçük/yerel modeller çoğu zaman bunu yapamaz. Daha güçlü model önerilir: Llama 3.1 70B / Qwen 2.5 32B+ ya da bir bulut modeli (Gemini / GPT-4o / Claude).",
+    "weakCloudTitle": "⚠ Model testi başarısız",
+    "weakCloudBody": "Sağlayıcı yanıt vermedi — büyük olasılıkla anahtar, kota veya faturalandırma sorunu.",
+    "probeSuccess": "✓ Model yapılandırılmış çıktı testini geçti ({{ms}} ms)",
+    "planLockedBody": "<bold>MergN</bold> yerleşik modelindesin. Kendi modelini ve API anahtarını kullanmak için Pro'ya geç — kendi kullanımın plan limitlerine sayılmaz.",
+    "upgradeToPro": "Pro'ya geç"
   },
   "auth": {
     "welcomeBack": "Tekrar hoş geldin",

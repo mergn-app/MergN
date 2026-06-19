@@ -23,7 +23,24 @@
   "llm": {
     "selectModel": "Elegir modelo",
     "pickToStart": "Elige un modelo de IA para empezar",
-    "keyUnchanged": "•••••• (sin cambios)"
+    "keyUnchanged": "•••••• (sin cambios)",
+    "modelOptionalHint": "Opcional — déjalo vacío para usar el modelo predeterminado del proveedor",
+    "modelInvalidHelp": "Puede ser un problema con el nombre del modelo. Consulta la lista oficial del proveedor:",
+    "modelNameFormatHint": "El nombre debe coincidir exactamente — p. ej. {{example}}. Un solo carácter mal o faltante fallará.",
+    "modelDocsLink": "Ver nombres de modelo válidos",
+    "modelDefaultHint": "O deja el campo de modelo vacío para usar el modelo predeterminado del proveedor.",
+    "mergnBuiltIn": "Modelo integrado de MergN. No necesitas clave API — el uso cuenta en tu plan.",
+    "ownKeyHint": "Tu propia clave — el uso se te factura y no cuenta en los límites de tu plan.",
+    "probing": "Probando modelo…",
+    "weakLocalTitle": "⚠ Este modelo parece demasiado débil para el builder",
+    "weakLocalStructuredWrong": "Generó salida estructurada pero incorrecta (no siguió la instrucción al pie de la letra).",
+    "weakLocalNoSchema": "No pudo generar el esquema JSON requerido.",
+    "weakLocalAdvice": "El builder genera cada paso con esquema obligatorio; los modelos locales/pequeños a menudo no pueden. Se recomiendan modelos más potentes: Llama 3.1 70B / Qwen 2.5 32B+ o un modelo en la nube (Gemini / GPT-4o / Claude).",
+    "weakCloudTitle": "⚠ Prueba de modelo fallida",
+    "weakCloudBody": "El proveedor no respondió — probablemente un problema de clave, cuota o facturación.",
+    "probeSuccess": "✓ El modelo pasó la prueba de salida estructurada ({{ms}} ms)",
+    "planLockedBody": "Estás en <bold>MergN</bold>, el modelo integrado. Pasa a Pro para usar tu propio modelo y clave API — tu uso propio no cuenta en los límites del plan.",
+    "upgradeToPro": "Pasar a Pro"
   },
   "auth": {
     "welcomeBack": "Bienvenido de nuevo",

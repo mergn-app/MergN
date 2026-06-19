@@ -437,17 +437,26 @@ export interface LlmSettings {
   lockReason?: "instance" | "plan" | null;
 }
 
-export function saveLlmSettings(body: {
+export async function saveLlmSettings(body: {
   provider: string;
   model?: string;
   baseURL?: string;
   apiKey?: string;
-}): Promise<{ ok: boolean }> {
-  return json("/api/settings/llm", {
+}): Promise<{ ok: boolean; modelRejected?: boolean; error?: string }> {
+  const res = await fetch("/api/settings/llm", {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...spaceHeaders() },
     body: JSON.stringify(body),
   });
+  const data = (await res.json().catch(() => ({}))) as {
+    ok?: boolean;
+    error?: string;
+    modelRejected?: boolean;
+  };
+  if (!res.ok) {
+    throw new Error(data.error || `Save failed: ${res.status}`);
+  }
+  return data as { ok: boolean; modelRejected?: boolean; error?: string };
 }
 
 export interface FileMeta {

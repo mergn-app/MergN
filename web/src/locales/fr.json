@@ -23,7 +23,24 @@
   "llm": {
     "selectModel": "Choisir un modèle",
     "pickToStart": "Choisissez un modèle d'IA pour commencer",
-    "keyUnchanged": "•••••• (inchangé)"
+    "keyUnchanged": "•••••• (inchangé)",
+    "modelOptionalHint": "Optionnel — laissez vide pour le modèle par défaut du fournisseur",
+    "modelInvalidHelp": "Le problème vient probablement du nom du modèle. Consultez la liste officielle du fournisseur :",
+    "modelNameFormatHint": "Le nom doit correspondre exactement — ex. {{example}}. Un seul caractère manquant ou incorrect échouera.",
+    "modelDocsLink": "Voir les noms de modèles valides",
+    "modelDefaultHint": "Ou laissez le champ modèle vide pour utiliser le modèle par défaut du fournisseur.",
+    "mergnBuiltIn": "Modèle intégré MergN. Pas de clé API — l'utilisation compte dans votre forfait.",
+    "ownKeyHint": "Votre propre clé — l'utilisation vous est facturée et ne compte pas dans les limites de votre forfait.",
+    "probing": "Test du modèle…",
+    "weakLocalTitle": "⚠ Ce modèle semble trop faible pour le builder",
+    "weakLocalStructuredWrong": "Sortie structurée produite mais incorrecte (instruction pas suivie à la lettre).",
+    "weakLocalNoSchema": "Impossible de produire le schéma JSON requis.",
+    "weakLocalAdvice": "Le builder produit chaque étape avec schéma obligatoire ; les petits modèles locaux échouent souvent. Modèles plus puissants recommandés : Llama 3.1 70B / Qwen 2.5 32B+ ou un modèle cloud (Gemini / GPT-4o / Claude).",
+    "weakCloudTitle": "⚠ Test du modèle échoué",
+    "weakCloudBody": "Le fournisseur n'a pas répondu — probablement un problème de clé, de quota ou de facturation.",
+    "probeSuccess": "✓ Le modèle a réussi le test de sortie structurée ({{ms}} ms)",
+    "planLockedBody": "Vous êtes sur <bold>MergN</bold>, le modèle intégré. Passez à Pro pour utiliser votre propre modèle et clé API — votre usage propre ne compte pas dans les limites du forfait.",
+    "upgradeToPro": "Passer à Pro"
   },
   "auth": {
     "welcomeBack": "Bon retour",

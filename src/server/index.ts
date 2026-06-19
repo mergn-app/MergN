@@ -60,6 +60,7 @@ import {
 import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
 import { reconcileWiring } from "../agent/wiring-repair";
 import { probeModel } from "../agent/probe";
+import { validateModelName } from "../agent/validate-model";
 import { authorInputForm } from "../agent/form-author";
 import { setLlmBudgetHooks } from "../agent/llm-budget";
 import { LIMITS } from "../limits";
@@ -1677,9 +1678,26 @@ app.post("/api/settings/llm", async (c) => {
     return c.json({ ok: true, usingOwn: false });
   }
   const current = MANAGED ? getSpaceLlmConfig(spaceId) : await settings.getLlm();
+  const requestedModel =
+    body.model === undefined ? undefined : String(body.model).trim() || undefined;
+  let modelRejected = false;
+
+  let resolvedModel = requestedModel;
+  if (requestedModel) {
+    const check = await validateModelName(provider, requestedModel, {
+      apiKey: body.apiKey || current?.apiKey || undefined,
+      baseURL: body.baseURL || current?.baseURL || undefined,
+    });
+    if (!check.valid) {
+      modelRejected = true;
+      resolvedModel =
+        current?.provider === provider ? current?.model || undefined : undefined;
+    }
+  }
+
   const cfg: LlmConfig = {
     provider,
-    model: body.model || undefined,
+    model: resolvedModel,
     baseURL: body.baseURL || undefined,
     // the key is never sent back to the client, so an empty value means
     // "keep the existing one".
@@ -1692,7 +1710,14 @@ app.post("/api/settings/llm", async (c) => {
     await settings.setLlm("_global", cfg);
     setLlmConfig(cfg);
   }
-  return c.json({ ok: true, usingOwn: true });
+  return c.json({
+    ok: true,
+    usingOwn: true,
+    modelRejected,
+    ...(modelRejected
+      ? { error: `Model not found: ${requestedModel}` }
+      : {}),
+  });
 });
 
 // Capability probe for the active model. Detects a model too weak to produce

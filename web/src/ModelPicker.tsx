@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useTranslation } from "react-i18next";
+import { useTranslation, Trans } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { ChevronUp, Loader2, Sparkles, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,14 +19,30 @@ import {
 } from "./queries";
 import { useAuth } from "./authContext";
 import { getSpace } from "./space";
+import {
+  ModelNameErrorHelp,
+  shouldShowModelNameHelp,
+} from "./llm-model-help";
 
-const PROVIDERS = [
+const ALL_PROVIDERS = [
   { value: "mergn", label: "MergN (built-in)" },
   { value: "google", label: "Google (Gemini)" },
   { value: "openai", label: "OpenAI" },
   { value: "anthropic", label: "Anthropic (Claude)" },
   { value: "local", label: "Local (Ollama / LM Studio / vLLM)" },
 ];
+
+function providersFor(managed: boolean | null) {
+  if (managed === true) return ALL_PROVIDERS;
+  return ALL_PROVIDERS.filter((p) => p.value !== "mergn");
+}
+
+function initialProvider(current: LlmSettings, managed: boolean | null) {
+  const p = current.provider || "";
+  if (managed === true) return p || "mergn";
+  if (p && p !== "mergn") return p;
+  return "google";
+}
 
 const MODEL_PLACEHOLDER: Record<string, string> = {
   google: "gemini-2.5-flash",
@@ -37,15 +53,20 @@ const MODEL_PLACEHOLDER: Record<string, string> = {
 
 function LlmForm({
   current,
+  managed,
   onRefresh,
   onClose,
 }: {
   current: LlmSettings;
+  managed: boolean | null;
   onRefresh: () => void;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
-  const [provider, setProvider] = useState(current.provider || "mergn");
+  const providers = providersFor(managed);
+  const [provider, setProvider] = useState(() =>
+    initialProvider(current, managed),
+  );
   const [model, setModel] = useState(current.model || "");
   const [baseURL, setBaseURL] = useState(current.baseURL || "");
   const [apiKey, setApiKey] = useState("");
@@ -55,7 +76,7 @@ function LlmForm({
   const [error, setError] = useState<string | null>(null);
 
   const isLocal = provider === "local";
-  const isMergn = provider === "mergn";
+  const isMergn = managed === true && provider === "mergn";
   const fieldCls =
     "w-full rounded-lg border border-border/60 bg-background-subtle px-2 py-1 text-xs outline-none focus:border-border";
 
@@ -64,22 +85,34 @@ function LlmForm({
     setError(null);
     setProbe(null);
     try {
-      await saveLlmSettings({
+      const saveResult = await saveLlmSettings({
         provider,
-        model: model || undefined,
+        model: model.trim() || undefined,
         baseURL: baseURL || undefined,
         apiKey: apiKey || undefined,
       });
       onRefresh();
-      // verify the freshly-saved model can actually do structured output
+      if (saveResult.modelRejected) {
+        setSaving(false);
+        setError(saveResult.error ?? "Model not found");
+        return;
+      }
       setSaving(false);
       setProbing(true);
-      const result = await probeLlm().catch(() => null);
+      let probeFetchError: string | null = null;
+      const probeResult = await probeLlm().catch((e) => {
+        probeFetchError = e instanceof Error ? e.message : String(e);
+        return null;
+      });
       setProbing(false);
-      if (result) {
-        setProbe(result);
-        // happy path (capable model): close shortly; weak model: stay open with the warning
-        if (!result.weak) setTimeout(onClose, 900);
+      if (probeFetchError) {
+        setError(probeFetchError);
+        return;
+      }
+      if (probeResult) {
+        setProbe(probeResult);
+        if (shouldShowModelNameHelp(provider, model, null, probeResult)) return;
+        if (!probeResult.weak) setTimeout(onClose, 900);
       } else {
         onClose();
       }
@@ -90,6 +123,8 @@ function LlmForm({
     }
   };
 
+  const modelNameHelp = shouldShowModelNameHelp(provider, model, error, probe);
+
   return (
     <div className="space-y-2">
       <Select value={provider} onValueChange={setProvider}>
@@ -97,7 +132,7 @@ function LlmForm({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {PROVIDERS.map((p) => (
+          {providers.map((p) => (
             <SelectItem key={p.value} value={p.value}>
               {p.label}
             </SelectItem>
@@ -107,16 +142,23 @@ function LlmForm({
 
       {isMergn ? (
         <p className="rounded-lg bg-secondary/50 px-2 py-1.5 text-[11px] text-muted-foreground">
-          MergN's built-in model. No API key needed — usage counts toward your plan.
+          {t("llm.mergnBuiltIn")}
         </p>
       ) : (
         <>
           <input
             className={fieldCls}
             value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder={MODEL_PLACEHOLDER[provider] ?? ""}
+            onChange={(e) => {
+              setModel(e.target.value);
+              setError(null);
+              setProbe(null);
+            }}
+            placeholder={MODEL_PLACEHOLDER[provider] ?? t("llm.modelOptionalHint")}
           />
+          <p className="px-0.5 text-[10px] text-muted-foreground/70">
+            {t("llm.modelOptionalHint")}
+          </p>
           {isLocal ? (
             <input
               className={`${fieldCls} font-mono`}
@@ -134,12 +176,16 @@ function LlmForm({
             />
           )}
           <p className="px-0.5 text-[10px] text-muted-foreground/70">
-            Your own key — usage is billed to you, not counted toward your plan limits.
+            {t("llm.ownKeyHint")}
           </p>
         </>
       )}
 
-      {error && <p className="text-[11px] text-destructive">{error}</p>}
+      {modelNameHelp ? (
+        <ModelNameErrorHelp provider={provider} />
+      ) : error ? (
+        <p className="text-[11px] text-destructive">{error}</p>
+      ) : null}
 
       <button
         type="button"
@@ -148,35 +194,29 @@ function LlmForm({
         className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-2 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-50"
       >
         {(saving || probing) && <Loader2 className="size-3 animate-spin" />}
-        {probing ? "Model test ediliyor…" : t("common.save")}
+        {probing ? t("llm.probing") : t("common.save")}
       </button>
 
-      {probe?.weak && probe.local && (
+      {probe?.weak && probe.local && !modelNameHelp && (
         <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
-          <p className="font-medium">⚠ Bu model builder için zayıf görünüyor</p>
+          <p className="font-medium">{t("llm.weakLocalTitle")}</p>
           <p className="text-amber-200/80">
             {probe.structured
-              ? "Yapılandırılmış çıktıyı üretti ama yanlış (talimatı tam izleyemedi)."
-              : "Gerekli JSON şemasını üretemedi."}{" "}
-            Builder her adımı şema-zorlamalı üretir; küçük/yerel modeller çoğu zaman
-            bunu yapamaz. Daha güçlü bir model önerilir: <b>Llama 3.1 70B</b> /{" "}
-            <b>Qwen 2.5 32B+</b> ya da bir bulut modeli (Gemini / GPT-4o / Claude).
+              ? t("llm.weakLocalStructuredWrong")
+              : t("llm.weakLocalNoSchema")}{" "}
+            {t("llm.weakLocalAdvice")}
           </p>
         </div>
       )}
-      {probe?.weak && !probe.local && (
+      {probe?.weak && !probe.local && !modelNameHelp && (
         <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
-          <p className="font-medium">⚠ Model testi başarısız</p>
-          <p className="text-amber-200/80">
-            Bu sağlayıcı yanıt vermedi — büyük olasılıkla anahtar, kota veya
-            faturalandırma sorunu.{" "}
-            {probe.error ? <span className="opacity-80">({probe.error})</span> : null}
-          </p>
+          <p className="font-medium">{t("llm.weakCloudTitle")}</p>
+          <p className="text-amber-200/80">{t("llm.weakCloudBody")}</p>
         </div>
       )}
       {probe && !probe.weak && (
         <p className="text-[11px] text-emerald-400">
-          ✓ Model yapılandırılmış çıktıyı geçti ({probe.latencyMs} ms)
+          {t("llm.probeSuccess", { ms: probe.latencyMs })}
         </p>
       )}
     </div>
@@ -195,7 +235,7 @@ const EMPTY: LlmSettings = {
 export function ModelPicker() {
   const { t } = useTranslation();
   const qc = useQueryClient();
-  const { user, openBilling } = useAuth();
+  const { user, openBilling, managed } = useAuth();
   const { data } = useLlmSettings();
   const [open, setOpen] = useState(false);
   const autoOpened = useRef(false);
@@ -282,9 +322,12 @@ export function ModelPicker() {
           {planLocked ? (
             <div className="space-y-2">
               <p className="rounded-lg bg-secondary/50 px-2 py-1.5 text-[11px] text-muted-foreground">
-                You're on <b className="text-foreground">MergN</b>, the built-in model.
-                Upgrade to Pro to use your own model and API key — your own usage isn't
-                counted toward your plan limits.
+                <Trans
+                  i18nKey="llm.planLockedBody"
+                  components={{
+                    bold: <b className="text-foreground" />,
+                  }}
+                />
               </p>
               <button
                 type="button"
@@ -297,12 +340,13 @@ export function ModelPicker() {
                 }}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-foreground px-2 py-1.5 text-xs font-medium text-background transition-opacity hover:opacity-90"
               >
-                <Sparkles className="size-3.5" /> Upgrade to Pro
+                <Sparkles className="size-3.5" /> {t("llm.upgradeToPro")}
               </button>
             </div>
           ) : (
             <LlmForm
               current={current}
+              managed={managed}
               onRefresh={() =>
                 qc.invalidateQueries({ queryKey: ["llm-settings"] })
               }

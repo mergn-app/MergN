@@ -23,7 +23,24 @@
   "llm": {
     "selectModel": "Modell wählen",
     "pickToStart": "Wähle ein KI-Modell, um zu starten",
-    "keyUnchanged": "•••••• (unverändert)"
+    "keyUnchanged": "•••••• (unverändert)",
+    "modelOptionalHint": "Optional — leer lassen für das Standardmodell des Anbieters",
+    "modelInvalidHelp": "Das Problem liegt vermutlich am Modellnamen. Prüfe die offizielle Modellliste des Anbieters:",
+    "modelNameFormatHint": "Der Name muss exakt passen — z. B. {{example}}. Schon ein falsches oder fehlendes Zeichen führt zu Fehlern.",
+    "modelDocsLink": "Gültige Modellnamen ansehen",
+    "modelDefaultHint": "Oder das Modellfeld leer lassen, um das Standardmodell des Anbieters zu nutzen.",
+    "mergnBuiltIn": "MergNs eingebautes Modell. Kein API-Schlüssel nötig — die Nutzung zählt zu deinem Plan.",
+    "ownKeyHint": "Dein eigener Schlüssel — die Nutzung wird dir berechnet und zählt nicht zu deinen Plan-Limits.",
+    "probing": "Modell wird getestet…",
+    "weakLocalTitle": "⚠ Dieses Modell wirkt für den Builder zu schwach",
+    "weakLocalStructuredWrong": "Strukturierte Ausgabe erzeugt, aber falsch (Anweisung nicht exakt befolgt).",
+    "weakLocalNoSchema": "Das erforderliche JSON-Schema konnte nicht erzeugt werden.",
+    "weakLocalAdvice": "Der Builder erzeugt jeden Schritt schema-gezwungen; kleine/lokale Modelle schaffen das oft nicht. Stärkere Modelle empfohlen: Llama 3.1 70B / Qwen 2.5 32B+ oder ein Cloud-Modell (Gemini / GPT-4o / Claude).",
+    "weakCloudTitle": "⚠ Modelltest fehlgeschlagen",
+    "weakCloudBody": "Der Anbieter hat nicht geantwortet — wahrscheinlich Schlüssel-, Kontingent- oder Abrechnungsproblem.",
+    "probeSuccess": "✓ Modell hat den Strukturtest bestanden ({{ms}} ms)",
+    "planLockedBody": "Du nutzt <bold>MergN</bold>, das eingebaute Modell. Upgrade auf Pro, um dein eigenes Modell und deinen API-Schlüssel zu verwenden — deine eigene Nutzung zählt nicht zu deinen Plan-Limits.",
+    "upgradeToPro": "Auf Pro upgraden"
   },
   "auth": {
     "welcomeBack": "Willkommen zurück",
