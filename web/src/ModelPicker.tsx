@@ -44,6 +44,11 @@ function initialProvider(current: LlmSettings, managed: boolean | null) {
   return "google";
 }
 
+function initialModel(current: LlmSettings, provider: string) {
+  if (current.provider !== provider) return "";
+  return current.model || "";
+}
+
 const MODEL_PLACEHOLDER: Record<string, string> = {
   google: "gemini-2.5-flash",
   openai: "gpt-4o",
@@ -64,10 +69,9 @@ function LlmForm({
 }) {
   const { t } = useTranslation();
   const providers = providersFor(managed);
-  const [provider, setProvider] = useState(() =>
-    initialProvider(current, managed),
-  );
-  const [model, setModel] = useState(current.model || "");
+  const startProvider = initialProvider(current, managed);
+  const [provider, setProvider] = useState(startProvider);
+  const [model, setModel] = useState(() => initialModel(current, startProvider));
   const [baseURL, setBaseURL] = useState(current.baseURL || "");
   const [apiKey, setApiKey] = useState("");
   const [saving, setSaving] = useState(false);
@@ -127,7 +131,15 @@ function LlmForm({
 
   return (
     <div className="space-y-2">
-      <Select value={provider} onValueChange={setProvider}>
+      <Select
+        value={provider}
+        onValueChange={(next) => {
+          setProvider(next);
+          setModel("");
+          setError(null);
+          setProbe(null);
+        }}
+      >
         <SelectTrigger size="sm" className="w-full bg-background-subtle text-xs">
           <SelectValue />
         </SelectTrigger>
