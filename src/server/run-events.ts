@@ -3,6 +3,7 @@ export interface RunEvent {
   workflowId: string;
   status: string;
   trigger: string;
+  errorType?: string; // set on failed runs (transient|auth|logic|unknown)
 }
 
 type Listener = (event: RunEvent) => void;

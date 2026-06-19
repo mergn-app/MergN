@@ -47,6 +47,9 @@ import {
 } from "./ratelimit";
 import { runWorkflow } from "./run";
 import { emitRun, onRun } from "./run-events";
+import { classifyError, type ErrorType } from "./error-classify";
+import { createHealthMonitor } from "./health";
+import { createLivenessEvaluator } from "./liveness";
 import { createRegistry, publicAuth, type ProviderDraft } from "../providers/registry";
 import { assertSpace, type DocStore } from "../store/docstore";
 import { createStorage } from "../store/factory";
@@ -218,7 +221,7 @@ function withResultLimits(tools: ToolSet): ToolSet {
 
 const MANAGED =
   process.env.MANAGED === "1" || process.env.MANAGED === "true";
-// PII masking default for persisted run step IO (M2). Deployment-aware, env-
+// PII masking default for persisted run step IO. Deployment-aware, env-
 // overridable: managed = "shape" (multi-tenant privacy), self-host = "full"
 // (operator's own data, best diagnosis). Same env-?:-MANAGED pattern as MCP.
 const MASK_DEFAULT: MaskLevel = (["shape", "keys", "full"] as const).includes(
@@ -257,10 +260,19 @@ const registry = createRegistry(store);
 const oauth = createOAuth({ store, vault, registry });
 const connections = createConnections({ store, vault, oauth });
 const workflows = createWorkflowStore(store);
-const versions = createVersionStore(store); // M1: workflow version log
+const versions = createVersionStore(store); // workflow version log
 const mcpTokens = createMcpTokenStore(store);
 const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
+// Per-flow health. onChange fires on status transitions; we log it here, and the
+// same signal can drive alerting / status UI through the in-memory event bus.
+const health = createHealthMonitor({
+  runs,
+  onChange: (spaceId, state, prev) =>
+    console.log(
+      `[health] ${spaceId}/${state.workflowId}: ${prev ?? "—"} → ${state.status}`,
+    ),
+});
 const settings = createSettingsStore(store);
 
 // load the saved LLM config (in-app settings) into the model factory at boot;
@@ -423,10 +435,10 @@ async function runSavedWorkflow(
   trigger: string,
   runId?: string,
 ): Promise<RunDoc> {
-  // M2: unified recorder for saved-workflow triggers (webhook/schedule/poll).
-  // Seals the running version (M1 stamp) → writes a "running" header → persists
-  // each step append-only (PII-masked) → finalizes → emits + prunes. Returns the
-  // RunDoc with RAW (unmasked) records for the immediate caller.
+  // Unified recorder for saved-workflow triggers (webhook/schedule/poll).
+  // Seals the running version → writes a "running" header → persists each step
+  // append-only (PII-masked) → finalizes → emits + prunes. Returns the RunDoc
+  // with RAW (unmasked) records for the immediate caller.
   const id = runId ?? randomUUID();
   const startedAt = new Date().toISOString();
   const maskLevel = MASK_DEFAULT;
@@ -499,20 +511,36 @@ async function runSavedWorkflow(
   // setup (0 step records) still shows WHY in the UI, not a blank state.
   await runs.finalizeRun(spaceId, id, status, finishedAt, engineError);
 
+  let errorType: ErrorType | undefined;
   if (status === "failed") {
     const errs = records
       .filter((r) => r.status === "failed")
       .map((r) => `${r.nodeId}: ${r.error ?? "failed"}`)
       .join("; ");
+    const failMessage = errs || engineError || "unknown error";
+    errorType = classifyError(failMessage); // transient|auth|logic|unknown
     void userLogs.append(spaceId, {
       level: "error",
       source: "run",
       message: `Run failed: ${wf.name} (${trigger})`,
-      detail: errs || engineError || "unknown error",
+      detail: failMessage,
       workflowId: wf.id,
     });
+    void health
+      .recompute(spaceId, wf.id, {
+        lastError: { type: errorType, message: failMessage },
+      })
+      .catch(() => {});
+  } else {
+    void health.recompute(spaceId, wf.id).catch(() => {}); // refresh / clear
   }
-  emitRun(spaceId, { id, workflowId: wf.id, status, trigger });
+  emitRun(spaceId, {
+    id,
+    workflowId: wf.id,
+    status,
+    trigger,
+    ...(errorType ? { errorType } : {}),
+  });
   void runs.pruneRuns(spaceId).catch(() => {});
 
   return {
@@ -638,7 +666,11 @@ if (nats) {
         finishedAt: now,
       };
       await runs.saveRun(spaceId, run);
-      emitRun(spaceId, { id, workflowId: wf.id, status: "failed", trigger });
+      const errorType = classifyError(message);
+      void health
+        .recompute(spaceId, wf.id, { lastError: { type: errorType, message } })
+        .catch(() => {});
+      emitRun(spaceId, { id, workflowId: wf.id, status: "failed", trigger, errorType });
     },
   });
   await schedulerConsumer.start();
@@ -647,9 +679,15 @@ if (nats) {
   void recoverSchedules(scheduler, scheduleStore, workflows, store)
     .then((n) => console.log(`scheduler recovery: reconciled ${n} scheduling workflow(s)`))
     .catch((e) => console.error("scheduler recovery failed", e));
+
+  // Liveness: periodically check that active interval schedules are still
+  // firing on cadence; record a liveness fail on the flow's health if not.
+  const liveness = createLivenessEvaluator({ store, scheduleStore, runs, health });
+  liveness.start();
+  console.log("liveness evaluator started");
 }
 
-// M2: a fresh process can have no live runs — any "running" header is an orphan
+// A fresh process can have no live runs — any "running" header is an orphan
 // from a crash/restart. Mark them failed(orphaned) at startup so the UI/health
 // doesn't show a run stuck "running" forever.
 void (async () => {
@@ -1420,6 +1458,18 @@ app.get("/api/workflows/:id", async (c) => {
   return wf ? c.json(wf) : c.json({ error: "not found" }, 404);
 });
 
+// Per-flow health for a workflow. Recompute from run history, preserving any
+// liveness fail the evaluator has flagged.
+app.get("/api/workflows/:id/health", async (c) => {
+  const state = await health.recompute(c.get("spaceId"), c.req.param("id"));
+  return c.json(state);
+});
+
+// Space-wide health summary.
+app.get("/api/health", async (c) => {
+  return c.json(await health.summary(c.get("spaceId")));
+});
+
 app.put("/api/workflows/:id", async (c) => {
   const id = c.req.param("id");
   if (!/^[A-Za-z0-9_-]+$/.test(id)) return c.json({ error: "bad id" }, 400);
@@ -1480,7 +1530,7 @@ app.delete("/api/workflows/:id", async (c) => {
   return c.json({ ok: true });
 });
 
-// ── M1: workflow versioning ──────────────────────────────────────────────
+// ── workflow versioning ───────────────────────────────────────────────────
 // HEAD (the "workflows" doc) is unchanged; these add an append-only version
 // log. Sealing is content-hash deduped (bursty autosave/MCP builds coalesce).
 app.get("/api/workflows/:id/versions", async (c) =>
@@ -1514,7 +1564,7 @@ app.post("/api/workflows/:id/versions", async (c) => {
   return c.json({ id: version.id, deduped });
 });
 
-// Structured diff between two versions (powers M8 node badges later).
+// Structured diff between two versions (powers node badges).
 app.get("/api/workflows/:id/diff", async (c) => {
   const spaceId = c.get("spaceId");
   const id = c.req.param("id");
@@ -1647,16 +1697,20 @@ app.post("/api/run", async (c) => {
       const status = records.some((r) => r.status === "failed")
         ? "failed"
         : "done";
+      let errorType: ErrorType | undefined;
+      let failMessage: string | undefined;
       if (status === "failed") {
         const errs = records
           .filter((r) => r.status === "failed")
           .map((r) => `${r.nodeId}: ${r.error ?? "failed"}`)
           .join("; ");
+        failMessage = errs || "unknown error";
+        errorType = classifyError(failMessage);
         void userLogs.append(spaceId, {
           level: "error",
           source: "run",
           message: `Run failed: ${body.workflowName ?? "untitled"} (manual)`,
-          detail: errs || "unknown error",
+          detail: failMessage,
           workflowId: body.workflowId,
         });
       }
@@ -1671,11 +1725,22 @@ app.post("/api/run", async (c) => {
         startedAt,
         finishedAt: new Date().toISOString(),
       });
+      // manual runs feed health too (errorType + status), same as the recorder
+      void health
+        .recompute(
+          spaceId,
+          body.workflowId,
+          errorType && failMessage
+            ? { lastError: { type: errorType, message: failMessage } }
+            : {},
+        )
+        .catch(() => {});
       emitRun(spaceId, {
         id: runDocId,
         workflowId: body.workflowId,
         status,
         trigger: body.resumeRunId ? "resume" : "manual",
+        ...(errorType ? { errorType } : {}),
       });
     }
   });
