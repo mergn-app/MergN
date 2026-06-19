@@ -25,6 +25,7 @@ import {
   type ProviderSource,
 } from "./queries";
 import { CodeBlock } from "./CodeBlock";
+import { ConfigField } from "./ConfigField";
 
 interface RunRecord {
   nodeId: string;
@@ -51,8 +52,8 @@ function pretty(v: unknown): string {
 }
 
 function SaveDot({ cur, saved }: { cur: string; saved: boolean }) {
-  if (!saved) return <Loader2 className="h-3.5 w-3.5 animate-spin text-rose-400" />;
-  if (cur !== "") return <Check className="h-3.5 w-3.5 text-emerald-400" />;
+  if (!saved) return <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />;
+  if (cur !== "") return <Check className="h-3.5 w-3.5 text-green-500" />;
   return null;
 }
 
@@ -79,11 +80,13 @@ export function RunPanel({
   onData,
   onRepair,
   onConfigChange,
+  savePending = false,
 }: {
   funcs: AuthoredFunc[];
   wires: Wire[];
   config: Record<string, Record<string, string>>;
   onConfigChange: (funcId: string, port: string, value: string) => void;
+  savePending?: boolean;
   nodeConnections: Record<string, Record<string, string>>;
   workflowId: string | null;
   workflowName: string;
@@ -133,6 +136,7 @@ export function RunPanel({
   const [error, setError] = useState<string | null>(null);
   const [loadingRun, setLoadingRun] = useState<string | null>(null);
   const [currentRunId, setCurrentRunId] = useState<string | null>(null);
+  const [runError, setRunError] = useState<string | null>(null);
   const [tab, setTab] = useState<
     "input" | "state" | "runs" | "code" | "provider"
   >("input");
@@ -318,6 +322,7 @@ export function RunPanel({
     setError(null);
     setRunning(true);
     setRecords([]);
+    setRunError(null); // clear any error carried over from a previously-opened run
     setTab("state");
     onStatus({});
     onData({});
@@ -420,6 +425,9 @@ export function RunPanel({
     try {
       const run = await fetchRun(id);
       setRecords(run.records as RunRecord[]);
+      // a run that died at engine setup has 0 step records but a failReason —
+      // surface it so clicking it doesn't show a blank state.
+      setRunError((run as { failReason?: string }).failReason ?? null);
       setCurrentRunId(id);
       const status: Record<string, string> = {};
       const dataByNode: Record<string, RunStepData> = {};
@@ -753,7 +761,10 @@ export function RunPanel({
                 const value = String(
                   formValues[f.name] ?? f.defaultValue ?? "",
                 );
-                const cur = String(formValues[f.name] ?? "");
+                // compare the DISPLAYED value (incl. the default) to what's
+                // persisted — otherwise a field showing its default reads cur=""
+                // and the save indicator spins forever (never "saved").
+                const cur = value;
                 const saved = cur === String(persistedVars[f.name] ?? "");
                 return (
                   <div key={f.name} className="space-y-1">
@@ -854,14 +865,14 @@ export function RunPanel({
                         </span>
                       )}
                     </label>
-                    <Input
+                    <ConfigField
+                      name={p.name}
+                      type={p.type}
                       value={cur}
-                      onChange={(e) =>
-                        onConfigChange(activeNode, p.name, e.target.value)
+                      onChange={(value) =>
+                        onConfigChange(activeNode, p.name, value)
                       }
-                      type={p.type === "number" ? "number" : "text"}
-                      placeholder={`${p.name}…`}
-                      className="h-8 w-full rounded-lg bg-background-subtle text-xs"
+                      savePending={savePending}
                     />
                   </div>
                 );
@@ -1022,9 +1033,18 @@ export function RunPanel({
       ) : (
         <div className="min-h-0 flex-1 overflow-auto px-3 pb-3">
           {records.length === 0 ? (
-            <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-              {t("run.emptyState")}
-            </div>
+            runError ? (
+              <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-600 dark:text-rose-400">
+                <div className="mb-1 font-semibold">{t("run.failed")}</div>
+                <div className="whitespace-pre-wrap break-words font-mono">
+                  {runError}
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                {t("run.emptyState")}
+              </div>
+            )
           ) : (
             <div className="space-y-2">
               {records.map((r, i) => {

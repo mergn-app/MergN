@@ -3,9 +3,9 @@ import { useTranslation } from "react-i18next";
 import { ArrowLeftRight, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { AuthoredFunc, RunStepData } from "./types";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { NodeConnection } from "./NodeConnection";
+import { ConfigField } from "./ConfigField";
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
@@ -64,6 +64,7 @@ export function NodePanel({
   run,
   onConfigChange,
   onConnectionChange,
+  savePending = false,
 }: {
   func: AuthoredFunc | null;
   config: Record<string, string>;
@@ -71,6 +72,7 @@ export function NodePanel({
   run?: RunStepData;
   onConfigChange: (port: string, value: string) => void;
   onConnectionChange?: (requirementName: string, connectionId: string) => void;
+  savePending?: boolean;
 }) {
   const { t } = useTranslation();
   if (!func) {
@@ -186,12 +188,12 @@ export function NodePanel({
                       </span>
                     )}
                   </label>
-                  <Input
+                  <ConfigField
+                    name={p.name}
+                    type={p.type}
                     value={config[p.name] ?? ""}
-                    onChange={(e) => onConfigChange(p.name, e.target.value)}
-                    type={p.type === "number" ? "number" : "text"}
-                    placeholder={`${p.name}…`}
-                    className="h-8 rounded-lg bg-background text-sm"
+                    onChange={(value) => onConfigChange(p.name, value)}
+                    savePending={savePending}
                   />
                 </div>
               ))}

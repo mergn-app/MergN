@@ -160,6 +160,9 @@ export function WorkflowsPanel({
                     onClick={(e) => {
                       e.stopPropagation();
                       del.mutate(it.id);
+                      // deleting the flow that's open → clear the canvas/chat so
+                      // we don't keep showing a workflow that no longer exists.
+                      if (it.id === currentId) onNew();
                     }}
                     className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
                     title={t("common.delete")}

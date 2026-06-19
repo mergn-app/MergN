@@ -2,6 +2,7 @@
   "common": {
     "save": "Guardar",
     "saving": "guardando…",
+    "saved": "Guardado",
     "delete": "Eliminar",
     "loading": "cargando…",
     "loadingPage": "Cargando…",

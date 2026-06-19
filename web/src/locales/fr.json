@@ -2,6 +2,7 @@
   "common": {
     "save": "Enregistrer",
     "saving": "enregistrement…",
+    "saved": "Enregistré",
     "delete": "Supprimer",
     "loading": "chargement…",
     "loadingPage": "Chargement…",

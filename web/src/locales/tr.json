@@ -2,6 +2,7 @@
   "common": {
     "save": "Kaydet",
     "saving": "kaydediliyor…",
+    "saved": "Kaydedildi",
     "delete": "Sil",
     "loading": "yükleniyor…",
     "loadingPage": "Yükleniyor…",
