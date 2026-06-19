@@ -45,7 +45,7 @@ export const planZ = z.object({
         .enum(["second", "minute", "hour", "day"])
         .optional()
         .describe(
-          "REQUIRED for mode 'interval' — set it (second/minute/hour/day) to match the user's wording. OMIT it for mode 'cron' (it is not used there).",
+          "REQUIRED for mode 'interval' — set it (second/minute/hour/day) to the exact unit the user states; never upscale (a count of seconds stays 'second'). OMIT it for mode 'cron' (it is not used there).",
         ),
     })
     .optional()

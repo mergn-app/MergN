@@ -33,7 +33,8 @@ import { authorFunc } from "../agent/func-author";
 import { createWorkflowStore, type TriggerConfig, type WorkflowStore } from "./store";
 import { createVersionStore } from "./workflow-versions";
 import { diffWorkflows } from "./workflow-diff";
-import { createRunStore, type RunDoc } from "./runs";
+import { createRunStore, type RunDoc, type RunHeader } from "./runs";
+import { maskValue, maskErrorString, type MaskLevel } from "./pii-mask";
 import { createSettingsStore } from "./settings";
 import { createMcpTokenStore } from "./mcp-tokens";
 import { createMcpOAuth, OAuthError } from "./mcp-oauth";
@@ -217,6 +218,16 @@ function withResultLimits(tools: ToolSet): ToolSet {
 
 const MANAGED =
   process.env.MANAGED === "1" || process.env.MANAGED === "true";
+// PII masking default for persisted run step IO (M2). Deployment-aware, env-
+// overridable: managed = "shape" (multi-tenant privacy), self-host = "full"
+// (operator's own data, best diagnosis). Same env-?:-MANAGED pattern as MCP.
+const MASK_DEFAULT: MaskLevel = (["shape", "keys", "full"] as const).includes(
+  process.env.PII_MASK_DEFAULT as MaskLevel,
+)
+  ? (process.env.PII_MASK_DEFAULT as MaskLevel)
+  : MANAGED
+    ? "shape"
+    : "full";
 // MCP support is a SELF-HOST-only feature: never on a managed/prod instance, and
 // even self-host must opt in with ENABLE_MCP. Gates the /api/mcp/* endpoints.
 const MCP_ENABLED = !MANAGED && /^(1|true)$/i.test(process.env.ENABLE_MCP ?? "");
@@ -335,6 +346,10 @@ const remoteMcpDeps: RemoteMcpDeps = {
     const run = await runSavedWorkflow(spaceId, wf, input, "mcp");
     return { records: run.records };
   },
+  reconcileSchedule: async (spaceId, id) => {
+    const wf = await workflows.getWorkflow(spaceId, id);
+    if (wf) await scheduler.reconcile(spaceId, wf);
+  },
 };
 
 setLlmBudgetHooks({
@@ -408,33 +423,83 @@ async function runSavedWorkflow(
   trigger: string,
   runId?: string,
 ): Promise<RunDoc> {
+  // M2: unified recorder for saved-workflow triggers (webhook/schedule/poll).
+  // Seals the running version (M1 stamp) → writes a "running" header → persists
+  // each step append-only (PII-masked) → finalizes → emits + prunes. Returns the
+  // RunDoc with RAW (unmasked) records for the immediate caller.
+  const id = runId ?? randomUUID();
   const startedAt = new Date().toISOString();
-  const records: StepRecord[] = [];
+  const maskLevel = MASK_DEFAULT;
   const merged = { ...(wf.variables ?? {}), ...input };
-  await runWorkflow(
-    { spaceId, registry, connections, files: fileService },
-    wf.funcs as Parameters<typeof runWorkflow>[1],
-    wf.wires as Parameters<typeof runWorkflow>[2],
-    merged,
-    wf.config ?? {},
-    wf.nodeConnections ?? {},
-    (record) => {
-      records.push(record);
-    },
-  );
-  const run: RunDoc = {
-    id: runId ?? randomUUID(),
+
+  let workflowVersionId: string | undefined;
+  const head = await workflows.getWorkflow(spaceId, wf.id);
+  if (head) {
+    const { version } = await versions.seal(spaceId, head, {
+      source: "run-snapshot",
+    });
+    workflowVersionId = version.id;
+  }
+
+  const headerDoc: RunHeader = {
+    id,
     workflowId: wf.id,
     workflowName: wf.name,
     trigger,
-    status: records.some((r) => r.status === "failed") ? "failed" : "done",
-    input: merged,
-    records,
+    status: "running",
+    input: maskValue(merged, maskLevel) as Record<string, unknown>,
     startedAt,
-    finishedAt: new Date().toISOString(),
+    ...(workflowVersionId ? { workflowVersionId } : {}),
+    maskLevel,
   };
-  await runs.saveRun(spaceId, run);
-  if (run.status === "failed") {
+  await runs.startRun(spaceId, headerDoc);
+
+  const records: StepRecord[] = [];
+  let seq = 0;
+  let engineError: string | undefined;
+  try {
+    await runWorkflow(
+      { spaceId, registry, connections, files: fileService },
+      wf.funcs as Parameters<typeof runWorkflow>[1],
+      wf.wires as Parameters<typeof runWorkflow>[2],
+      merged,
+      wf.config ?? {},
+      wf.nodeConnections ?? {},
+      async (record) => {
+        records.push(record);
+        await runs.appendStep(spaceId, {
+          ...record,
+          runId: id, // runWorkflow uses an internal "run" id — use the real one
+          resolvedInput: maskValue(record.resolvedInput, maskLevel),
+          output:
+            record.output === undefined
+              ? undefined
+              : maskValue(record.output, maskLevel),
+          error: maskErrorString(record.error, maskLevel),
+          spaceId,
+          workflowId: wf.id,
+          seq: seq++,
+          at: new Date().toISOString(),
+        });
+      },
+    );
+  } catch (e) {
+    // Systemic engine error (not a per-step failure) — always finalize the run
+    // so the header never stays stuck "running".
+    engineError = e instanceof Error ? e.message : String(e);
+    console.error(`run engine error [${wf.id}]`, e);
+  }
+
+  const status =
+    engineError || records.some((r) => r.status === "failed")
+      ? "failed"
+      : "done";
+  const finishedAt = new Date().toISOString();
+  // Store the actual engine-error message as failReason so a run that died at
+  // setup (0 step records) still shows WHY in the UI, not a blank state.
+  await runs.finalizeRun(spaceId, id, status, finishedAt, engineError);
+
+  if (status === "failed") {
     const errs = records
       .filter((r) => r.status === "failed")
       .map((r) => `${r.nodeId}: ${r.error ?? "failed"}`)
@@ -443,17 +508,26 @@ async function runSavedWorkflow(
       level: "error",
       source: "run",
       message: `Run failed: ${wf.name} (${trigger})`,
-      detail: errs || "unknown error",
+      detail: errs || engineError || "unknown error",
       workflowId: wf.id,
     });
   }
-  emitRun(spaceId, {
-    id: run.id,
-    workflowId: run.workflowId,
-    status: run.status,
-    trigger: run.trigger,
-  });
-  return run;
+  emitRun(spaceId, { id, workflowId: wf.id, status, trigger });
+  void runs.pruneRuns(spaceId).catch(() => {});
+
+  return {
+    id,
+    workflowId: wf.id,
+    workflowName: wf.name,
+    trigger,
+    status,
+    input: merged,
+    records,
+    startedAt,
+    finishedAt,
+    ...(workflowVersionId ? { workflowVersionId } : {}),
+    maskLevel,
+  };
 }
 
 async function recoverSchedules(
@@ -574,6 +648,20 @@ if (nats) {
     .then((n) => console.log(`scheduler recovery: reconciled ${n} scheduling workflow(s)`))
     .catch((e) => console.error("scheduler recovery failed", e));
 }
+
+// M2: a fresh process can have no live runs — any "running" header is an orphan
+// from a crash/restart. Mark them failed(orphaned) at startup so the UI/health
+// doesn't show a run stuck "running" forever.
+void (async () => {
+  try {
+    let n = 0;
+    for (const spaceId of await store.spaces())
+      n += await runs.markOrphaned(spaceId, 0);
+    if (n) console.log(`run recovery: marked ${n} orphaned run(s) failed`);
+  } catch (e) {
+    console.error("orphan run reconcile failed", e);
+  }
+})();
 
 function makeTools(
   spaceId: string,

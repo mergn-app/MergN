@@ -63,6 +63,9 @@ export const LIMITS = {
   // the oldest UNLABELED editor/chat versions are pruned; healing/restore/pinned
   // are always kept). NO_CAP / self-host = keep everything.
   versionRetentionMax: lim("VERSION_RETENTION_MAX", NO_CAP),
+  // Run-history retention in days (run docs + their step records pruned past
+  // this window). UNLIMITED (-1) / self-host = keep everything forever.
+  runRetentionDays: lim("RUN_RETENTION_DAYS", UNLIMITED),
 
   // ── File storage (per-space total upload quota) ──
   maxStorageBytes: lim("MAX_STORAGE_BYTES", NO_CAP),

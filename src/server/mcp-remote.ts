@@ -15,6 +15,9 @@ export interface RemoteMcpDeps {
     wf: { id: string; name: string; funcs: unknown[]; wires: unknown[]; config?: Record<string, Record<string, string>>; variables?: Record<string, unknown> },
     input: Record<string, unknown>,
   ) => Promise<{ records: Array<{ nodeId: string; status: string; output?: unknown; error?: string }> }>;
+  // Register/refresh a schedule|poll trigger with the scheduler so it actually
+  // fires (the editor PUT does this; the MCP save path must too).
+  reconcileSchedule?: (spaceId: string, workflowId: string) => Promise<void>;
 }
 
 const EVENT_FIELDS: Record<string, string[]> = {
@@ -74,6 +77,7 @@ WIRING / DATA:
 - Mark fixed per-step settings as add_step configInputs — the user fills them in the app; at runtime you STILL read them as input.<field>.
 - Return only outputs a later step or the final action consumes; never echo an input as an output; for a list return the list, not per-item scalars.
 - Webhook trigger: input.payload (reserved name) = the ENTIRE trigger body. Read fields off it: const obj = input.payload?.data?.object ?? input.payload?.object ?? input.payload; const name = obj.name.
+- RECURRING workflow ("run every N seconds/minutes/hours", "every 15s", "daily at 9", a cron): create_workflow with triggerKind:'schedule' AND set the cadence there (intervalValue+intervalUnit, e.g. 15+second, OR cron). A schedule step exposes input.timestamp. Just BUILD it — if the CONTENT (what the step outputs/does) is vague, use a sensible placeholder and ask about the content after; do NOT refuse or stall over an ambiguous word.
 - TEST INPUT for run_workflow IS the trigger body itself. For a webhook flow pass the raw body directly, e.g. { name, email, budget } — do NOT wrap it as { payload: {...} }. Wrapping double-nests it (input.payload becomes { payload: {...} }). A real webhook delivers the bare body, so test with the bare body too.
 
 PROVIDERS:
@@ -136,15 +140,25 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     });
   });
 
-  tool("create_workflow", "Create an empty workflow. triggerKind: manual|webhook|schedule|poll.",
-    { name: z.string(), triggerKind: z.enum(["manual", "webhook", "schedule", "poll"]).default("manual") },
-    async ({ name, triggerKind }) => {
+  tool("create_workflow", "Create an empty workflow. triggerKind: manual|webhook|schedule|poll. For a RECURRING (schedule) workflow set its cadence here: intervalValue + intervalUnit (second|minute|hour|day) e.g. 15+second = every 15s, OR a cron expression. The schedule registers immediately and starts firing.",
+    { name: z.string(), triggerKind: z.enum(["manual", "webhook", "schedule", "poll"]).default("manual"),
+      intervalValue: z.number().optional(), intervalUnit: z.enum(["second", "minute", "hour", "day"]).optional(), cron: z.string().optional() },
+    async ({ name, triggerKind, intervalValue, intervalUnit, cron }) => {
       const id = randomUUID();
       const ef = EVENT_FIELDS[triggerKind] ?? [];
       const trigger: any = { kind: triggerKind };
       if (ef.length) trigger.eventFields = ef;
+      if (triggerKind === "schedule") {
+        if (cron) trigger.schedule = { mode: "cron", cron };
+        else if (intervalValue) trigger.schedule = { mode: "interval", intervalValue, intervalUnit: intervalUnit ?? "minute" };
+      }
       await save({ id, name, funcs: [], wires: [], positions: { trigger: { x: 0, y: 180 } }, config: {}, trigger });
-      return json({ id, name, triggerKind, eventFields: ef });
+      // schedule/poll must be registered with the scheduler to actually fire
+      if (triggerKind === "schedule" || triggerKind === "poll") {
+        try { await deps.reconcileSchedule?.(spaceId, id); }
+        catch (e) { console.error(`[mcp:create_workflow] schedule reconcile failed`, e); }
+      }
+      return json({ id, name, triggerKind, schedule: trigger.schedule, eventFields: ef });
     },
   );
 
