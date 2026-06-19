@@ -639,7 +639,7 @@ export function useRevokeMcpToken() {
   });
 }
 
-// --- M1: workflow versioning ----------------------------------------------
+// --- workflow versioning ---------------------------------------------------
 export interface WorkflowVersionMeta {
   id: string;
   workflowId: string;

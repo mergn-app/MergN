@@ -1,6 +1,6 @@
-// Pure, dependency-light workflow diffing + content hashing for M1 versioning.
+// Pure, dependency-light workflow diffing + content hashing for versioning.
 // No store / LLM imports — trivially unit-testable. The version store and the
-// (later) M8 diff UI both consume these.
+// diff UI both consume these.
 import { createHash } from "node:crypto";
 
 // SavedWorkflow keeps funcs/wires as unknown[]; we read only the fields that
@@ -128,7 +128,7 @@ function setDiff(a: Iterable<string>, b: Iterable<string>) {
   };
 }
 
-// Structured before→after diff. Feeds M8 node badges (code/input/wire/gate/provider).
+// Structured before→after diff. Feeds node badges (code/input/wire/gate/provider).
 export function diffWorkflows(a: WorkflowSnapshot, b: WorkflowSnapshot): WorkflowDiff {
   const fa = funcsById(a);
   const fb = funcsById(b);

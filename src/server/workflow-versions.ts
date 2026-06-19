@@ -4,7 +4,7 @@ import type { SavedWorkflow } from "./store";
 import { contentHash, type WorkflowSnapshot } from "./workflow-diff";
 import { LIMITS } from "../limits";
 
-// Append-only workflow version log (M1). HEAD lives in the "workflows"
+// Append-only workflow version log. HEAD lives in the "workflows"
 // collection (unchanged); this store owns the immutable snapshots. Sealing is
 // content-hash deduped against the LATEST version so bursty autosave / MCP
 // builds coalesce into one version. Restore orchestration (which writes HEAD)

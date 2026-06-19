@@ -1,9 +1,9 @@
-// PII shape-masking for persisted run data (M2). Applied BEFORE writing a step's
+// PII shape-masking for persisted run data. Applied BEFORE writing a step's
 // resolvedInput/output/error to storage — raw PII never hits disk unless the
 // deployment opts into "full". The default is deployment-aware (set by the
 // caller): managed = "shape" (multi-tenant privacy), self-host = "full" (the
 // operator's own data, best diagnosis). "shape" preserves structure + types so
-// the M6 healing diagnosis can still see null / double-wrap / wrong-type.
+// failure diagnosis can still see null / double-wrap / wrong-type.
 export type MaskLevel = "shape" | "keys" | "full";
 
 const TYPE_TAG = (v: unknown): string => {

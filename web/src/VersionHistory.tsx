@@ -8,8 +8,7 @@ import {
   type WorkflowVersionMeta,
 } from "./queries";
 
-// Minimal M1 version-history panel: list + checkpoint + restore. The rich diff
-// view + per-node fix badges land in M8.
+// Version-history panel: list + checkpoint + restore.
 const SOURCE_LABEL: Record<WorkflowVersionMeta["source"], string> = {
   editor: "Edit",
   chat: "AI chat",

@@ -2,7 +2,7 @@ import type { DocStore } from "../store/docstore";
 import type { StepRecord } from "../atoms/index";
 import { LIMITS } from "../limits";
 
-// M2: runs are persisted incrementally. A header doc (status "running") is
+// Runs are persisted incrementally. A header doc (status "running") is
 // written at start; each step is appended to a separate append-only collection
 // (no read-modify-write amplification on big fan-outs); finalize flips the
 // header to done/failed. Records are assembled from run_steps on read, so the
@@ -21,7 +21,7 @@ export interface RunDoc {
   records: StepRecord[]; // assembled from run_steps on read (or legacy inline)
   startedAt: string;
   finishedAt?: string; // absent while running
-  workflowVersionId?: string; // M1 stamp
+  workflowVersionId?: string; // sealed-version stamp for this run
   maskLevel?: string; // mask level applied to this run's step IO
   stepCount?: number; // set on finalize (cheap list metric)
   failReason?: string; // e.g. "orphaned"
@@ -48,7 +48,7 @@ export interface RunMeta {
 }
 
 export interface RunStore {
-  // M2 incremental lifecycle:
+  // incremental lifecycle:
   startRun(spaceId: string, header: RunHeader): Promise<void>;
   appendStep(spaceId: string, step: RunStepDoc): Promise<void>;
   listSteps(spaceId: string, runId: string): Promise<StepRecord[]>;
