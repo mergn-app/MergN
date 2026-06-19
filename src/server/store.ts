@@ -43,6 +43,7 @@ export interface SavedWorkflow {
   inputForm?: unknown;
   variables?: Record<string, unknown>;
   conversationId?: string;
+  currentVersionId?: string; // M1: latest sealed version (run-stamp / history pointer)
   createdAt: string;
   updatedAt: string;
 }
@@ -62,6 +63,12 @@ export interface WorkflowStore {
     input: Omit<SavedWorkflow, "createdAt" | "updatedAt">,
   ): Promise<SavedWorkflow>;
   deleteWorkflow(spaceId: string, id: string): Promise<void>;
+  // M1: point HEAD at its latest sealed version without bumping content/updatedAt.
+  setCurrentVersion(
+    spaceId: string,
+    id: string,
+    versionId: string,
+  ): Promise<void>;
 }
 
 export function createWorkflowStore(store: DocStore): WorkflowStore {
@@ -109,6 +116,15 @@ export function createWorkflowStore(store: DocStore): WorkflowStore {
 
     async deleteWorkflow(spaceId, id) {
       await store.remove(spaceId, COLLECTION, id);
+    },
+
+    async setCurrentVersion(spaceId, id, versionId) {
+      const existing = await getWorkflow(spaceId, id);
+      if (!existing) return;
+      await store.put(spaceId, COLLECTION, id, {
+        ...existing,
+        currentVersionId: versionId,
+      } as unknown as Record<string, unknown>);
     },
   };
 }

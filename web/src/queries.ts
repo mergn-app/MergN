@@ -638,3 +638,57 @@ export function useRevokeMcpToken() {
       qc.invalidateQueries({ queryKey: ["mcp-tokens", getSpace()] }),
   });
 }
+
+// --- M1: workflow versioning ----------------------------------------------
+export interface WorkflowVersionMeta {
+  id: string;
+  workflowId: string;
+  seq: number;
+  source: "editor" | "chat" | "mcp" | "run-snapshot" | "healing" | "restore";
+  label?: string;
+  message?: string;
+  restoredFrom?: string;
+  createdAt: string;
+}
+
+export function useWorkflowVersions(workflowId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["versions", getSpace(), workflowId],
+    queryFn: () =>
+      json<WorkflowVersionMeta[]>(`/api/workflows/${workflowId}/versions`),
+    enabled: !!user && !!workflowId,
+  });
+}
+
+export function useCreateCheckpoint(workflowId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { label?: string; message?: string }) =>
+      json<{ id: string; deduped: boolean }>(
+        `/api/workflows/${workflowId}/versions`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      ),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["versions", getSpace(), workflowId] }),
+  });
+}
+
+export function useRestoreVersion(workflowId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (versionId: string) =>
+      json<{ ok: boolean; newVersionId: string }>(
+        `/api/workflows/${workflowId}/versions/${versionId}/restore`,
+        { method: "POST" },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["versions", getSpace(), workflowId] });
+      qc.invalidateQueries({ queryKey: ["workflows"] });
+    },
+  });
+}

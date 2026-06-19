@@ -31,6 +31,8 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { authorFunc } from "../agent/func-author";
 import { createWorkflowStore, type TriggerConfig, type WorkflowStore } from "./store";
+import { createVersionStore } from "./workflow-versions";
+import { diffWorkflows } from "./workflow-diff";
 import { createRunStore, type RunDoc } from "./runs";
 import { createSettingsStore } from "./settings";
 import { createMcpTokenStore } from "./mcp-tokens";
@@ -244,6 +246,7 @@ const registry = createRegistry(store);
 const oauth = createOAuth({ store, vault, registry });
 const connections = createConnections({ store, vault, oauth });
 const workflows = createWorkflowStore(store);
+const versions = createVersionStore(store); // M1: workflow version log
 const mcpTokens = createMcpTokenStore(store);
 const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
@@ -1387,6 +1390,89 @@ app.delete("/api/workflows/:id", async (c) => {
   }
   await workflows.deleteWorkflow(spaceId, id);
   return c.json({ ok: true });
+});
+
+// ── M1: workflow versioning ──────────────────────────────────────────────
+// HEAD (the "workflows" doc) is unchanged; these add an append-only version
+// log. Sealing is content-hash deduped (bursty autosave/MCP builds coalesce).
+app.get("/api/workflows/:id/versions", async (c) =>
+  c.json(await versions.list(c.get("spaceId"), c.req.param("id"))),
+);
+
+app.get("/api/workflows/:id/versions/:versionId", async (c) => {
+  const v = await versions.get(c.get("spaceId"), c.req.param("versionId"));
+  if (!v || v.workflowId !== c.req.param("id"))
+    return c.json({ error: "version not found" }, 404);
+  return c.json(v);
+});
+
+// Explicit checkpoint: seal the current HEAD as a version (optional label).
+app.post("/api/workflows/:id/versions", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const head = await workflows.getWorkflow(spaceId, id);
+  if (!head) return c.json({ error: "workflow not found" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as {
+    label?: string;
+    message?: string;
+  };
+  const { version, deduped } = await versions.seal(spaceId, head, {
+    source: "editor",
+    label: body.label,
+    message: body.message,
+    createdBy: c.get("userId"),
+  });
+  if (!deduped) await workflows.setCurrentVersion(spaceId, id, version.id);
+  return c.json({ id: version.id, deduped });
+});
+
+// Structured diff between two versions (powers M8 node badges later).
+app.get("/api/workflows/:id/diff", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  if (!from || !to) return c.json({ error: "from and to required" }, 400);
+  const a = await versions.get(spaceId, from);
+  const b = await versions.get(spaceId, to);
+  if (!a || !b || a.workflowId !== id || b.workflowId !== id)
+    return c.json({ error: "version not found" }, 404);
+  return c.json(diffWorkflows(a.snapshot, b.snapshot));
+});
+
+// Restore: write a past version's snapshot to HEAD, then seal a NEW version
+// marking the restore. History is never mutated (re-restorable).
+app.post("/api/workflows/:id/versions/:versionId/restore", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const target = await versions.get(spaceId, c.req.param("versionId"));
+  if (!target || target.workflowId !== id)
+    return c.json({ error: "version not found" }, 404);
+  const head = await workflows.getWorkflow(spaceId, id);
+  if (!head) return c.json({ error: "workflow not found" }, 404);
+  const s = target.snapshot;
+  await workflows.saveWorkflow(spaceId, {
+    id,
+    name: s.name ?? head.name,
+    funcs: s.funcs ?? [],
+    wires: s.wires ?? [],
+    positions: s.positions ?? {},
+    config: s.config ?? {},
+    nodeConnections: s.nodeConnections ?? {},
+    trigger: (s.trigger as TriggerConfig) ?? head.trigger ?? { kind: "manual" },
+    inputForm: s.inputForm,
+    variables: s.variables,
+    conversationId: head.conversationId, // keep chat continuity
+  });
+  const restored = await workflows.getWorkflow(spaceId, id);
+  const { version } = await versions.seal(spaceId, restored!, {
+    source: "restore",
+    restoredFrom: target.id,
+    createdBy: c.get("userId"),
+    message: `Restored from ${target.id.slice(0, 8)}`,
+  });
+  await workflows.setCurrentVersion(spaceId, id, version.id);
+  return c.json({ ok: true, newVersionId: version.id });
 });
 
 app.get("/api/workflows/:id/status", async (c) => {

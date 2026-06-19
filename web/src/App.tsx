@@ -21,6 +21,7 @@ import {
   Loader2,
   Network,
   Plug,
+  History,
 } from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
 import { LogsPanel } from "./LogsPanel";
@@ -41,6 +42,7 @@ import { LanguageSwitcher } from "./LanguageSwitcher";
 import { LegalLinks } from "./LegalLinks";
 import { EnterpriseDialog } from "./EnterpriseDialog";
 import { McpConnectDialog } from "./McpConnectDialog";
+import { VersionHistory } from "./VersionHistory";
 import { LeftSidebar } from "./LeftSidebar";
 import { triggerIntervalMs } from "./schedule-display";
 import { ChatPanel } from "./ChatPanel";
@@ -294,6 +296,7 @@ export function App({
   const saveMutation = useSaveWorkflow();
   const { user, requireAuth, signOut, managed, remoteMcp } = useAuth();
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [versionsOpen, setVersionsOpen] = useState(false);
   const { data: connections = NO_CONNECTIONS } = useConnections();
   const conversationsQuery = useConversations();
   const deleteConversation = useDeleteConversation();
@@ -1044,6 +1047,17 @@ export function App({
                 <span className="hidden text-xs sm:inline">{t("mcp.title")}</span>
               </Button>
             )}
+            {user && workflowId && (
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                title="Version history"
+                onClick={() => setVersionsOpen(true)}
+              >
+                <History className="h-4 w-4" />
+              </Button>
+            )}
             <LanguageSwitcher />
             <Button
               size="icon"
@@ -1092,6 +1106,16 @@ export function App({
       </div>
 
       {mcpOpen && <McpConnectDialog onClose={() => setMcpOpen(false)} />}
+      {versionsOpen && workflowId && (
+        <VersionHistory
+          workflowId={workflowId}
+          onClose={() => setVersionsOpen(false)}
+          onRestored={() => {
+            setVersionsOpen(false);
+            void load(workflowId);
+          }}
+        />
+      )}
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         {user && (

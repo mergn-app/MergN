@@ -59,6 +59,10 @@ export const LIMITS = {
   // ── Structural caps ──
   maxPlanSteps: lim("MAX_PLAN_STEPS", NO_CAP),
   maxSpacesPerUser: lim("MAX_SPACES_PER_USER", NO_CAP),
+  // Workflow version-history retention (max kept versions per workflow before
+  // the oldest UNLABELED editor/chat versions are pruned; healing/restore/pinned
+  // are always kept). NO_CAP / self-host = keep everything.
+  versionRetentionMax: lim("VERSION_RETENTION_MAX", NO_CAP),
 
   // ── File storage (per-space total upload quota) ──
   maxStorageBytes: lim("MAX_STORAGE_BYTES", NO_CAP),
