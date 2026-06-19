@@ -28,6 +28,22 @@ export function isLikelyModelNameError(message: string): boolean {
   ].some((s) => m.includes(s));
 }
 
+export function isLikelyApiKeyError(message: string): boolean {
+  const m = message.toLowerCase();
+  return [
+    "api key",
+    "invalid api key",
+    "incorrect api key",
+    "unauthorized",
+    "authentication",
+    "auth",
+    "forbidden",
+    "401",
+    "403",
+    "permission denied",
+  ].some((s) => m.includes(s));
+}
+
 export function shouldShowModelNameHelp(
   provider: string,
   model: string,
@@ -36,7 +52,9 @@ export function shouldShowModelNameHelp(
 ): boolean {
   if (!model.trim()) return false;
   if (provider === "mergn") return false;
+  if (saveError && isLikelyApiKeyError(saveError)) return false;
   if (saveError && isLikelyModelNameError(saveError)) return true;
+  if (probe?.error && isLikelyApiKeyError(probe.error)) return false;
   if (probe?.error && isLikelyModelNameError(probe.error)) return true;
   if (probe?.weak && !probe.structured && model.trim()) return true;
   return false;

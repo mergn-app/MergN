@@ -442,7 +442,12 @@ export async function saveLlmSettings(body: {
   model?: string;
   baseURL?: string;
   apiKey?: string;
-}): Promise<{ ok: boolean; modelRejected?: boolean; error?: string }> {
+}): Promise<{
+  ok: boolean;
+  keyRejected?: boolean;
+  modelRejected?: boolean;
+  error?: string;
+}> {
   const res = await fetch("/api/settings/llm", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...spaceHeaders() },
@@ -451,12 +456,18 @@ export async function saveLlmSettings(body: {
   const data = (await res.json().catch(() => ({}))) as {
     ok?: boolean;
     error?: string;
+    keyRejected?: boolean;
     modelRejected?: boolean;
   };
   if (!res.ok) {
     throw new Error(data.error || `Save failed: ${res.status}`);
   }
-  return data as { ok: boolean; modelRejected?: boolean; error?: string };
+  return data as {
+    ok: boolean;
+    keyRejected?: boolean;
+    modelRejected?: boolean;
+    error?: string;
+  };
 }
 
 export interface FileMeta {

@@ -60,7 +60,7 @@ import {
 import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
 import { reconcileWiring } from "../agent/wiring-repair";
 import { probeModel } from "../agent/probe";
-import { validateModelName } from "../agent/validate-model";
+import { validateApiKey, validateModelName } from "../agent/validate-model";
 import { authorInputForm } from "../agent/form-author";
 import { setLlmBudgetHooks } from "../agent/llm-budget";
 import { LIMITS } from "../limits";
@@ -1680,14 +1680,30 @@ app.post("/api/settings/llm", async (c) => {
   const current = MANAGED ? getSpaceLlmConfig(spaceId) : await settings.getLlm();
   const requestedModel =
     body.model === undefined ? undefined : String(body.model).trim() || undefined;
-  let modelRejected = false;
+  const resolvedBaseURL = body.baseURL || current?.baseURL || undefined;
+  const newApiKey = body.apiKey?.trim() || undefined;
+  const resolvedApiKey = newApiKey || current?.apiKey || undefined;
+  const creds = { apiKey: resolvedApiKey, baseURL: resolvedBaseURL };
 
+  let keyRejected = false;
+  let modelIds: string[] | undefined;
+
+  // 1) API key validation always comes first.
+  const keyCheck = await validateApiKey(
+    provider,
+    newApiKey ? { apiKey: newApiKey, baseURL: resolvedBaseURL } : creds,
+  );
+  if (!keyCheck.valid) {
+    keyRejected = true;
+  } else if (keyCheck.ids) {
+    modelIds = keyCheck.ids;
+  }
+
+  // 2) Model name validation only after the key check passes.
+  let modelRejected = false;
   let resolvedModel = requestedModel;
-  if (requestedModel) {
-    const check = await validateModelName(provider, requestedModel, {
-      apiKey: body.apiKey || current?.apiKey || undefined,
-      baseURL: body.baseURL || current?.baseURL || undefined,
-    });
+  if (requestedModel && !keyRejected) {
+    const check = await validateModelName(provider, requestedModel, creds, modelIds);
     if (!check.valid) {
       modelRejected = true;
       resolvedModel =
@@ -1701,7 +1717,7 @@ app.post("/api/settings/llm", async (c) => {
     baseURL: body.baseURL || undefined,
     // the key is never sent back to the client, so an empty value means
     // "keep the existing one".
-    apiKey: body.apiKey || current?.apiKey || undefined,
+    apiKey: keyRejected ? current?.apiKey || undefined : resolvedApiKey,
   };
   if (MANAGED) {
     await settings.setLlm(spaceId, cfg);
@@ -1713,10 +1729,13 @@ app.post("/api/settings/llm", async (c) => {
   return c.json({
     ok: true,
     usingOwn: true,
+    keyRejected,
     modelRejected,
-    ...(modelRejected
-      ? { error: `Model not found: ${requestedModel}` }
-      : {}),
+    ...(keyRejected
+      ? { error: "Invalid API key" }
+      : modelRejected
+        ? { error: `Model not found: ${requestedModel}` }
+        : {}),
   });
 });
 

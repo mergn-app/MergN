@@ -92,9 +92,9 @@ function LlmForm({
         apiKey: apiKey || undefined,
       });
       onRefresh();
-      if (saveResult.modelRejected) {
+      if (saveResult.keyRejected || saveResult.modelRejected) {
         setSaving(false);
-        setError(saveResult.error ?? "Model not found");
+        setError(saveResult.error ?? "Save failed");
         return;
       }
       setSaving(false);
@@ -209,9 +209,9 @@ function LlmForm({
         </div>
       )}
       {probe?.weak && !probe.local && !modelNameHelp && (
-        <div className="space-y-1 rounded-lg border border-amber-500/40 bg-amber-500/10 px-2 py-1.5 text-[11px] text-amber-200">
+        <div className="space-y-1 rounded-lg border border-destructive/40 bg-destructive/10 px-2 py-1.5 text-[11px] text-destructive">
           <p className="font-medium">{t("llm.weakCloudTitle")}</p>
-          <p className="text-amber-200/80">{t("llm.weakCloudBody")}</p>
+          <p className="text-destructive/90">{t("llm.weakCloudBody")}</p>
         </div>
       )}
       {probe && !probe.weak && (
