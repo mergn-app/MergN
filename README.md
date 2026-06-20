@@ -5,7 +5,7 @@
 <img width="2879" height="1799" alt="Screenshot From 2026-06-14 15-52-25" src="https://github.com/user-attachments/assets/6649dd27-c147-47da-8bf5-5eb5c0077d6e" />
 
 
-MergN is an AI-native automation platform built by Quoll crew. checkout: https://quollhq.com/
+MergN is an visual automation platform built by Quoll crew. checkout: https://quollhq.com/
 
 It bridges the gap between traditional workflow automation tools like n8n and AI-powered coding environments such as Claude Code. Instead of manually wiring integrations and writing automation logic, you describe what you want in plain language and MergN generates the required workflow logic at runtime.
 
