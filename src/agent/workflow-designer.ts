@@ -16,9 +16,9 @@ export const planZ = z.object({
       "a short human title for the whole workflow (3-6 words) describing what it does, e.g. 'Stripe receipt to Slack' or 'Daily signups digest'",
     ),
   triggerKind: z
-    .enum(["manual", "webhook", "schedule", "poll"])
+    .enum(["manual", "webhook", "schedule", "poll", "monitor"])
     .describe(
-      "how the workflow starts. 'poll' = WATCH a service for NEW items and react to each one ('when a new message arrives in Discord', 'watch a channel for new messages', 'when a new email comes in', 'check X periodically for new data') — services like Discord/Slack messages, new emails, new rows CANNOT receive webhooks here, so use 'poll'. 'webhook' = runs in REACTION to an external HTTP callback the service PUSHES to us ('when a payment succeeds', 'on a new GitHub issue'). 'schedule' = runs on a TIMER or at clock times ('every 15 seconds', 'her gün 09:00', 'periodically') with no external data source. 'manual' = the user runs it on demand ('format this', 'summarize and email me').",
+      "how the workflow starts. 'poll' = WATCH a service for NEW items and react to each one ('when a new message arrives in Discord', 'watch a channel for new messages', 'when a new email comes in', 'check X periodically for new data') — services like Discord/Slack messages, new emails, new rows CANNOT receive webhooks here, so use 'poll'. 'webhook' = runs in REACTION to an external HTTP callback the service PUSHES to us ('when a payment succeeds', 'on a new GitHub issue'). 'schedule' = runs on a TIMER or at clock times ('every 15 seconds', 'her gün 09:00', 'periodically') with no external data source. 'monitor' = an ALERT-HANDLER that runs when a MONITORING EVENT fires on some flow (an error / a flow that silently stopped / a flow that ran but did nothing / an auto-heal) — use it for 'when any/a flow fails, do X' ('log failures to a sheet', 'call my API on errors', 'notify on silent failures'); the steps read the event from the trigger input. 'manual' = the user runs it on demand ('format this', 'summarize and email me').",
     ),
   schedule: z
     .object({
@@ -312,6 +312,9 @@ export async function designWorkflow(
   } else if (plan.triggerKind === "webhook") {
     triggerHint =
       "Read the entire raw webhook body as `input.payload` (the whole parsed JSON the service POSTed). Do NOT declare or read any other trigger field — they do not exist. To format/forward/store the data, use input.payload directly (e.g. JSON.stringify(input.payload, null, 2)). To read a specific value, extract it in code from input.payload yourself (e.g. input.payload?.data?.object?.customer_name ?? input.payload?.customer_name) — NEVER add a user input that asks for a PATH/field-location (no `*_path` input + lodash get). When unsure, try a couple of sensible paths or process the whole input.payload.";
+  } else if (plan.triggerKind === "monitor") {
+    triggerHint =
+      "This is an alert-handler. Each run is ONE monitoring event, fed as the trigger input with these EXACT fields: input.category ('error'|'silent_failure'|'silent_success'|'recovered'|'healed'), input.severity ('info'|'warn'|'critical'), input.status, input.title, input.detail, input.sourceWorkflowId, input.sourceWorkflowName, input.at. Read those directly — do NOT invent other trigger fields and do NOT treat them as upstream-step inputs.";
   }
 
   const funcs = [];
@@ -330,7 +333,9 @@ export async function designWorkflow(
         ? ["timestamp"]
         : plan.triggerKind === "webhook"
           ? ["payload"] // the whole raw body is trigger-fed, never a form field
-          : [];
+          : plan.triggerKind === "monitor"
+            ? ["category", "severity", "status", "title", "detail", "sourceWorkflowId", "sourceWorkflowName", "at"]
+            : [];
 
   for (const step of plan.steps) {
     const stepLabel = `Writing ${step.title || step.id}`;

@@ -61,7 +61,15 @@ import {
 } from "./outcome";
 import type { LivenessConfig } from "./webhook-liveness";
 import { checkConnectionBindings, bindingsOf } from "./connection-check";
-import { createHealthMonitor } from "./health";
+import {
+  createHealthMonitor,
+  type HealthState,
+  type HealthStatus,
+} from "./health";
+import { createAlertChannelStore } from "./alert-store";
+import { createAlertService } from "./alert-service";
+import type { ChannelKind, ChannelSecret } from "./alert-channels";
+import type { Severity, AlertCategory } from "./alert-router";
 import { createLivenessEvaluator } from "./liveness";
 import { createRegistry, publicAuth, type ProviderDraft } from "../providers/registry";
 import { assertSpace, type DocStore } from "../store/docstore";
@@ -297,14 +305,21 @@ const versions = createVersionStore(store, {
 const mcpTokens = createMcpTokenStore(store);
 const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
-// Per-flow health. onChange fires on status transitions; we log it here, and the
-// same signal can drive alerting / status UI through the in-memory event bus.
+// Per-flow health. onChange fires on status transitions: we log it and hand it
+// to the alert pipeline (late-bound below, after its deps exist).
+let onHealthTransition: (
+  spaceId: string,
+  state: HealthState,
+  prev: HealthStatus | undefined,
+) => void = () => {};
 const health = createHealthMonitor({
   runs,
-  onChange: (spaceId, state, prev) =>
+  onChange: (spaceId, state, prev) => {
     console.log(
       `[health] ${spaceId}/${state.workflowId}: ${prev ?? "—"} → ${state.status}`,
-    ),
+    );
+    onHealthTransition(spaceId, state, prev);
+  },
 });
 const settings = createSettingsStore(store);
 
@@ -323,6 +338,41 @@ void settings
 const membership = createMembership(store);
 const chats = createChatStore(store);
 const userLogs = createLogStore(store);
+// Alerting: deliver health transitions to the activity log (always) + any
+// configured external channels (Telegram/Slack/Discord/email), engine-bypass.
+const alertChannels = createAlertChannelStore(store, vault);
+const alerts = createAlertService({
+  channels: alertChannels,
+  logs: userLogs,
+  workflowName: async (spaceId, workflowId) =>
+    (await workflows.getWorkflow(spaceId, workflowId))?.name,
+  // a flow is a handler if its trigger is "monitor" (loop guard reads this)
+  isHandler: async (spaceId, workflowId) =>
+    (await workflows.getWorkflow(spaceId, workflowId))?.trigger?.kind === "monitor",
+  // every monitor-trigger flow auto-fires on matching events (no binding step)
+  listHandlers: async (spaceId) => {
+    const out: { workflowId: string; events?: string[] }[] = [];
+    for (const m of await workflows.listWorkflows(spaceId)) {
+      const wf = await workflows.getWorkflow(spaceId, m.id);
+      if (wf?.trigger?.kind === "monitor")
+        out.push({ workflowId: wf.id, events: wf.trigger.monitor?.events });
+    }
+    return out;
+  },
+  // run a monitor-handler flow with the alert payload as its input
+  dispatchWorkflow: async (spaceId, workflowId, payload) => {
+    const wf = await workflows.getWorkflow(spaceId, workflowId);
+    if (!wf || wf.trigger?.kind !== "monitor") return; // only dispatch handlers
+    await runSavedWorkflow(
+      spaceId,
+      wf,
+      payload as unknown as Record<string, unknown>,
+      "monitor",
+    );
+  },
+});
+onHealthTransition = (spaceId, state, prev) =>
+  void alerts.onHealthChange(spaceId, state, prev).catch(() => {});
 const fileService = createFileService(store, createBlobStore());
 const usage = createUsageStore(store);
 const billing: BillingService =
@@ -1573,6 +1623,91 @@ app.get("/api/workflows/:id/health", async (c) => {
 // Space-wide health summary.
 app.get("/api/health", async (c) => {
   return c.json(await health.summary(c.get("spaceId")));
+});
+
+// ── Alert channels (Telegram / Slack / Discord / email / webhook / workflow) ─
+const ALERT_KINDS: ChannelKind[] = [
+  "telegram", "slack", "discord", "email", "webhook",
+];
+const ALERT_SEVERITIES: Severity[] = ["info", "warn", "critical"];
+const ALERT_CATEGORIES: AlertCategory[] = [
+  "error", "silent_failure", "silent_success", "recovered", "healed",
+];
+
+app.get("/api/alert-channels", async (c) => {
+  return c.json(await alertChannels.list(c.get("spaceId"))); // meta only, no secrets
+});
+
+// Flows eligible to handle alerts = those with the "monitor" trigger. The UI
+// lists these so the user can pick one for a "workflow" channel.
+app.get("/api/monitor-handlers", async (c) => {
+  const spaceId = c.get("spaceId");
+  const metas = await workflows.listWorkflows(spaceId);
+  const out: { id: string; name: string }[] = [];
+  for (const m of metas) {
+    const wf = await workflows.getWorkflow(spaceId, m.id);
+    if (wf?.trigger?.kind === "monitor") out.push({ id: wf.id, name: wf.name });
+  }
+  return c.json(out);
+});
+
+app.post("/api/alert-channels", async (c) => {
+  const body = await c.req.json<{
+    kind?: string;
+    label?: string;
+    minSeverity?: string;
+    categories?: string[];
+    secret?: ChannelSecret;
+  }>();
+  if (!body.kind || !ALERT_KINDS.includes(body.kind as ChannelKind))
+    return c.json({ error: "invalid channel kind" }, 400);
+  if (!body.secret || typeof body.secret !== "object")
+    return c.json({ error: "secret required" }, 400);
+  // kind-specific config validation
+  if (body.kind === "webhook" && !(body.secret as { url?: string }).url)
+    return c.json({ error: "webhook channel needs secret.url" }, 400);
+  const minSeverity =
+    body.minSeverity && ALERT_SEVERITIES.includes(body.minSeverity as Severity)
+      ? (body.minSeverity as Severity)
+      : undefined;
+  const categories = Array.isArray(body.categories)
+    ? body.categories.filter((x): x is AlertCategory => ALERT_CATEGORIES.includes(x as AlertCategory))
+    : undefined;
+  const meta = await alertChannels.add(c.get("spaceId"), {
+    kind: body.kind as ChannelKind,
+    label: body.label,
+    minSeverity,
+    categories: categories?.length ? categories : undefined,
+    secret: body.secret,
+  });
+  return c.json(meta);
+});
+
+app.patch("/api/alert-channels/:id", async (c) => {
+  const body = await c.req.json<{ enabled?: boolean }>();
+  if (typeof body.enabled !== "boolean")
+    return c.json({ error: "enabled (boolean) required" }, 400);
+  await alertChannels.setEnabled(c.get("spaceId"), c.req.param("id"), body.enabled);
+  return c.json({ ok: true });
+});
+
+app.delete("/api/alert-channels/:id", async (c) => {
+  await alertChannels.remove(c.get("spaceId"), c.req.param("id"));
+  return c.json({ ok: true });
+});
+
+// Send a test alert through all configured channels (verifies setup).
+app.post("/api/alert-channels/test", async (c) => {
+  await alerts.deliver(c.get("spaceId"), {
+    workflowId: "test",
+    status: "degraded",
+    severity: "warn",
+    reason: "error",
+    category: "error",
+    title: "Test alert",
+    detail: "If you can read this, your alert channel works.",
+  });
+  return c.json({ ok: true });
 });
 
 app.put("/api/workflows/:id", async (c) => {

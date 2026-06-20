@@ -12,6 +12,12 @@ export function emailEnabled(): boolean {
   return Boolean(RESEND_API_KEY && MAIL_ADDRESS);
 }
 
+// Generic transactional send for callers beyond OTP (e.g. alert escalation).
+// Throws on failure so the caller can fall back; no-op when email is unconfigured.
+export async function sendEmail(to: string, subject: string, html: string): Promise<void> {
+  return send(to, subject, html);
+}
+
 async function send(to: string, subject: string, html: string): Promise<void> {
   if (!emailEnabled()) return; // no-op when email isn't configured
   const res = await fetch("https://api.resend.com/emails", {

@@ -25,6 +25,11 @@ const EVENT_FIELDS: Record<string, string[]> = {
   schedule: ["timestamp"],
   poll: [],
   manual: [],
+  // an alert-handler flow receives the monitoring event as these input fields
+  monitor: [
+    "category", "severity", "status", "title", "detail",
+    "sourceWorkflowId", "sourceWorkflowName", "at",
+  ],
 };
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
@@ -140,8 +145,8 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     });
   });
 
-  tool("create_workflow", "Create an empty workflow. triggerKind: manual|webhook|schedule|poll. For a RECURRING (schedule) workflow set its cadence here: intervalValue + intervalUnit (second|minute|hour|day) e.g. 15+second = every 15s, OR a cron expression. The schedule registers immediately and starts firing.",
-    { name: z.string(), triggerKind: z.enum(["manual", "webhook", "schedule", "poll"]).default("manual"),
+  tool("create_workflow", "Create an empty workflow. triggerKind: manual|webhook|schedule|poll|monitor. For a RECURRING (schedule) workflow set its cadence here: intervalValue + intervalUnit (second|minute|hour|day) e.g. 15+second = every 15s, OR a cron expression. The schedule registers immediately and starts firing. triggerKind:'monitor' makes an ALERT-HANDLER flow that runs when a monitoring event (error / silent-failure / silent-success / heal) fires — it does NOT run on its own; its steps read the event from input.category, input.severity, input.sourceWorkflowName, input.detail, etc. Use it for 'when any flow fails, do X' (log to a sheet, call my API, escalate).",
+    { name: z.string(), triggerKind: z.enum(["manual", "webhook", "schedule", "poll", "monitor"]).default("manual"),
       intervalValue: z.number().optional(), intervalUnit: z.enum(["second", "minute", "hour", "day"]).optional(), cron: z.string().optional() },
     async ({ name, triggerKind, intervalValue, intervalUnit, cron }) => {
       const id = randomUUID();

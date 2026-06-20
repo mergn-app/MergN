@@ -27,11 +27,16 @@ export interface PollTriggerConfig {
 }
 
 export interface TriggerConfig {
-  kind: "manual" | "webhook" | "schedule" | "poll" | "event";
+  // "monitor" = an alert-handler flow: runs automatically when a monitoring
+  // event fires on any flow (error / silent-failure / silent-success / heal).
+  // Behaves like "manual" for scheduling/webhook paths (no job/endpoint).
+  kind: "manual" | "webhook" | "schedule" | "poll" | "event" | "monitor";
   enabled?: boolean;
   schedule?: ScheduleTriggerConfig;
   poll?: PollTriggerConfig;
   eventFields?: string[];
+  // for kind:"monitor" — only fire on these event categories (default: all).
+  monitor?: { events?: string[] };
 }
 
 export interface SavedWorkflow {
