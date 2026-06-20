@@ -299,5 +299,52 @@
     "created": "Creado el {{date}}",
     "planLocked": "El MCP remoto está disponible en planes de pago. Mejora tu plan para conectar.",
     "error": "No se pudo crear el token. Inténtalo de nuevo."
+  },
+  "health": {
+    "healthy": "Saludable",
+    "degraded": "Degradado",
+    "failing": "Con fallos",
+    "nodata": "Sin datos",
+    "cause": {
+      "scheduleStopped": "la programación dejó de ejecutarse",
+      "webhookSilent": "los eventos de webhook esperados dejaron de llegar"
+    }
+  },
+  "monitoring": {
+    "open": "Abrir monitoreo",
+    "back": "Volver al editor",
+    "flows": "Flujos",
+    "noFlows": "Aún no hay flujos",
+    "activity": "Actividad",
+    "runs": "Ejecuciones",
+    "noRuns": "Aún no hay ejecuciones",
+    "logs": "Registros",
+    "noLogs": "Sin registros para este flujo",
+    "versions": "Historial de versiones",
+    "settings": "Ajustes",
+    "assistant": "Asistente",
+    "assistantSoon": "Asistente de monitoreo — próximamente",
+    "graphHint": "latencia por ejecución, reciente a la derecha",
+    "runDetail": "Detalle de ejecución",
+    "noSteps": "Sin registros de pasos",
+    "settingsIntro": "Ajustes de monitoreo por flujo:",
+    "settingsHeal": "Auto-reparación on/off + modo",
+    "settingsAlerts": "Qué eventos te alertan + canales",
+    "settingsLiveness": "Comprobaciones de liveness y outcome",
+    "settingsSoon": "La edición llega con el hito de ajustes.",
+    "latency": "Latencia",
+    "successRate": "Tasa de éxito",
+    "lastN": "últimos {{n}}",
+    "errorTypes": "Tipos de error",
+    "noErrors": "Sin errores",
+    "volume": "Volumen de ejecuciones (24h)",
+    "volumeHint": "ejecuciones por hora",
+    "alertsToggle": "Enviar alertas externas",
+    "alertsToggleHint": "Desactivado por defecto. Si está activo, los errores/recuperaciones de este flujo notifican a tus canales y ejecutan flujos manejadores de alertas. (El registro de actividad los guarda igualmente.)",
+    "alerts": "Alertas",
+    "alertsOn": "Alertas activas",
+    "alertsOff": "Alertas desactivadas",
+    "alertChannels": "Canales y reglas",
+    "alertChannelsSoon": "La elección de destinos (Discord, Slack, correo) y reglas por severidad llegará pronto. Por ahora el interruptor controla todos los canales configurados."
   }
 }

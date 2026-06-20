@@ -42,6 +42,10 @@ export interface AlertServiceDeps {
   // is this flow itself a monitor-handler? (loop guard — a handler's own alert
   // must never dispatch handlers, or it would loop)
   isHandler?: (spaceId: string, workflowId: string) => Promise<boolean>;
+  // does this flow opt INTO external notifications? Default OFF — the activity
+  // log always records the alert, but external channels + handler flows only
+  // fire when the user enabled alerts for the source flow (no spam by default).
+  alertsEnabled?: (spaceId: string, workflowId: string) => Promise<boolean>;
   fetch?: Fetch;
   now?: () => number;
 }
@@ -52,8 +56,8 @@ export interface AlertService {
     state: HealthState,
     prev: HealthStatus | undefined,
   ): Promise<void>;
-  // exposed for a "send test alert" endpoint
-  deliver(spaceId: string, ev: AlertEvent): Promise<void>;
+  // exposed for a "send test alert" endpoint (force bypasses the opt-in gate)
+  deliver(spaceId: string, ev: AlertEvent, forceNotify?: boolean): Promise<void>;
 }
 
 export function createAlertService(deps: AlertServiceDeps): AlertService {
@@ -75,7 +79,8 @@ export function createAlertService(deps: AlertServiceDeps): AlertService {
       .catch(() => {});
   }
 
-  async function deliver(spaceId: string, ev: AlertEvent): Promise<void> {
+  // forceNotify=true skips the opt-in gate (used by the "send test alert" button).
+  async function deliver(spaceId: string, ev: AlertEvent, forceNotify = false): Promise<void> {
     const name = await deps.workflowName?.(spaceId, ev.workflowId).catch(() => undefined);
     const payload = toAlertPayload(ev, name, new Date(now()).toISOString());
     const delivery = {
@@ -94,6 +99,12 @@ export function createAlertService(deps: AlertServiceDeps): AlertService {
         workflowId: ev.workflowId,
       })
       .catch(() => {});
+
+    // Opt-in gate: external delivery (channels + handler flows) only when the
+    // source flow has alerts enabled (or explicitly forced). The log above
+    // already recorded it — no spam by default.
+    const notify = forceNotify || ((await deps.alertsEnabled?.(spaceId, ev.workflowId).catch(() => false)) ?? false);
+    if (!notify) return;
 
     // Loop guard: if the SOURCE flow is itself a monitor-handler, its own alert
     // must not dispatch handlers (else handler-fails → alert → handler → …).

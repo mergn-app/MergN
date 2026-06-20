@@ -299,5 +299,52 @@
     "created": "{{date}} tarihinde oluşturuldu",
     "planLocked": "Uzaktan MCP ücretli planlarda. Bağlanmak için yükselt.",
     "error": "Token oluşturulamadı. Tekrar dene."
+  },
+  "health": {
+    "healthy": "Sağlıklı",
+    "degraded": "Sorunlu",
+    "failing": "Bozuk",
+    "nodata": "Veri yok",
+    "cause": {
+      "scheduleStopped": "zamanlama ateşlemeyi durdurdu",
+      "webhookSilent": "beklenen webhook olayları gelmeyi durdurdu"
+    }
+  },
+  "monitoring": {
+    "open": "Monitoringi aç",
+    "back": "Editöre dön",
+    "flows": "Akışlar",
+    "noFlows": "Henüz akış yok",
+    "activity": "Aktivite",
+    "runs": "Çalışmalar",
+    "noRuns": "Henüz çalışma yok",
+    "logs": "Loglar",
+    "noLogs": "Bu akış için log yok",
+    "versions": "Versiyon geçmişi",
+    "settings": "Ayarlar",
+    "assistant": "Asistan",
+    "assistantSoon": "Monitoring asistanı — yakında",
+    "graphHint": "çalışma başına gecikme, en yeni sağda",
+    "runDetail": "Çalışma detayı",
+    "noSteps": "Adım kaydı yok",
+    "settingsIntro": "Akış-bazlı monitoring ayarları:",
+    "settingsHeal": "Self-healing aç/kapa + mod",
+    "settingsAlerts": "Hangi olaylarda alert + kanallar",
+    "settingsLiveness": "Liveness & outcome (silent-success) kontrolleri",
+    "settingsSoon": "Bunları düzenleme ayarlar milestone'uyla gelir.",
+    "latency": "Gecikme",
+    "successRate": "Başarı oranı",
+    "lastN": "son {{n}}",
+    "errorTypes": "Hata türleri",
+    "noErrors": "Hata yok",
+    "volume": "Çalışma hacmi (24s)",
+    "volumeHint": "saatlik çalışma",
+    "alertsToggle": "Dış alert gönder",
+    "alertsToggleHint": "Varsayılan kapalı. Açıkken bu akışın hataları/toparlanmaları kanallarına bildirim gönderir ve alert-handler akışlarını çalıştırır. (Activity log her durumda kaydeder.)",
+    "alerts": "Alertler",
+    "alertsOn": "Alertler açık",
+    "alertsOff": "Alertler kapalı",
+    "alertChannels": "Kanallar ve kurallar",
+    "alertChannelsSoon": "Hedef seçimi (Discord, Slack, e-posta) ve önem-bazlı kurallar yakında. Şimdilik bu anahtar yapılandırılmış tüm kanalları yönetir."
   }
 }

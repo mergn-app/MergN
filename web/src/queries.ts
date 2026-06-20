@@ -24,6 +24,7 @@ export interface SavedWorkflow {
   inputForm?: InputForm;
   variables?: Record<string, unknown>;
   conversationId?: string;
+  alertsEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -365,7 +366,20 @@ export interface RunMeta {
   trigger: string;
   status: string;
   startedAt: string;
+  finishedAt?: string; // present once the run completes — drives the latency graph
+  errorType?: string; // classified failure (transient|auth|logic|unknown)
   stepCount: number;
+}
+
+// Mirrors the server's HealthState (web has no import bridge to src/server).
+export interface HealthState {
+  workflowId: string;
+  status: "healthy" | "degraded" | "failing" | "nodata";
+  lastRunAt?: string;
+  lastError?: { type: string; message: string };
+  livenessFail?: { kind: "schedule" | "webhook"; since: string };
+  outcomeFail?: { kind: "expectation" | "drop"; nodeId?: string; detail: string; since: string };
+  updatedAt: string;
 }
 
 export interface RunRecord {
@@ -576,6 +590,57 @@ export function useRuns(workflowId: string | null) {
     queryFn: () =>
       json<RunMeta[]>(`/api/runs?workflow=${encodeURIComponent(workflowId!)}`),
     enabled: !!workflowId && !!user,
+  });
+}
+
+// Per-flow health (recomputed from run history on read). Polls while open so the
+// icon/page stay live without depending on the SSE wiring.
+export function useHealth(workflowId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["health", getSpace(), workflowId],
+    queryFn: () =>
+      json<HealthState>(`/api/workflows/${encodeURIComponent(workflowId!)}/health`),
+    enabled: !!workflowId && !!user,
+    refetchInterval: 15000,
+  });
+}
+
+// Per-flow "send external alerts" flag (default OFF). The gear toggle reads +
+// flips it via PATCH so a flow doesn't spam notifications until opted in.
+export function useAlertsEnabled(workflowId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["alerts-enabled", getSpace(), workflowId],
+    queryFn: async () =>
+      (await json<SavedWorkflow>(`/api/workflows/${encodeURIComponent(workflowId!)}`)).alertsEnabled === true,
+    enabled: !!workflowId && !!user,
+  });
+}
+
+export function useToggleAlerts(workflowId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (enabled: boolean) =>
+      json<{ ok: boolean }>(`/api/workflows/${encodeURIComponent(workflowId)}/alerts`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["alerts-enabled", getSpace(), workflowId] }),
+  });
+}
+
+// Space-wide health summary — one entry per workflow (the monitoring page's
+// left list + at-a-glance dots read this).
+export function useHealthSummary() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["health-summary", getSpace()],
+    queryFn: () => json<HealthState[]>("/api/health"),
+    enabled: !!user,
+    refetchInterval: 15000,
   });
 }
 

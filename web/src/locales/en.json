@@ -299,5 +299,52 @@
     "created": "Created {{date}}",
     "planLocked": "Remote MCP is available on paid plans. Upgrade to connect.",
     "error": "Could not create token. Please try again."
+  },
+  "health": {
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "failing": "Failing",
+    "nodata": "No data",
+    "cause": {
+      "scheduleStopped": "the schedule stopped firing",
+      "webhookSilent": "expected webhook events stopped arriving"
+    }
+  },
+  "monitoring": {
+    "open": "Open monitoring",
+    "back": "Back to editor",
+    "flows": "Flows",
+    "noFlows": "No flows yet",
+    "activity": "Activity",
+    "runs": "Runs",
+    "noRuns": "No runs yet",
+    "logs": "Logs",
+    "noLogs": "No logs for this flow",
+    "versions": "Version history",
+    "settings": "Settings",
+    "assistant": "Assistant",
+    "assistantSoon": "Monitoring assistant — coming soon",
+    "graphHint": "latency per run, newest right",
+    "runDetail": "Run detail",
+    "noSteps": "No step records",
+    "settingsIntro": "Per-flow monitoring settings:",
+    "settingsHeal": "Self-healing on/off + mode",
+    "settingsAlerts": "Which events alert you + channels",
+    "settingsLiveness": "Liveness & outcome (silent-success) checks",
+    "settingsSoon": "Editing these lands with the settings milestone.",
+    "latency": "Latency",
+    "successRate": "Success rate",
+    "lastN": "last {{n}}",
+    "errorTypes": "Error types",
+    "noErrors": "No errors",
+    "volume": "Run volume (24h)",
+    "volumeHint": "runs per hour",
+    "alertsToggle": "Send external alerts",
+    "alertsToggleHint": "Off by default. When on, this flow's errors/recoveries notify your channels and run alert-handler flows. (The activity log records them either way.)",
+    "alerts": "Alerts",
+    "alertsOn": "Alerts on",
+    "alertsOff": "Alerts off",
+    "alertChannels": "Channels & rules",
+    "alertChannelsSoon": "Choosing destinations (Discord, Slack, email) and per-severity rules is coming soon. For now the toggle controls all configured channels."
   }
 }

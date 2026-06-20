@@ -299,5 +299,52 @@
     "created": "Créé le {{date}}",
     "planLocked": "Le MCP distant est disponible sur les forfaits payants. Mettez à niveau pour vous connecter.",
     "error": "Impossible de créer le token. Veuillez réessayer."
+  },
+  "health": {
+    "healthy": "Sain",
+    "degraded": "Dégradé",
+    "failing": "En échec",
+    "nodata": "Aucune donnée",
+    "cause": {
+      "scheduleStopped": "la planification ne se déclenche plus",
+      "webhookSilent": "les événements webhook attendus n'arrivent plus"
+    }
+  },
+  "monitoring": {
+    "open": "Ouvrir le monitoring",
+    "back": "Retour à l'éditeur",
+    "flows": "Flux",
+    "noFlows": "Aucun flux",
+    "activity": "Activité",
+    "runs": "Exécutions",
+    "noRuns": "Aucune exécution",
+    "logs": "Journaux",
+    "noLogs": "Aucun journal pour ce flux",
+    "versions": "Historique des versions",
+    "settings": "Paramètres",
+    "assistant": "Assistant",
+    "assistantSoon": "Assistant de monitoring — bientôt",
+    "graphHint": "latence par exécution, récente à droite",
+    "runDetail": "Détail d'exécution",
+    "noSteps": "Aucun enregistrement d'étape",
+    "settingsIntro": "Paramètres de monitoring par flux :",
+    "settingsHeal": "Auto-réparation activée/désactivée + mode",
+    "settingsAlerts": "Quels événements vous alertent + canaux",
+    "settingsLiveness": "Contrôles liveness & outcome",
+    "settingsSoon": "L'édition arrive avec le jalon des paramètres.",
+    "latency": "Latence",
+    "successRate": "Taux de réussite",
+    "lastN": "{{n}} derniers",
+    "errorTypes": "Types d'erreur",
+    "noErrors": "Aucune erreur",
+    "volume": "Volume d'exécutions (24h)",
+    "volumeHint": "exécutions par heure",
+    "alertsToggle": "Envoyer des alertes externes",
+    "alertsToggleHint": "Désactivé par défaut. Activé, les erreurs/rétablissements de ce flux notifient vos canaux et lancent les flux gestionnaires d'alertes. (Le journal d'activité les enregistre dans tous les cas.)",
+    "alerts": "Alertes",
+    "alertsOn": "Alertes activées",
+    "alertsOff": "Alertes désactivées",
+    "alertChannels": "Canaux et règles",
+    "alertChannelsSoon": "Le choix des destinations (Discord, Slack, e-mail) et des règles par gravité arrive bientôt. Pour l'instant, l'interrupteur contrôle tous les canaux configurés."
   }
 }

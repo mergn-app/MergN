@@ -299,5 +299,52 @@
     "created": "Erstellt am {{date}}",
     "planLocked": "Remote-MCP ist in kostenpflichtigen Plänen verfügbar. Upgrade zum Verbinden.",
     "error": "Token konnte nicht erstellt werden. Bitte erneut versuchen."
+  },
+  "health": {
+    "healthy": "Gesund",
+    "degraded": "Beeinträchtigt",
+    "failing": "Fehlerhaft",
+    "nodata": "Keine Daten",
+    "cause": {
+      "scheduleStopped": "der Zeitplan löst nicht mehr aus",
+      "webhookSilent": "erwartete Webhook-Ereignisse bleiben aus"
+    }
+  },
+  "monitoring": {
+    "open": "Monitoring öffnen",
+    "back": "Zurück zum Editor",
+    "flows": "Flows",
+    "noFlows": "Noch keine Flows",
+    "activity": "Aktivität",
+    "runs": "Läufe",
+    "noRuns": "Noch keine Läufe",
+    "logs": "Logs",
+    "noLogs": "Keine Logs für diesen Flow",
+    "versions": "Versionsverlauf",
+    "settings": "Einstellungen",
+    "assistant": "Assistent",
+    "assistantSoon": "Monitoring-Assistent — bald verfügbar",
+    "graphHint": "Latenz pro Lauf, neueste rechts",
+    "runDetail": "Lauf-Detail",
+    "noSteps": "Keine Schritt-Datensätze",
+    "settingsIntro": "Flow-spezifische Monitoring-Einstellungen:",
+    "settingsHeal": "Self-Healing an/aus + Modus",
+    "settingsAlerts": "Welche Ereignisse benachrichtigen + Kanäle",
+    "settingsLiveness": "Liveness- & Outcome-Prüfungen",
+    "settingsSoon": "Die Bearbeitung kommt mit dem Einstellungs-Meilenstein.",
+    "latency": "Latenz",
+    "successRate": "Erfolgsrate",
+    "lastN": "letzte {{n}}",
+    "errorTypes": "Fehlertypen",
+    "noErrors": "Keine Fehler",
+    "volume": "Lauf-Volumen (24h)",
+    "volumeHint": "Läufe pro Stunde",
+    "alertsToggle": "Externe Alerts senden",
+    "alertsToggleHint": "Standardmäßig aus. Wenn an, benachrichtigen Fehler/Wiederherstellungen dieses Flows deine Kanäle und starten Alert-Handler-Flows. (Das Aktivitätsprotokoll erfasst sie ohnehin.)",
+    "alerts": "Alerts",
+    "alertsOn": "Alerts an",
+    "alertsOff": "Alerts aus",
+    "alertChannels": "Kanäle & Regeln",
+    "alertChannelsSoon": "Die Auswahl der Ziele (Discord, Slack, E-Mail) und Regeln je Schweregrad kommt bald. Vorerst steuert der Schalter alle konfigurierten Kanäle."
   }
 }

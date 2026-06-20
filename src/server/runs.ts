@@ -25,6 +25,7 @@ export interface RunDoc {
   maskLevel?: string; // mask level applied to this run's step IO
   stepCount?: number; // set on finalize (cheap list metric)
   failReason?: string; // e.g. "orphaned"
+  errorType?: string; // classified failure (transient|auth|logic|unknown) — monitoring breakdown
 }
 
 export type RunHeader = Omit<RunDoc, "records">;
@@ -44,6 +45,7 @@ export interface RunMeta {
   status: string;
   startedAt: string;
   finishedAt?: string;
+  errorType?: string; // classified failure — drives the monitoring breakdown
   stepCount: number;
 }
 
@@ -58,9 +60,10 @@ export interface RunStore {
     status: "done" | "failed",
     finishedAt: string,
     failReason?: string,
+    errorType?: string,
   ): Promise<void>;
   // reads:
-  listRuns(spaceId: string, workflowId?: string): Promise<RunMeta[]>;
+  listRuns(spaceId: string, workflowId?: string, limit?: number): Promise<RunMeta[]>;
   getRun(spaceId: string, id: string): Promise<RunDoc | null>;
   // maintenance:
   pruneRuns(spaceId: string): Promise<number>;
@@ -110,7 +113,7 @@ export function createRunStore(store: DocStore): RunStore {
       );
     },
 
-    async finalizeRun(spaceId, runId, status, finishedAt, failReason) {
+    async finalizeRun(spaceId, runId, status, finishedAt, failReason, errorType) {
       const header = await readHeader(spaceId, runId);
       if (!header) return;
       const steps = await listSteps(spaceId, runId);
@@ -120,6 +123,7 @@ export function createRunStore(store: DocStore): RunStore {
         finishedAt,
         stepCount: steps.filter(nonTrigger).length,
         ...(failReason ? { failReason } : {}),
+        ...(errorType ? { errorType } : {}),
       } as unknown as Record<string, unknown>);
     },
 
@@ -133,12 +137,12 @@ export function createRunStore(store: DocStore): RunStore {
       };
     },
 
-    async listRuns(spaceId, workflowId) {
+    async listRuns(spaceId, workflowId, limit) {
       const docs = (await store.list(
         spaceId,
         COLLECTION,
       )) as unknown as RunDoc[];
-      return docs
+      const rows = docs
         .filter((r) => !workflowId || r.workflowId === workflowId)
         .map((r) => ({
           id: r.id,
@@ -148,6 +152,7 @@ export function createRunStore(store: DocStore): RunStore {
           status: r.status,
           startedAt: r.startedAt,
           finishedAt: r.finishedAt,
+          ...(r.errorType ? { errorType: r.errorType } : {}),
           stepCount:
             r.stepCount ??
             (Array.isArray(r.records)
@@ -155,6 +160,9 @@ export function createRunStore(store: DocStore): RunStore {
               : 0),
         }))
         .sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+      // newest-first already; bound the payload so high-volume flows don't ship
+      // thousands of rows the UI only ever shows ~100 of.
+      return limit && limit > 0 ? rows.slice(0, limit) : rows;
     },
 
     async pruneRuns(spaceId) {

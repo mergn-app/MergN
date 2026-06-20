@@ -53,6 +53,7 @@ export interface SavedWorkflow {
   conversationId?: string;
   currentVersionId?: string; // latest sealed version (run-stamp / history pointer)
   outcome?: OutcomeConfig; // opt-in silent-success checks (expectations / drift-to-empty)
+  alertsEnabled?: boolean; // send external alerts / run handlers for this flow (default OFF — opt-in)
   maskLevel?: MaskLevel; // per-flow PII masking override (default → MASK_DEFAULT)
   liveness?: LivenessConfig; // per-flow liveness config (webhook heartbeat / schedule tol)
   createdAt: string;

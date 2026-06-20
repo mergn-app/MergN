@@ -349,6 +349,9 @@ const alerts = createAlertService({
   // a flow is a handler if its trigger is "monitor" (loop guard reads this)
   isHandler: async (spaceId, workflowId) =>
     (await workflows.getWorkflow(spaceId, workflowId))?.trigger?.kind === "monitor",
+  // external alerts are opt-in per flow (default OFF) — no notification spam
+  alertsEnabled: async (spaceId, workflowId) =>
+    (await workflows.getWorkflow(spaceId, workflowId))?.alertsEnabled === true,
   // every monitor-trigger flow auto-fires on matching events (no binding step)
   listHandlers: async (spaceId) => {
     const out: { workflowId: string; events?: string[] }[] = [];
@@ -637,18 +640,22 @@ async function runSavedWorkflow(
       ? "failed"
       : "done";
   const finishedAt = new Date().toISOString();
-  // Store the actual engine-error message as failReason so a run that died at
-  // setup (0 step records) still shows WHY in the UI, not a blank state.
-  await runs.finalizeRun(spaceId, id, status, finishedAt, engineError);
-
+  // Classify the failure (if any) BEFORE finalize so the run header stores its
+  // errorType — the monitoring breakdown reads it from listRuns.
   let errorType: ErrorType | undefined;
+  let failMessage: string | undefined;
   if (status === "failed") {
     const errs = records
       .filter((r) => r.status === "failed")
       .map((r) => `${r.nodeId}: ${r.error ?? "failed"}`)
       .join("; ");
-    const failMessage = errs || engineError || "unknown error";
+    failMessage = errs || engineError || "unknown error";
     errorType = classifyError(failMessage); // transient|auth|logic|unknown
+  }
+  // Store failReason + errorType so a run that died at setup still shows WHY.
+  await runs.finalizeRun(spaceId, id, status, finishedAt, engineError, errorType);
+
+  if (status === "failed") {
     void userLogs.append(spaceId, {
       level: "error",
       source: "run",
@@ -658,7 +665,7 @@ async function runSavedWorkflow(
     });
     void health
       .recompute(spaceId, wf.id, {
-        lastError: { type: errorType, message: failMessage },
+        lastError: { type: errorType ?? "unknown", message: failMessage ?? "unknown error" },
       })
       .catch(() => {});
   } else {
@@ -792,12 +799,14 @@ if (nats) {
       const message = error instanceof Error ? error.message : String(error);
       const id = randomUUID();
       const now = new Date().toISOString();
+      const errorType = classifyError(message);
       const run: RunDoc = {
         id,
         workflowId: wf.id,
         workflowName: wf.name,
         trigger,
         status: "failed",
+        errorType,
         input: {},
         records: [
           {
@@ -815,7 +824,6 @@ if (nats) {
         finishedAt: now,
       };
       await runs.saveRun(spaceId, run);
-      const errorType = classifyError(message);
       void health
         .recompute(spaceId, wf.id, { lastError: { type: errorType, message } })
         .catch(() => {});
@@ -1620,6 +1628,19 @@ app.get("/api/workflows/:id/health", async (c) => {
   return c.json(state);
 });
 
+// Toggle external alerts for one flow (default OFF). Reads current + merges so
+// the gear can flip it without re-sending the whole workflow.
+app.patch("/api/workflows/:id/alerts", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const { enabled } = await c.req.json<{ enabled?: boolean }>();
+  if (typeof enabled !== "boolean") return c.json({ error: "enabled (boolean) required" }, 400);
+  const wf = await workflows.getWorkflow(spaceId, id);
+  if (!wf) return c.json({ error: "not found" }, 404);
+  await workflows.saveWorkflow(spaceId, { ...wf, alertsEnabled: enabled });
+  return c.json({ ok: true, alertsEnabled: enabled });
+});
+
 // Space-wide health summary.
 app.get("/api/health", async (c) => {
   return c.json(await health.summary(c.get("spaceId")));
@@ -1698,15 +1719,19 @@ app.delete("/api/alert-channels/:id", async (c) => {
 
 // Send a test alert through all configured channels (verifies setup).
 app.post("/api/alert-channels/test", async (c) => {
-  await alerts.deliver(c.get("spaceId"), {
-    workflowId: "test",
-    status: "degraded",
-    severity: "warn",
-    reason: "error",
-    category: "error",
-    title: "Test alert",
-    detail: "If you can read this, your alert channel works.",
-  });
+  await alerts.deliver(
+    c.get("spaceId"),
+    {
+      workflowId: "test",
+      status: "degraded",
+      severity: "warn",
+      reason: "error",
+      category: "error",
+      title: "Test alert",
+      detail: "If you can read this, your alert channel works.",
+    },
+    true, // force — a test always sends, bypassing the per-flow opt-in
+  );
   return c.json({ ok: true });
 });
 
@@ -1727,6 +1752,7 @@ app.put("/api/workflows/:id", async (c) => {
     outcome?: OutcomeConfig;
     maskLevel?: MaskLevel;
     liveness?: LivenessConfig;
+    alertsEnabled?: boolean;
   }>();
   const wf = await workflows.saveWorkflow(c.get("spaceId"), {
     id,
@@ -1743,6 +1769,7 @@ app.put("/api/workflows/:id", async (c) => {
     ...(body.outcome ? { outcome: body.outcome } : {}),
     ...(body.maskLevel ? { maskLevel: body.maskLevel } : {}),
     ...(body.liveness ? { liveness: body.liveness } : {}),
+    ...(typeof body.alertsEnabled === "boolean" ? { alertsEnabled: body.alertsEnabled } : {}),
   });
   if (body.conversationId) {
     await chats.linkWorkflow(
@@ -1991,6 +2018,7 @@ app.post("/api/run", async (c) => {
         workflowName: body.workflowName ?? "untitled",
         trigger: body.resumeRunId ? "resume" : "manual",
         status,
+        ...(errorType ? { errorType } : {}),
         input,
         records,
         startedAt,
@@ -2320,7 +2348,11 @@ app.delete("/api/files/:id", async (c) => {
 
 app.get("/api/runs", async (c) => {
   const workflowId = c.req.query("workflow") || undefined;
-  return c.json(await runs.listRuns(c.get("spaceId"), workflowId));
+  // bound the payload (newest-first); default 200 covers the graph window (60)
+  // + the run list (100) with headroom. `?limit=0` opts out (full history).
+  const raw = c.req.query("limit");
+  const limit = raw === undefined ? 200 : Math.max(0, Number(raw) || 0);
+  return c.json(await runs.listRuns(c.get("spaceId"), workflowId, limit));
 });
 
 app.get("/api/runs/stream", async (c) => {

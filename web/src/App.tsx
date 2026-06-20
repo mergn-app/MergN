@@ -60,9 +60,11 @@ import {
   pauseWorkflow,
   resumeWorkflow,
   reportLog,
+  useHealth,
   type ConnectionMeta,
   type ActivationState,
 } from "./queries";
+import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 import type {
   AuthoredFunc,
   InputForm,
@@ -148,7 +150,9 @@ function Canvas({
       <Background />
       <Controls />
       {nodes.length > 1 && (
-        <Panel position="top-right">
+        // sit left of the monitoring entry icon (absolute right-3 top-3) so they
+        // don't overlap in graph view
+        <Panel position="top-right" style={{ marginRight: "3rem" }}>
           <button
             onClick={() => {
               onArrange();
@@ -519,6 +523,7 @@ export function App({
   const [fireAnchor, setFireAnchor] = useState<number | null>(null);
   const [firePulse, setFirePulse] = useState(0);
   const [fireStatus, setFireStatus] = useState<"done" | "failed">("done");
+  const flowHealth = useHealth(workflowId);
   useRunStream(workflowId, trigger.kind !== "manual", (status) => {
     setFireAnchor(Date.now());
     setFireStatus(status);
@@ -1206,6 +1211,20 @@ export function App({
           />
         )}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/40 bg-card">
+          {workflowId && (
+            <div className="absolute right-3 top-3 z-10">
+              <WorkflowStatusIcon
+                health={flowHealth.data}
+                onClick={() =>
+                  spaceId &&
+                  void navigate({
+                    to: "/s/$spaceId/w/$workflowId/monitor",
+                    params: { spaceId, workflowId },
+                  })
+                }
+              />
+            </div>
+          )}
           <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
             <div className="flex rounded-lg border border-border/50 bg-muted p-0.5 text-xs">
               {(["story", "pipeline", "graph"] as const).map((v) => (
