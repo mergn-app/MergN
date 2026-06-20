@@ -48,6 +48,8 @@ import {
 import { runWorkflow } from "./run";
 import { createIdempotencyStore } from "./idempotency";
 import { createConcurrencyGuard } from "./concurrency";
+import { createFixEngine } from "./fix-engine";
+import { buildDiagnosisContext } from "./diagnosis-context";
 import {
   emitRun,
   onRun,
@@ -120,6 +122,7 @@ import { createOAuth } from "./oauth";
 import { auth, getSessionUser, emailVerificationRequired } from "./auth";
 import { createMembership } from "./membership";
 import type { FuncDefinition, StepRecord } from "../atoms/index";
+import { funcToWire } from "./func-wire";
 
 const SYSTEM = [
   "You are a workflow builder assistant for an AI-native automation product.",
@@ -135,29 +138,6 @@ const SYSTEM = [
   "The user may have uploaded FILES to this space (CSV/JSON/text/etc.). Use list_files to see them and read_file to inspect content before building a workflow that processes a file. A workflow step can receive a file's content via a 'file' input the user picks.",
   "Keep replies short. After building, briefly summarize the steps and how they connect.",
 ].join("\n");
-
-function funcToWire(func: FuncDefinition, title: string, summary: string) {
-  return {
-    id: func.id,
-    title,
-    summary,
-    version: func.version,
-    kind: func.kind,
-    pure: func.pure,
-    inputs: func.inputs.map((p) => ({
-      name: p.name,
-      role: p.role,
-      type: p.schema.type,
-      required: p.required,
-    })),
-    outputSchema: func.outputSchema,
-    bodySource: func.body.source,
-    dependencies: func.body.dependencies ?? [],
-    requires: func.pure ? [] : func.requires,
-    dangerClass: func.pure ? null : func.effect.dangerClass,
-    idempotency: func.pure ? null : func.effect.idempotency,
-  };
-}
 
 function leanFunc(f: {
   id: string;
@@ -288,22 +268,22 @@ const registry = createRegistry(store);
 const oauth = createOAuth({ store, vault, registry });
 const connections = createConnections({ store, vault, oauth });
 const workflows = createWorkflowStore(store);
-// workflow version log. pinProviders captures the (secret-free) provider drafts
-// a workflow's funcs require, so restoring a version restores its provider code
-// — not whatever the registry was last re-authored to.
-const versions = createVersionStore(store, {
-  pinProviders: async (spaceId, funcs) => {
-    const ids = new Set<string>();
-    for (const f of funcs as Array<{ requires?: Array<{ provider?: string }> }>)
-      for (const r of f?.requires ?? []) if (r?.provider) ids.add(r.provider);
-    const out: Record<string, unknown> = {};
-    for (const id of ids) {
-      const draft = await registry.getProviderDraft(spaceId, id);
-      if (draft) out[id] = draft; // builtins (e.g. "http") return null → excluded
-    }
-    return out;
-  },
-});
+// Captures the (secret-free) provider drafts a workflow's funcs require, so a
+// sealed version restores its own provider code — not whatever the registry was
+// last re-authored to. Shared by the version store (pinning) and the fix engine
+// (diffing a provider repair).
+const pinProviders = async (spaceId: string, funcs: unknown[]): Promise<Record<string, unknown>> => {
+  const ids = new Set<string>();
+  for (const f of funcs as Array<{ requires?: Array<{ provider?: string }> }>)
+    for (const r of f?.requires ?? []) if (r?.provider) ids.add(r.provider);
+  const out: Record<string, unknown> = {};
+  for (const id of ids) {
+    const draft = await registry.getProviderDraft(spaceId, id);
+    if (draft) out[id] = draft; // builtins (e.g. "http") return null → excluded
+  }
+  return out;
+};
+const versions = createVersionStore(store, { pinProviders });
 const mcpTokens = createMcpTokenStore(store);
 const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
@@ -440,6 +420,27 @@ async function canUseRemoteMcp(spaceId: string): Promise<boolean> {
   const plan = await billing.planOf(spaceId);
   return OWN_MODEL_PLANS.has(plan.slug);
 }
+
+// May this space PRODUCE an AI fix proposal? Diagnosis is NEVER gated; only the
+// LLM-fix proposal is. HEAL_DISABLED is a hard kill (kill-switch). Self-host →
+// always on; managed → paid plans only (Free gets notify-only diagnosis).
+const HEAL_DISABLED = /^(1|true|yes)$/i.test(process.env.HEAL_DISABLED ?? "");
+async function canHeal(spaceId: string): Promise<boolean> {
+  if (HEAL_DISABLED) return false;
+  if (!MANAGED) return true; // self-host: open, uncapped
+  if (!billing.enabled()) return false;
+  const plan = await billing.planOf(spaceId);
+  return OWN_MODEL_PLANS.has(plan.slug);
+}
+const fixEngine = createFixEngine({
+  registry,
+  getWorkflow: (spaceId, id) => workflows.getWorkflow(spaceId, id),
+  saveWorkflow: (spaceId, wf) => workflows.saveWorkflow(spaceId, wf),
+  seal: (spaceId, head, meta) => versions.seal(spaceId, head, meta),
+  setCurrentVersion: (spaceId, id, versionId) => workflows.setCurrentVersion(spaceId, id, versionId),
+  pinProviders,
+  canProposeFix: canHeal,
+});
 
 const remoteMcpDeps: RemoteMcpDeps = {
   workflows,
@@ -2475,6 +2476,26 @@ app.get("/api/runs/stream", async (c) => {
 app.get("/api/runs/:id", async (c) => {
   const run = await runs.getRun(c.get("spaceId"), c.req.param("id"));
   return run ? c.json(run) : c.json({ error: "not found" }, 404);
+});
+
+// Diagnose a failed run: plain-language cause + a structured fix proposal (diff).
+// READ-ONLY — never applies a fix (auto-apply gating is a later milestone). The
+// fix proposal is only produced when the space may heal; otherwise notify-only.
+app.post("/api/runs/:id/diagnose", async (c) => {
+  const spaceId = c.get("spaceId");
+  const ctx = await buildDiagnosisContext(
+    { getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow },
+    spaceId,
+    c.req.param("id"),
+  );
+  if (!ctx) return c.json({ error: "run not found or not a failure" }, 404);
+  // Diagnosis language (default English — global app). Accepts a locale code or
+  // a language name; the UI passes the user's locale.
+  const LANGS: Record<string, string> = { en: "English", tr: "Turkish", de: "German", es: "Spanish", fr: "French" };
+  const lang = c.req.query("lang");
+  const language = lang ? (LANGS[lang.toLowerCase()] ?? lang) : "English";
+  const diagnosis = await fixEngine.diagnose(spaceId, ctx, { language });
+  return c.json(diagnosis);
 });
 
 app.get("/api/spaces", async (c) => {
