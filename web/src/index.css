@@ -230,3 +230,29 @@
 .cm-editor .cm-gutters {
   font-family: var(--font-mono);
 }
+
+/* Side-by-side code diff (CodeMirror MergeView) — GitHub-style line + word blocks.
+   Overrides the package's 2px gradient "underline" on changed text with a real box. */
+.cm-merge-a .cm-changedLine,
+.cm-merge-a .cm-deletedLine {
+  background-color: rgb(244 63 94 / 0.1);
+}
+.cm-merge-b .cm-changedLine,
+.cm-merge-b .cm-insertedLine {
+  background-color: rgb(16 185 129 / 0.1);
+}
+.cm-merge-a .cm-changedText,
+.cm-merge-a .cm-deletedText {
+  background: rgb(244 63 94 / 0.28) !important;
+  border-radius: 2px;
+}
+.cm-merge-b .cm-changedText {
+  background: rgb(16 185 129 / 0.3) !important;
+  border-radius: 2px;
+}
+.cm-mergeView .cm-collapsedLines {
+  background: var(--background-subtle);
+  color: var(--muted-foreground);
+  font-size: 10px;
+  padding: 2px 8px;
+}

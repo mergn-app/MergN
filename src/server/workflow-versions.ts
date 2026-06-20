@@ -42,6 +42,8 @@ export interface VersionMeta {
   label?: string;
   message?: string;
   restoredFrom?: string;
+  parentVersionId?: string; // the version this one was sealed on top of — the diff "from"
+  healing?: { runId: string; diagnosis: string }; // plain-language fix title (source==="healing")
   createdAt: string;
 }
 
@@ -206,6 +208,8 @@ export function createVersionStore(
           ...(v.label ? { label: v.label } : {}),
           ...(v.message ? { message: v.message } : {}),
           ...(v.restoredFrom ? { restoredFrom: v.restoredFrom } : {}),
+          ...(v.parentVersionId ? { parentVersionId: v.parentVersionId } : {}),
+          ...(v.healing ? { healing: v.healing } : {}),
           createdAt: v.createdAt,
         }),
       );

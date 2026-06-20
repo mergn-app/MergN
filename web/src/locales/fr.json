@@ -63,8 +63,8 @@
     "chat": "Chat",
     "history": "Historique",
     "node": "Nœud",
-    "logs": "Journaux",
-    "files": "Fichiers"
+    "files": "Fichiers",
+    "versions": "Versions"
   },
   "logsPanel": {
     "refresh": "Actualiser",
@@ -346,5 +346,88 @@
     "alertsOff": "Alertes désactivées",
     "alertChannels": "Canaux et règles",
     "alertChannelsSoon": "Le choix des destinations (Discord, Slack, e-mail) et des règles par gravité arrive bientôt. Pour l'instant, l'interrupteur contrôle tous les canaux configurés."
+  },
+  "heal": {
+    "fixes": "Corrections",
+    "fixTitle": "Correction proposée",
+    "noFixes": "Aucune correction pour ce flux pour l'instant.",
+    "changes": "Modifications",
+    "noChanges": "Aucune modification structurelle.",
+    "triggerChanged": "Déclencheur modifié",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "undo": "Annuler",
+    "status": {
+      "proposed": "Proposée",
+      "applied": "Appliquée",
+      "rejected": "Rejetée",
+      "reverted": "Annulée",
+      "failed": "Échouée"
+    },
+    "mode": {
+      "notify": "Notifier",
+      "propose": "Proposer",
+      "auto": "Automatique"
+    },
+    "confidence": {
+      "high": "Confiance élevée",
+      "medium": "Confiance moyenne",
+      "low": "Confiance faible"
+    },
+    "badge": {
+      "code": "Code de l'étape modifié",
+      "input": "Entrées modifiées",
+      "wire": "Câblage modifié",
+      "gate": "Condition modifiée",
+      "provider": "Fournisseur modifié"
+    },
+    "reason": {
+      "cap-exceeded": "Limite d'exécution",
+      "not-logic": "Non auto-corrigible",
+      "low-confidence": "Confiance faible",
+      "danger-downstream": "Aval risqué",
+      "blast-too-wide": "Trop large",
+      "loop-cap": "Limite de boucle",
+      "fix-ineffective": "Correction inefficace",
+      "kill-switch": "Auto-réparation désactivée"
+    }
+  },
+  "versions": {
+    "title": "Historique des versions",
+    "save": "Enregistrer la version",
+    "label": "Libellé (optionnel)",
+    "noChange": "Aucun changement depuis la dernière version.",
+    "empty": "Aucune version pour l'instant — enregistrez-en une ci-dessus.",
+    "restore": "Restaurer cette version",
+    "confirm": "Confirmer",
+    "source": {
+      "editor": "Édition",
+      "chat": "Chat IA",
+      "mcp": "MCP",
+      "run-snapshot": "Exécution",
+      "healing": "Auto-réparation",
+      "restore": "Restauration"
+    }
+  },
+  "review": {
+    "title": "Revue des changements",
+    "switchTo": "Passer à cette version",
+    "added": "Ajouté",
+    "modified": "Modifié",
+    "removed": "Supprimé",
+    "oldNew": "ancien → nouveau",
+    "outputs": "Sorties",
+    "present": "défini",
+    "cat": {
+      "code": "Code",
+      "input": "Entrées",
+      "provider": "Fournisseur",
+      "gate": "Condition",
+      "wire": "Câblage"
+    },
+    "history": "Historique",
+    "noHistory": "Aucun historique pour l'instant.",
+    "pickNode": "Choisir un nœud",
+    "pickNodeHint": "Cliquez sur un nœud surligné pour voir son changement."
   }
 }

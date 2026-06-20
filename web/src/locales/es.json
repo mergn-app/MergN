@@ -63,8 +63,8 @@
     "chat": "Chat",
     "history": "Historial",
     "node": "Nodo",
-    "logs": "Registros",
-    "files": "Archivos"
+    "files": "Archivos",
+    "versions": "Versiones"
   },
   "logsPanel": {
     "refresh": "Actualizar",
@@ -346,5 +346,88 @@
     "alertsOff": "Alertas desactivadas",
     "alertChannels": "Canales y reglas",
     "alertChannelsSoon": "La elección de destinos (Discord, Slack, correo) y reglas por severidad llegará pronto. Por ahora el interruptor controla todos los canales configurados."
+  },
+  "heal": {
+    "fixes": "Correcciones",
+    "fixTitle": "Corrección propuesta",
+    "noFixes": "Aún no hay correcciones para este flujo.",
+    "changes": "Cambios",
+    "noChanges": "Sin cambios estructurales.",
+    "triggerChanged": "Disparador cambiado",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "undo": "Deshacer",
+    "status": {
+      "proposed": "Propuesta",
+      "applied": "Aplicada",
+      "rejected": "Rechazada",
+      "reverted": "Revertida",
+      "failed": "Fallida"
+    },
+    "mode": {
+      "notify": "Notificar",
+      "propose": "Proponer",
+      "auto": "Automático"
+    },
+    "confidence": {
+      "high": "Confianza alta",
+      "medium": "Confianza media",
+      "low": "Confianza baja"
+    },
+    "badge": {
+      "code": "Código del paso cambiado",
+      "input": "Entradas cambiadas",
+      "wire": "Cableado cambiado",
+      "gate": "Condición cambiada",
+      "provider": "Proveedor cambiado"
+    },
+    "reason": {
+      "cap-exceeded": "Límite de ejecución",
+      "not-logic": "No auto-corregible",
+      "low-confidence": "Confianza baja",
+      "danger-downstream": "Downstream riesgoso",
+      "blast-too-wide": "Demasiado amplio",
+      "loop-cap": "Límite de bucle",
+      "fix-ineffective": "Corrección ineficaz",
+      "kill-switch": "Sanación apagada"
+    }
+  },
+  "versions": {
+    "title": "Historial de versiones",
+    "save": "Guardar versión",
+    "label": "Etiqueta (opcional)",
+    "noChange": "Sin cambios desde la última versión.",
+    "empty": "Aún no hay versiones — guarda una arriba.",
+    "restore": "Restaurar esta versión",
+    "confirm": "Confirmar",
+    "source": {
+      "editor": "Edición",
+      "chat": "Chat IA",
+      "mcp": "MCP",
+      "run-snapshot": "Ejecución",
+      "healing": "Autorreparación",
+      "restore": "Restauración"
+    }
+  },
+  "review": {
+    "title": "Revisión de cambios",
+    "switchTo": "Cambiar a esta versión",
+    "added": "Añadido",
+    "modified": "Modificado",
+    "removed": "Eliminado",
+    "oldNew": "viejo → nuevo",
+    "outputs": "Salidas",
+    "present": "definido",
+    "cat": {
+      "code": "Código",
+      "input": "Entradas",
+      "provider": "Proveedor",
+      "gate": "Condición",
+      "wire": "Cableado"
+    },
+    "history": "Historial",
+    "noHistory": "Aún no hay historial.",
+    "pickNode": "Elige un nodo",
+    "pickNodeHint": "Haz clic en un nodo resaltado para ver su cambio."
   }
 }

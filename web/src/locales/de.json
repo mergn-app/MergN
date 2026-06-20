@@ -63,8 +63,8 @@
     "chat": "Chat",
     "history": "Verlauf",
     "node": "Knoten",
-    "logs": "Logs",
-    "files": "Dateien"
+    "files": "Dateien",
+    "versions": "Versionen"
   },
   "logsPanel": {
     "refresh": "Aktualisieren",
@@ -346,5 +346,88 @@
     "alertsOff": "Alerts aus",
     "alertChannels": "Kanäle & Regeln",
     "alertChannelsSoon": "Die Auswahl der Ziele (Discord, Slack, E-Mail) und Regeln je Schweregrad kommt bald. Vorerst steuert der Schalter alle konfigurierten Kanäle."
+  },
+  "heal": {
+    "fixes": "Korrekturen",
+    "fixTitle": "Vorgeschlagene Korrektur",
+    "noFixes": "Noch keine Korrekturen für diesen Flow.",
+    "changes": "Änderungen",
+    "noChanges": "Keine strukturellen Änderungen.",
+    "triggerChanged": "Trigger geändert",
+    "approve": "Übernehmen",
+    "reject": "Ablehnen",
+    "undo": "Rückgängig",
+    "status": {
+      "proposed": "Vorgeschlagen",
+      "applied": "Angewendet",
+      "rejected": "Abgelehnt",
+      "reverted": "Zurückgesetzt",
+      "failed": "Fehlgeschlagen"
+    },
+    "mode": {
+      "notify": "Melden",
+      "propose": "Vorschlagen",
+      "auto": "Automatisch"
+    },
+    "confidence": {
+      "high": "Hohe Sicherheit",
+      "medium": "Mittlere Sicherheit",
+      "low": "Geringe Sicherheit"
+    },
+    "badge": {
+      "code": "Schritt-Code geändert",
+      "input": "Eingaben geändert",
+      "wire": "Verdrahtung geändert",
+      "gate": "Bedingung geändert",
+      "provider": "Provider geändert"
+    },
+    "reason": {
+      "cap-exceeded": "Laufsicherheits-Limit",
+      "not-logic": "Nicht auto-korrigierbar",
+      "low-confidence": "Geringe Sicherheit",
+      "danger-downstream": "Riskanter Downstream",
+      "blast-too-wide": "Zu weitreichend",
+      "loop-cap": "Schleifen-Limit",
+      "fix-ineffective": "Korrektur wirkungslos",
+      "kill-switch": "Heilung aus"
+    }
+  },
+  "versions": {
+    "title": "Versionsverlauf",
+    "save": "Version speichern",
+    "label": "Label (optional)",
+    "noChange": "Keine Änderungen seit der letzten Version.",
+    "empty": "Noch keine Versionen — oben eine speichern.",
+    "restore": "Diese Version wiederherstellen",
+    "confirm": "Bestätigen",
+    "source": {
+      "editor": "Bearbeitung",
+      "chat": "KI-Chat",
+      "mcp": "MCP",
+      "run-snapshot": "Lauf",
+      "healing": "Selbstheilung",
+      "restore": "Wiederherstellung"
+    }
+  },
+  "review": {
+    "title": "Änderungsübersicht",
+    "switchTo": "Zu dieser Version wechseln",
+    "added": "Hinzugefügt",
+    "modified": "Geändert",
+    "removed": "Entfernt",
+    "oldNew": "alt → neu",
+    "outputs": "Ausgaben",
+    "present": "gesetzt",
+    "cat": {
+      "code": "Code",
+      "input": "Eingaben",
+      "provider": "Provider",
+      "gate": "Bedingung",
+      "wire": "Verdrahtung"
+    },
+    "history": "Verlauf",
+    "noHistory": "Noch kein Verlauf.",
+    "pickNode": "Knoten wählen",
+    "pickNodeHint": "Klicke einen markierten Knoten an, um seine Änderung zu sehen."
   }
 }

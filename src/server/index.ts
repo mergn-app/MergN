@@ -1986,6 +1986,19 @@ app.get("/api/workflows/:id/diff", async (c) => {
   return c.json(diffWorkflows(a.snapshot, b.snapshot));
 });
 
+// Everything the change-review screen needs for ONE version: the before
+// (parent) + after (this version) snapshots + their diff. before is empty when
+// the version has no parent (initial version → everything is "added").
+app.get("/api/workflows/:id/versions/:vid/review", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const v = await versions.get(spaceId, c.req.param("vid"));
+  if (!v || v.workflowId !== id) return c.json({ error: "version not found" }, 404);
+  const parent = v.parentVersionId ? await versions.get(spaceId, v.parentVersionId) : null;
+  const before = parent?.snapshot ?? { funcs: [], wires: [], trigger: null };
+  return c.json({ before, after: v.snapshot, diff: diffWorkflows(before, v.snapshot) });
+});
+
 // Restore: write a past version's snapshot to HEAD, then seal a NEW version
 // marking the restore. History is never mutated (re-restorable).
 app.post("/api/workflows/:id/versions/:versionId/restore", async (c) => {

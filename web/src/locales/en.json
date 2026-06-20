@@ -63,8 +63,8 @@
     "chat": "Chat",
     "history": "History",
     "node": "Node",
-    "logs": "Logs",
-    "files": "Files"
+    "files": "Files",
+    "versions": "Versions"
   },
   "logsPanel": {
     "refresh": "Refresh",
@@ -346,5 +346,88 @@
     "alertsOff": "Alerts off",
     "alertChannels": "Channels & rules",
     "alertChannelsSoon": "Choosing destinations (Discord, Slack, email) and per-severity rules is coming soon. For now the toggle controls all configured channels."
+  },
+  "heal": {
+    "fixes": "Fixes",
+    "fixTitle": "Proposed fix",
+    "noFixes": "No fixes yet for this flow.",
+    "changes": "Changes",
+    "noChanges": "No structural changes.",
+    "triggerChanged": "Trigger changed",
+    "approve": "Approve",
+    "reject": "Reject",
+    "undo": "Undo",
+    "status": {
+      "proposed": "Proposed",
+      "applied": "Applied",
+      "rejected": "Rejected",
+      "reverted": "Reverted",
+      "failed": "Failed"
+    },
+    "mode": {
+      "notify": "Notify",
+      "propose": "Propose",
+      "auto": "Auto"
+    },
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
+    },
+    "badge": {
+      "code": "Step code changed",
+      "input": "Inputs changed",
+      "wire": "Wiring changed",
+      "gate": "Condition changed",
+      "provider": "Provider changed"
+    },
+    "reason": {
+      "cap-exceeded": "Run-safety cap",
+      "not-logic": "Not auto-fixable",
+      "low-confidence": "Low confidence",
+      "danger-downstream": "Risky downstream",
+      "blast-too-wide": "Too wide",
+      "loop-cap": "Loop limit",
+      "fix-ineffective": "Fix ineffective",
+      "kill-switch": "Healing off"
+    }
+  },
+  "versions": {
+    "title": "Version history",
+    "save": "Save version",
+    "label": "Label (optional)",
+    "noChange": "No changes since the last version.",
+    "empty": "No versions yet — save one above.",
+    "restore": "Restore this version",
+    "confirm": "Confirm",
+    "source": {
+      "editor": "Edit",
+      "chat": "AI chat",
+      "mcp": "MCP",
+      "run-snapshot": "Run",
+      "healing": "Self-heal",
+      "restore": "Restore"
+    }
+  },
+  "review": {
+    "title": "Change review",
+    "switchTo": "Switch to this version",
+    "added": "Added",
+    "modified": "Modified",
+    "removed": "Removed",
+    "oldNew": "old → new",
+    "outputs": "Outputs",
+    "present": "set",
+    "cat": {
+      "code": "Code",
+      "input": "Inputs",
+      "provider": "Provider",
+      "gate": "Condition",
+      "wire": "Wiring"
+    },
+    "history": "History",
+    "noHistory": "No history yet.",
+    "pickNode": "Select a node",
+    "pickNodeHint": "Click a highlighted node to see its change."
   }
 }

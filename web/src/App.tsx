@@ -22,10 +22,10 @@ import {
   Check,
   Network,
   Plug,
-  History,
 } from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
-import { LogsPanel } from "./LogsPanel";
+import { VersionsPanel } from "./VersionsPanel";
+import { ChangeReview, type ChangeSource } from "./ChangeReview";
 import { FilesPanel } from "./FilesPanel";
 import { Chat } from "./Chat";
 import { TriggerDialog } from "./TriggerDialog";
@@ -43,7 +43,6 @@ import { LanguageSwitcher } from "./LanguageSwitcher";
 import { LegalLinks } from "./LegalLinks";
 import { EnterpriseDialog } from "./EnterpriseDialog";
 import { McpConnectDialog } from "./McpConnectDialog";
-import { VersionHistory } from "./VersionHistory";
 import { LeftSidebar } from "./LeftSidebar";
 import { triggerIntervalMs } from "./schedule-display";
 import { ChatPanel } from "./ChatPanel";
@@ -304,7 +303,7 @@ export function App({
   const saveMutation = useSaveWorkflow();
   const { user, requireAuth, signOut, managed, remoteMcp } = useAuth();
   const [mcpOpen, setMcpOpen] = useState(false);
-  const [versionsOpen, setVersionsOpen] = useState(false);
+  const [openSource, setOpenSource] = useState<ChangeSource | null>(null);
   const { data: connections = NO_CONNECTIONS } = useConnections();
   const conversationsQuery = useConversations();
   const deleteConversation = useDeleteConversation();
@@ -1126,17 +1125,6 @@ export function App({
                 <span className="hidden text-xs sm:inline">{t("mcp.title")}</span>
               </Button>
             )}
-            {user && workflowId && (
-              <Button
-                size="icon"
-                variant="ghost"
-                className="h-8 w-8"
-                title="Version history"
-                onClick={() => setVersionsOpen(true)}
-              >
-                <History className="h-4 w-4" />
-              </Button>
-            )}
             <LanguageSwitcher />
             <Button
               size="icon"
@@ -1185,14 +1173,12 @@ export function App({
       </div>
 
       {mcpOpen && <McpConnectDialog onClose={() => setMcpOpen(false)} />}
-      {versionsOpen && workflowId && (
-        <VersionHistory
+      {openSource && workflowId && (
+        <ChangeReview
+          source={openSource}
           workflowId={workflowId}
-          onClose={() => setVersionsOpen(false)}
-          onRestored={() => {
-            setVersionsOpen(false);
-            void load(workflowId);
-          }}
+          onClose={() => setOpenSource(null)}
+          onApplied={() => void load(workflowId)}
         />
       )}
 
@@ -1410,7 +1396,7 @@ export function App({
             />
           }
           files={<FilesPanel />}
-          logs={<LogsPanel active={activeTab === "logs"} />}
+          versions={<VersionsPanel workflowId={workflowId} onOpen={(v) => setOpenSource({ kind: "version", version: v })} />}
           node={
             <NodePanel
               func={selected}

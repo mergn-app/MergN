@@ -63,8 +63,8 @@
     "chat": "Sohbet",
     "history": "Geçmiş",
     "node": "Düğüm",
-    "logs": "Loglar",
-    "files": "Dosyalar"
+    "files": "Dosyalar",
+    "versions": "Sürümler"
   },
   "logsPanel": {
     "refresh": "Yenile",
@@ -346,5 +346,88 @@
     "alertsOff": "Alertler kapalı",
     "alertChannels": "Kanallar ve kurallar",
     "alertChannelsSoon": "Hedef seçimi (Discord, Slack, e-posta) ve önem-bazlı kurallar yakında. Şimdilik bu anahtar yapılandırılmış tüm kanalları yönetir."
+  },
+  "heal": {
+    "fixes": "Düzeltmeler",
+    "fixTitle": "Önerilen düzeltme",
+    "noFixes": "Bu akış için henüz düzeltme yok.",
+    "changes": "Değişiklikler",
+    "noChanges": "Yapısal değişiklik yok.",
+    "triggerChanged": "Tetikleyici değişti",
+    "approve": "Onayla",
+    "reject": "Reddet",
+    "undo": "Geri al",
+    "status": {
+      "proposed": "Önerildi",
+      "applied": "Uygulandı",
+      "rejected": "Reddedildi",
+      "reverted": "Geri alındı",
+      "failed": "Başarısız"
+    },
+    "mode": {
+      "notify": "Bildir",
+      "propose": "Öner",
+      "auto": "Otomatik"
+    },
+    "confidence": {
+      "high": "Yüksek güven",
+      "medium": "Orta güven",
+      "low": "Düşük güven"
+    },
+    "badge": {
+      "code": "Adım kodu değişti",
+      "input": "Girdiler değişti",
+      "wire": "Bağlantı değişti",
+      "gate": "Koşul değişti",
+      "provider": "Sağlayıcı değişti"
+    },
+    "reason": {
+      "cap-exceeded": "Çalışma-güvenliği sınırı",
+      "not-logic": "Otomatik düzeltilemez",
+      "low-confidence": "Düşük güven",
+      "danger-downstream": "Riskli alt-akış",
+      "blast-too-wide": "Çok geniş etki",
+      "loop-cap": "Döngü sınırı",
+      "fix-ineffective": "Düzeltme işe yaramadı",
+      "kill-switch": "İyileştirme kapalı"
+    }
+  },
+  "versions": {
+    "title": "Sürüm geçmişi",
+    "save": "Sürümü kaydet",
+    "label": "Etiket (opsiyonel)",
+    "noChange": "Son sürümden bu yana değişiklik yok.",
+    "empty": "Henüz sürüm yok — yukarıdan kaydet.",
+    "restore": "Bu sürüme dön",
+    "confirm": "Onayla",
+    "source": {
+      "editor": "Düzenleme",
+      "chat": "AI sohbet",
+      "mcp": "MCP",
+      "run-snapshot": "Çalıştırma",
+      "healing": "Oto-iyileştirme",
+      "restore": "Geri yükleme"
+    }
+  },
+  "review": {
+    "title": "Değişiklik incelemesi",
+    "switchTo": "Bu versiyona geç",
+    "added": "Eklendi",
+    "modified": "Değişti",
+    "removed": "Silindi",
+    "oldNew": "eski → yeni",
+    "outputs": "Çıktılar",
+    "present": "var",
+    "cat": {
+      "code": "Kod",
+      "input": "Girdiler",
+      "provider": "Provider",
+      "gate": "Koşul",
+      "wire": "Bağlantı"
+    },
+    "history": "Geçmiş",
+    "noHistory": "Henüz geçmiş yok.",
+    "pickNode": "Bir node seç",
+    "pickNodeHint": "Değişikliği görmek için renkli bir node'a tıkla."
   }
 }

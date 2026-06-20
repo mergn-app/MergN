@@ -19,6 +19,8 @@ import {
   useHealthSummary,
   useRuns,
   useLogs,
+  useHealEvents,
+  useWorkflowVersions,
   useAlertsEnabled,
   useToggleAlerts,
   fetchRun,
@@ -28,8 +30,8 @@ import {
   type LogEntry,
 } from "./queries";
 import { healthColor } from "./status-palette";
-import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
-import { VersionHistory } from "./VersionHistory";
+import { ChangeReview, type ChangeSource } from "./ChangeReview";
+import { VersionRow, FixRow } from "./VersionRow";
 import { MonitorGraphs } from "./monitor-graphs";
 
 // run-status colors (distinct from health-status — never mix)
@@ -135,10 +137,10 @@ function SettingsModal({ workflowId, onClose }: { workflowId: string; onClose: (
               onClick={() => toggle.mutate(!enabled)}
               className={cn(
                 "mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50",
-                enabled ? "bg-emerald-500/80" : "bg-muted",
+                enabled ? "bg-emerald-500/80" : "bg-muted-foreground/30",
               )}
             >
-              <span className={cn("size-4 rounded-full bg-background transition-transform", enabled && "translate-x-4")} />
+              <span className={cn("size-4 rounded-full bg-background shadow-sm ring-1 ring-black/5 transition-transform", enabled && "translate-x-4")} />
             </button>
             <div className="min-w-0">
               <div className="text-sm font-medium">{t("monitoring.alertsToggle")}</div>
@@ -174,7 +176,7 @@ function AlertPanel({ workflowId, onConfigure }: { workflowId: string; onConfigu
         <span
           className={cn(
             "ml-auto rounded-full px-2 py-0.5 text-[9px] font-medium normal-case tracking-normal",
-            enabled ? "bg-emerald-500/15 text-emerald-500" : "bg-muted text-muted-foreground",
+            enabled ? "bg-emerald-500/15 text-emerald-500" : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
           )}
         >
           {enabled ? t("monitoring.alertsOn") : t("monitoring.alertsOff")}
@@ -189,10 +191,10 @@ function AlertPanel({ workflowId, onConfigure }: { workflowId: string; onConfigu
             onClick={() => toggle.mutate(!enabled)}
             className={cn(
               "mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50",
-              enabled ? "bg-emerald-500/80" : "bg-muted",
+              enabled ? "bg-emerald-500/80" : "bg-muted-foreground/30",
             )}
           >
-            <span className={cn("size-4 rounded-full bg-background transition-transform", enabled && "translate-x-4")} />
+            <span className={cn("size-4 rounded-full bg-background shadow-sm ring-1 ring-black/5 transition-transform", enabled && "translate-x-4")} />
           </button>
           <div className="min-w-0">
             <div className="text-sm font-medium">{t("monitoring.alertsToggle")}</div>
@@ -306,6 +308,42 @@ function HealthHeader({ health }: { health?: HealthState }) {
   );
 }
 
+// ── right: unified history — pending fixes (need review) + version timeline ───
+// A fix IS a version, so both live in one list. Clicking any entry opens the same
+// full-screen change-review surface.
+function HistoryPanel({ workflowId, onOpen }: { workflowId: string; onOpen: (s: ChangeSource) => void }) {
+  const { t } = useTranslation();
+  const pending = (useHealEvents(workflowId || null).data ?? []).filter((e) => e.status === "proposed");
+  const versions = useWorkflowVersions(workflowId || null).data ?? [];
+  const empty = pending.length === 0 && versions.length === 0;
+  return (
+    <div className={cn(panel, "flex w-[400px] shrink-0 flex-col overflow-hidden")}>
+      <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
+        <History className="size-3.5" />
+        {t("review.history")}
+      </div>
+      <div className="min-h-0 flex-1 space-y-1.5 overflow-auto p-2">
+        {empty ? (
+          <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted-foreground/70">
+            {t("review.noHistory")}
+          </div>
+        ) : (
+          <>
+            {/* pending proposed fixes — need review, pinned to the top */}
+            {pending.map((e) => (
+              <FixRow key={e.id} e={e} time={rel(e.at)} onClick={() => onOpen({ kind: "fix", event: e })} />
+            ))}
+            {/* version timeline (newest-first) */}
+            {versions.map((v) => (
+              <VersionRow key={v.id} v={v} time={rel(v.createdAt)} onClick={() => onOpen({ kind: "version", version: v })} />
+            ))}
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function MonitoringPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -318,9 +356,9 @@ export function MonitoringPage() {
   const health = useHealth(workflowId || null).data;
   const runs = useRuns(workflowId || null).data ?? [];
   const logs = (useLogs(true).data ?? []).filter((l) => l.workflowId === workflowId);
-  const [versionsOpen, setVersionsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openRunId, setOpenRunId] = useState<string | null>(null);
+  const [openSource, setOpenSource] = useState<ChangeSource | null>(null);
 
   const goFlow = (id: string) =>
     void navigate({ to: "/s/$spaceId/w/$workflowId/monitor", params: { spaceId, workflowId: id } });
@@ -351,13 +389,7 @@ export function MonitoringPage() {
           <div className="flex items-center gap-3 border-b border-border/40 px-4 py-2.5">
             <HealthHeader health={health} />
             <div className="ml-auto flex shrink-0 items-center gap-1">
-              <button
-                onClick={() => setVersionsOpen(true)}
-                title={t("monitoring.versions")}
-                className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-              >
-                <History className="size-4" />
-              </button>
+              {/* version history lives in the right-column timeline now (consolidated) */}
               <button
                 onClick={() => setSettingsOpen(true)}
                 title={t("monitoring.settings")}
@@ -441,26 +473,13 @@ export function MonitoringPage() {
           </div>
         </div>
 
-        {/* right — monitoring assistant (ana ekran chat genişliğinde) */}
-        <div className={cn(panel, "flex w-[400px] shrink-0 flex-col overflow-hidden")}>
-          <div className="border-b border-border/40 px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-            {t("monitoring.assistant")}
-          </div>
-          <div className="flex flex-1 items-center justify-center p-4 text-center text-xs text-muted-foreground/70">
-            {t("monitoring.assistantSoon")}
-          </div>
-        </div>
+        {/* right — self-healing fixes (the AI's proposed/applied repairs) */}
+        {workflowId && <HistoryPanel workflowId={workflowId} onOpen={setOpenSource} />}
       </div>
 
-      {versionsOpen && workflowId && (
-        <VersionHistory
-          workflowId={workflowId}
-          onClose={() => setVersionsOpen(false)}
-          onRestored={() => setVersionsOpen(false)}
-        />
-      )}
       {settingsOpen && workflowId && <SettingsModal workflowId={workflowId} onClose={() => setSettingsOpen(false)} />}
       {openRunId && <RunDetailModal runId={openRunId} onClose={() => setOpenRunId(null)} />}
+      {openSource && workflowId && <ChangeReview source={openSource} workflowId={workflowId} onClose={() => setOpenSource(null)} />}
     </div>
   );
 }

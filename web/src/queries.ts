@@ -713,7 +713,103 @@ export interface WorkflowVersionMeta {
   label?: string;
   message?: string;
   restoredFrom?: string;
+  parentVersionId?: string; // pre-fix HEAD — diff "from" + undo target
+  healing?: { runId: string; diagnosis: string }; // plain-language fix title
   createdAt: string;
+}
+
+// ── self-healing: diff + fix events (M9 consumes the M8 contract) ─────────────
+// mirror of the server WorkflowDiff (src/server/workflow-diff.ts) — kept in sync.
+export interface WorkflowDiff {
+  nodes: {
+    added: string[];
+    removed: string[];
+    modified: Array<{
+      id: string;
+      changed: {
+        code?: boolean;
+        inputs?: { added: string[]; removed: string[]; retyped: string[] };
+        outputs?: { added: string[]; removed: string[] };
+        gate?: "added" | "removed" | "changed";
+        provider?: boolean;
+      };
+    }>;
+  };
+  wires: { added: string[]; removed: string[] };
+  trigger: { changed: boolean };
+  config: { changedSteps: string[] };
+}
+
+export type FixMode = "notify" | "propose" | "auto";
+export type FixStatus = "proposed" | "applied" | "rejected" | "reverted" | "failed";
+
+export interface FixEvent {
+  id: string;
+  workflowId: string;
+  runId: string;
+  versionId?: string;
+  mode: FixMode;
+  status: FixStatus;
+  errorType: string;
+  confidence: "high" | "medium" | "low";
+  diagnosis: string;
+  downgradeReason?: string;
+  proposal?: { kind: string; diff: WorkflowDiff; apply?: { funcs?: unknown[]; wires?: unknown[] } };
+  at: string;
+}
+
+export function useHealEvents(workflowId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["heal-events", getSpace(), workflowId],
+    queryFn: () => json<FixEvent[]>(`/api/workflows/${workflowId}/heal-events`),
+    enabled: !!user && !!workflowId,
+    refetchInterval: 15000,
+  });
+}
+
+// before/after snapshots + diff — everything the change-review screen renders.
+export interface WorkflowSnapshot {
+  funcs?: unknown[];
+  wires?: unknown[];
+  trigger?: unknown;
+  positions?: Record<string, { x: number; y: number }>;
+}
+export interface ReviewData {
+  before: WorkflowSnapshot;
+  after: WorkflowSnapshot;
+  diff: WorkflowDiff;
+}
+
+export function useVersionReview(workflowId: string | null, versionId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["version-review", getSpace(), workflowId, versionId],
+    queryFn: () => json<ReviewData>(`/api/workflows/${workflowId}/versions/${versionId}/review`),
+    enabled: !!user && !!workflowId && !!versionId,
+  });
+}
+
+export function useApproveFix(workflowId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (eventId: string) =>
+      json<FixEvent>(`/api/workflows/${workflowId}/fix/${eventId}/approve`, { method: "POST" }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["heal-events", getSpace(), workflowId] });
+      qc.invalidateQueries({ queryKey: ["versions", getSpace(), workflowId] });
+      qc.invalidateQueries({ queryKey: ["workflows"] });
+    },
+  });
+}
+
+export function useRejectFix(workflowId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (eventId: string) =>
+      json<FixEvent>(`/api/workflows/${workflowId}/fix/${eventId}/reject`, { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["heal-events", getSpace(), workflowId] }),
+  });
 }
 
 export function useWorkflowVersions(workflowId: string | null) {
