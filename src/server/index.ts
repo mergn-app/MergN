@@ -48,8 +48,11 @@ import {
 import { runWorkflow } from "./run";
 import { createIdempotencyStore } from "./idempotency";
 import { createConcurrencyGuard } from "./concurrency";
-import { createFixEngine } from "./fix-engine";
+import { createFixEngine, type FixMode } from "./fix-engine";
 import { buildDiagnosisContext } from "./diagnosis-context";
+import { createHealEventStore } from "./heal-events";
+import { createHealOrchestrator } from "./heal-modes";
+import { createHealDispatcher } from "./heal-dispatcher";
 import {
   emitRun,
   onRun,
@@ -442,6 +445,32 @@ const fixEngine = createFixEngine({
   canProposeFix: canHeal,
 });
 
+// Self-healing orchestration. Per-flow heal is OPT-IN, default OFF — until the
+// per-flow settings store lands, the default mode/enable is env-driven
+// (self-host operator can flip HEAL_DEFAULT_ENABLED=1 + HEAL_DEFAULT_MODE=auto).
+const HEAL_DEFAULT_ENABLED = /^(1|true|yes)$/i.test(process.env.HEAL_DEFAULT_ENABLED ?? "");
+const HEAL_DEFAULT_MODE: FixMode = (["notify", "propose", "auto"] as const).includes(
+  process.env.HEAL_DEFAULT_MODE as FixMode,
+)
+  ? (process.env.HEAL_DEFAULT_MODE as FixMode)
+  : "propose";
+const HEAL_WINDOW_MS = Number(process.env.HEAL_WINDOW_MS) || 3_600_000; // loop-counter window (engineering constant)
+const healEvents = createHealEventStore(store);
+const healOrchestrator = createHealOrchestrator({
+  fixEngine,
+  buildContext: (spaceId, runId) =>
+    buildDiagnosisContext({ getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow }, spaceId, runId),
+  events: healEvents,
+  getFlowMode: async () => ({ enabled: HEAL_DEFAULT_ENABLED, fixMode: HEAL_DEFAULT_MODE }),
+  canHeal,
+  caps: () => ({ blastMax: LIMITS.healBlastRadiusMax, attemptMax: LIMITS.healAttemptMax, windowMs: HEAL_WINDOW_MS }),
+  log: (spaceId, e) => void userLogs.append(spaceId, { ...e, source: "healing" }).catch(() => {}),
+});
+const healDispatcher = createHealDispatcher({
+  orchestrate: (t) => healOrchestrator.orchestrate(t),
+  onError: (e) => console.error("[heal] orchestrate failed", e),
+});
+
 const remoteMcpDeps: RemoteMcpDeps = {
   workflows,
   registry,
@@ -762,6 +791,15 @@ async function runSavedWorkflow(
         lastError: { type: errorType ?? "unknown", message: failMessage ?? "unknown error" },
       })
       .catch(() => {});
+    // Fire self-healing on a separate queue — NEVER inline (must not block or
+    // crash the run engine). No-op unless heal is enabled for this flow.
+    healDispatcher.enqueue({
+      spaceId,
+      workflowId: wf.id,
+      runId: id,
+      errorType: errorType ?? "unknown",
+      error: failMessage ?? "unknown error",
+    });
   } else {
     // done run — check it actually did its job (silent-success), then refresh.
     const outcome = wf.outcome
@@ -2496,6 +2534,39 @@ app.post("/api/runs/:id/diagnose", async (c) => {
   const language = lang ? (LANGS[lang.toLowerCase()] ?? lang) : "English";
   const diagnosis = await fixEngine.diagnose(spaceId, ctx, { language });
   return c.json(diagnosis);
+});
+
+// ── self-healing fix events (audit + propose/approve flow) ────────────────────
+app.get("/api/workflows/:id/heal-events", async (c) => {
+  const limit = Math.max(0, Number(c.req.query("limit")) || 50);
+  return c.json(await healEvents.listForWorkflow(c.get("spaceId"), c.req.param("id"), limit));
+});
+
+// Approve a proposed fix → apply it as a healing version. The proposal is carried
+// on the event, so apply is deterministic (no re-diagnosis / second LLM call).
+app.post("/api/workflows/:id/fix/:eventId/approve", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const ev = await healEvents.get(spaceId, c.req.param("eventId"));
+  if (!ev || ev.workflowId !== id) return c.json({ error: "fix event not found" }, 404);
+  if (ev.status !== "proposed") return c.json({ error: `fix is '${ev.status}', not awaiting approval` }, 409);
+  if (!ev.proposal) return c.json({ error: "fix event has no proposal to apply" }, 422);
+  const { versionId } = await fixEngine.applyFix(spaceId, id, ev.proposal, { runId: ev.runId, mode: "propose" });
+  const updated = await healEvents.update(spaceId, ev.id, {
+    status: "applied",
+    versionId,
+    approvedBy: c.get("userId"),
+  });
+  void userLogs.append(spaceId, { level: "info", source: "healing", message: `Fix approved & applied: ${ev.diagnosis}`, workflowId: id }).catch(() => {});
+  return c.json(updated);
+});
+
+app.post("/api/workflows/:id/fix/:eventId/reject", async (c) => {
+  const spaceId = c.get("spaceId");
+  const ev = await healEvents.get(spaceId, c.req.param("eventId"));
+  if (!ev || ev.workflowId !== c.req.param("id")) return c.json({ error: "fix event not found" }, 404);
+  if (ev.status !== "proposed") return c.json({ error: `fix is '${ev.status}', not awaiting approval` }, 409);
+  return c.json(await healEvents.update(spaceId, ev.id, { status: "rejected" }));
 });
 
 app.get("/api/spaces", async (c) => {

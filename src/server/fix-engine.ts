@@ -69,6 +69,9 @@ export interface DiagnoseOptions {
   // this is a global app). Callers pass the user's locale; the runtime/error
   // codes are language-independent.
   language?: string;
+  // false → notify-only: return the diagnosis (cause + errorType) with NO fix
+  // proposal (skips the heal-agent / LLM-fix). Used by the "notify" fix mode.
+  propose?: boolean;
 }
 
 export interface FixEngine {
@@ -156,7 +159,8 @@ export function createFixEngine(deps: FixEngineDeps): FixEngine {
 
       // ── logic / unknown → AI diagnosis + fix proposal ──────────────────────
       // Gate ONLY the fix proposal (LLM-fix), never the diagnosis itself.
-      if (!(await deps.canProposeFix(spaceId).catch(() => false))) {
+      // notify-mode (propose:false) also takes the notify-only path.
+      if (opts?.propose === false || !(await deps.canProposeFix(spaceId).catch(() => false))) {
         return {
           ...base,
           plainLanguage: notifyOnlyMessage(ctx, errorType),

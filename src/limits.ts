@@ -76,4 +76,10 @@ export const LIMITS = {
   maxFanOut: lim("MAX_FAN_OUT", NO_CAP), // nodes enqueued per scheduler tick (back-pressure)
   maxRunInvocations: lim("MAX_RUN_INVOCATIONS", NO_CAP), // total steps processed in one run
   maxSpaceConcurrency: lim("MAX_SPACE_CONCURRENCY", NO_CAP), // concurrent active runs per space
+
+  // ── Self-healing caps (auto-fix gating; "an obedient bot burns the house down") ──
+  // Managed enforces; self-host (ENFORCE_LIMITS off) → NO_CAP → auto-fix gating is
+  // loose (loop-cap never trips, blast-radius unbounded — operator's own machine).
+  healAttemptMax: lim("HEAL_ATTEMPT_MAX", NO_CAP), // max heal attempts per flow in a window
+  healBlastRadiusMax: lim("HEAL_BLAST_RADIUS_MAX", NO_CAP), // max touched nodes for auto-apply
 } as const;
