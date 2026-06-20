@@ -15,6 +15,7 @@ import type {
   Runtime,
   ConnectionResolver,
   RunLogStore,
+  IdempotencyStore,
 } from "../engine/index";
 import {
   Scheduler,
@@ -22,8 +23,17 @@ import {
   InMemoryQueue,
   InMemoryFuncRegistry,
 } from "../engine/index";
+import { LIMITS } from "../limits";
 import type { Registry } from "../providers/registry";
 import type { Connections } from "./connections";
+
+// Per-step pacing — an engineering constant (like a poll interval), not a
+// business limit, so it's a bare env (default 180ms; 0 disables), NOT in
+// limits.ts. Replaces the old hardcoded 180ms.
+const STEP_THROTTLE_MS = ((): number => {
+  const v = Number(process.env.RUN_STEP_THROTTLE_MS);
+  return Number.isFinite(v) && v >= 0 ? v : 180;
+})();
 import { RemoteSandboxRuntime } from "./remote-sandbox-runtime";
 import { LocalRuntime } from "./local-runtime";
 import { DockerRuntime } from "./docker-runtime";
@@ -36,6 +46,9 @@ export interface RunDeps {
   registry: Registry;
   connections: Connections;
   files?: FileService;
+  // optional: when present, effectful steps that declare an idempotency
+  // mechanism are deduped against this store (side-effect fires at most once).
+  idempotency?: IdempotencyStore;
 }
 
 class NotifyingRunLog implements RunLogStore {
@@ -305,6 +318,9 @@ export async function runWorkflow(
   nodeConnections: Record<string, Record<string, string>> = {},
   onRecord?: (r: StepRecord) => Promise<void> | void,
   seed?: StepRecord[],
+  // The REAL run id, used only for idempotency keying (the engine's internal
+  // log id is a fixed "run"). Defaults to that internal id when omitted.
+  runKey?: string,
 ): Promise<StepRecord[]> {
   const registry = new InMemoryFuncRegistry();
   const nodes: FuncNode[] = [];
@@ -316,7 +332,7 @@ export async function runWorkflow(
   const workflow: Workflow = { id: "run", nodes };
   const queue = new InMemoryQueue();
   const log = new NotifyingRunLog(onRecord);
-  const scheduler = new Scheduler(workflow, log, queue);
+  const scheduler = new Scheduler(workflow, log, queue, LIMITS.maxFanOut);
 
   let runtime = createRuntime();
   if (deps.files) {
@@ -335,6 +351,8 @@ export async function runWorkflow(
   }
   const resolver: ConnectionResolver = new CarrierConnectionsResolver(deps);
 
+  const runId = "run";
+
   const worker = new Worker(
     workflow,
     registry,
@@ -343,9 +361,9 @@ export async function runWorkflow(
     log,
     queue,
     scheduler,
+    { spaceId: deps.spaceId, runKey: runKey ?? runId, idempotency: deps.idempotency },
   );
 
-  const runId = "run";
   if (seed && seed.length) {
     for (const record of seed) await log.append({ ...record, runId });
   } else {
@@ -362,11 +380,30 @@ export async function runWorkflow(
   }
   await scheduler.tick(runId);
 
+  const budget = LIMITS.maxRunInvocations;
   let item = await queue.pop();
   let guard = 0;
-  while (item && guard++ < 1000) {
+  while (item) {
     const current = item;
-    await new Promise((r) => setTimeout(r, 180));
+    if (guard++ >= budget) {
+      // Runaway guard: stop and record a FAILED step so the run finalizes
+      // failed (not silently truncated to "done"). "out of range" makes
+      // classifyError return `logic`, so the diagnosis layer won't auto-retry
+      // it — a retry would just re-trip the same cap. Self-host: budget =
+      // NO_CAP ⇒ never trips ⇒ behaviour identical to before.
+      await log.append({
+        runId,
+        nodeId: current.nodeId,
+        funcId: nodes.find((n) => n.nodeId === current.nodeId)?.funcId ?? "run",
+        funcVersion: 1,
+        attempt: 1,
+        status: "failed",
+        resolvedInput: {},
+        error: "run invocation budget exceeded: step count out of range",
+      });
+      break;
+    }
+    if (STEP_THROTTLE_MS) await new Promise((r) => setTimeout(r, STEP_THROTTLE_MS));
     try {
       await worker.process(current);
     } catch (e) {

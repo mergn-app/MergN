@@ -46,6 +46,8 @@ import {
   type RateLimitRule,
 } from "./ratelimit";
 import { runWorkflow } from "./run";
+import { createIdempotencyStore } from "./idempotency";
+import { createConcurrencyGuard } from "./concurrency";
 import {
   emitRun,
   onRun,
@@ -305,6 +307,14 @@ const versions = createVersionStore(store, {
 const mcpTokens = createMcpTokenStore(store);
 const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
+// Run-safety: idempotency dedup for effectful steps + per-space concurrent
+// run ceiling. Both no-op on self-host (no declared mechanisms / uncapped).
+const idempotency = createIdempotencyStore(store);
+const concurrency = createConcurrencyGuard({
+  store,
+  countActive: async (spaceId) =>
+    (await runs.listRuns(spaceId)).filter((r) => r.status === "running").length,
+});
 // Per-flow health. onChange fires on status transitions: we log it and hand it
 // to the alert pipeline (late-bound below, after its deps exist).
 let onHealthTransition: (
@@ -551,6 +561,21 @@ async function evaluateRunOutcome(
   return evaluateOutcome({ outputs, config: cfg, driftBaseline, driftHistory });
 }
 
+// Shared resume seed: a prior run's `done` steps + its input. Both the manual
+// /api/run path and runSavedWorkflow (all triggers + auto-heal) use this, so
+// the "what counts as already-done" rule lives in exactly one place.
+async function loadResumeSeed(
+  spaceId: string,
+  priorRunId: string,
+): Promise<{ seed: StepRecord[]; input: Record<string, unknown> } | null> {
+  const prior = await runs.getRun(spaceId, priorRunId);
+  if (!prior) return null;
+  return {
+    seed: prior.records.filter((r) => r.status === "done"),
+    input: prior.input,
+  };
+}
+
 async function runSavedWorkflow(
   spaceId: string,
   wf: {
@@ -567,6 +592,14 @@ async function runSavedWorkflow(
   input: Record<string, unknown>,
   trigger: string,
   runId?: string,
+  // Resume from a prior run: its `done` steps seed this run (re-run continues
+  // from where it failed). Available to ALL triggers + auto-heal/replay, not
+  // just manual /api/run. NOTE: the seed comes from getRun, whose step IO is
+  // PII-masked at persist time — so seeded values are raw only when this
+  // deployment stores raw (self-host / mask "full"). Under managed masking the
+  // seed carries masked values (the same long-standing limit /api/run has);
+  // restoring raw-value resume is a separate, deliberate change.
+  resumeFrom?: { runId: string },
 ): Promise<RunDoc> {
   // Unified recorder for saved-workflow triggers (webhook/schedule/poll).
   // Seals the running version → writes a "running" header → persists each step
@@ -575,7 +608,65 @@ async function runSavedWorkflow(
   const id = runId ?? randomUUID();
   const startedAt = new Date().toISOString();
   const maskLevel = resolveMaskLevel(wf.maskLevel, MASK_DEFAULT); // per-flow override
-  const merged = { ...(wf.variables ?? {}), ...input };
+  let merged = { ...(wf.variables ?? {}), ...input };
+
+  // Run-safety: refuse the run when the space is already at its concurrent-run
+  // ceiling (a schedule/poll storm must not drown a space). Recorded as a failed
+  // run so it's visible; "out of range" ⇒ errorType `logic` ⇒ not auto-retried.
+  // No-op on self-host (uncapped). A future buffering layer can hold these
+  // instead of failing.
+  if (!(await concurrency.tryAcquire(spaceId))) {
+    const at = new Date().toISOString();
+    const failMessage = "space concurrency cap reached: active run count out of range";
+    const errorType = classifyError(failMessage);
+    await runs.saveRun(spaceId, {
+      id,
+      workflowId: wf.id,
+      workflowName: wf.name,
+      trigger,
+      status: "failed",
+      errorType,
+      input: maskValue(merged, maskLevel) as Record<string, unknown>,
+      records: [],
+      startedAt: at,
+      finishedAt: at,
+      failReason: failMessage,
+      maskLevel,
+    });
+    void userLogs.append(spaceId, {
+      level: "error",
+      source: "run",
+      message: `Run rejected: ${wf.name} (${trigger})`,
+      detail: failMessage,
+      workflowId: wf.id,
+    });
+    emitRun(spaceId, { id, workflowId: wf.id, status: "failed", trigger, errorType });
+    return {
+      id,
+      workflowId: wf.id,
+      workflowName: wf.name,
+      trigger,
+      status: "failed",
+      errorType,
+      input: merged,
+      records: [],
+      startedAt: at,
+      finishedAt: at,
+      maskLevel,
+    };
+  }
+
+  // Resume seeding: replay this run's prior `done` steps so it continues from
+  // the failed step (input carries over). Idempotency keeps any already-fired
+  // effect from re-firing past the seed (when funcs declare a mechanism).
+  let seed: StepRecord[] | undefined;
+  if (resumeFrom) {
+    const loaded = await loadResumeSeed(spaceId, resumeFrom.runId);
+    if (loaded) {
+      seed = loaded.seed;
+      merged = loaded.input;
+    }
+  }
 
   let workflowVersionId: string | undefined;
   const head = await workflows.getWorkflow(spaceId, wf.id);
@@ -604,7 +695,7 @@ async function runSavedWorkflow(
   let engineError: string | undefined;
   try {
     await runWorkflow(
-      { spaceId, registry, connections, files: fileService },
+      { spaceId, registry, connections, files: fileService, idempotency },
       wf.funcs as Parameters<typeof runWorkflow>[1],
       wf.wires as Parameters<typeof runWorkflow>[2],
       merged,
@@ -627,6 +718,8 @@ async function runSavedWorkflow(
           at: new Date().toISOString(),
         });
       },
+      seed, // generalized resume: prior done-steps (undefined for a fresh run)
+      id, // runKey: the real run id so idempotency dedup keys are run-stable
     );
   } catch (e) {
     // Systemic engine error (not a per-step failure) — always finalize the run
@@ -685,6 +778,9 @@ async function runSavedWorkflow(
     ...(errorType ? { errorType } : {}),
   });
   void runs.pruneRuns(spaceId).catch(() => {});
+  // Release the concurrency slot. A throw before here leaks the counter by one,
+  // which tryAcquire's reconcile-against-running-runs self-corrects at the cap.
+  await concurrency.release(spaceId);
 
   return {
     id,
@@ -1967,10 +2063,10 @@ app.post("/api/run", async (c) => {
   let input = body.input ?? {};
   let seed: StepRecord[] | undefined;
   if (body.resumeRunId) {
-    const prior = await runs.getRun(spaceId, body.resumeRunId);
-    if (prior) {
-      seed = prior.records.filter((r) => r.status === "done");
-      input = prior.input;
+    const loaded = await loadResumeSeed(spaceId, body.resumeRunId);
+    if (loaded) {
+      seed = loaded.seed;
+      input = loaded.input;
     }
   }
   const runDocId = body.runId ?? randomUUID();

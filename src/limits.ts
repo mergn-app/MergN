@@ -69,4 +69,11 @@ export const LIMITS = {
 
   // ── File storage (per-space total upload quota) ──
   maxStorageBytes: lim("MAX_STORAGE_BYTES", NO_CAP),
+
+  // ── Run-safety caps (stop a runaway run before AI/replay can re-trigger it) ──
+  // Deterministic ceilings, no AI involved. Managed enforces; self-host
+  // (ENFORCE_LIMITS off) → NO_CAP → the guards run but always pass (uncapped).
+  maxFanOut: lim("MAX_FAN_OUT", NO_CAP), // nodes enqueued per scheduler tick (back-pressure)
+  maxRunInvocations: lim("MAX_RUN_INVOCATIONS", NO_CAP), // total steps processed in one run
+  maxSpaceConcurrency: lim("MAX_SPACE_CONCURRENCY", NO_CAP), // concurrent active runs per space
 } as const;
