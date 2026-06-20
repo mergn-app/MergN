@@ -6,6 +6,14 @@
 // failure diagnosis can still see null / double-wrap / wrong-type.
 export type MaskLevel = "shape" | "keys" | "full";
 
+const MASK_LEVELS: readonly MaskLevel[] = ["shape", "keys", "full"];
+
+// Validate a (possibly user-supplied, per-flow) mask level, falling back to the
+// deployment default when absent or invalid.
+export function resolveMaskLevel(value: unknown, fallback: MaskLevel): MaskLevel {
+  return MASK_LEVELS.includes(value as MaskLevel) ? (value as MaskLevel) : fallback;
+}
+
 const TYPE_TAG = (v: unknown): string => {
   if (typeof v === "string") return `«string:${v.length}»`;
   if (typeof v === "number") return Number.isInteger(v) ? "«int»" : "«number»";

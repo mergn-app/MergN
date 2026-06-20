@@ -1,4 +1,7 @@
 import type { DocStore } from "../store/docstore";
+import type { OutcomeConfig } from "./outcome";
+import type { MaskLevel } from "./pii-mask";
+import type { LivenessConfig } from "./webhook-liveness";
 
 const COLLECTION = "workflows";
 
@@ -44,6 +47,9 @@ export interface SavedWorkflow {
   variables?: Record<string, unknown>;
   conversationId?: string;
   currentVersionId?: string; // latest sealed version (run-stamp / history pointer)
+  outcome?: OutcomeConfig; // opt-in silent-success checks (expectations / drift-to-empty)
+  maskLevel?: MaskLevel; // per-flow PII masking override (default → MASK_DEFAULT)
+  liveness?: LivenessConfig; // per-flow liveness config (webhook heartbeat / schedule tol)
   createdAt: string;
   updatedAt: string;
 }

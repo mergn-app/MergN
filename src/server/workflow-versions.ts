@@ -104,7 +104,20 @@ const snapshotOf = (wf: SavedWorkflow): WorkflowSnapshot => ({
   variables: wf.variables,
 });
 
-export function createVersionStore(store: DocStore): VersionStore {
+export interface VersionStoreOpts {
+  // Resolve the provider drafts (clientSource + metadata, secret-free) that the
+  // given funcs require, so each sealed version pins the provider code it ran
+  // against. Injected (not imported) to keep this store free of the registry.
+  pinProviders?: (
+    spaceId: string,
+    funcs: unknown[],
+  ) => Promise<Record<string, unknown>>;
+}
+
+export function createVersionStore(
+  store: DocStore,
+  opts: VersionStoreOpts = {},
+): VersionStore {
   // All versions for a workflow, oldest → newest (createdAt asc).
   async function allFor(
     spaceId: string,
@@ -140,7 +153,17 @@ export function createVersionStore(store: DocStore): VersionStore {
 
     async seal(spaceId, head, meta) {
       const workflowId = head.id;
-      const snapshot = snapshotOf(head);
+      const base = snapshotOf(head);
+      // Pin the provider code this version requires (if a resolver is wired).
+      // Empty result → omit the field (backward-compatible hash for no-provider
+      // workflows). Provider-code change → different hash → new version.
+      const providers = opts.pinProviders
+        ? await opts.pinProviders(spaceId, (head.funcs ?? []) as unknown[])
+        : undefined;
+      const snapshot: WorkflowSnapshot =
+        providers && Object.keys(providers).length
+          ? { ...base, providers }
+          : base;
       const hash = contentHash(snapshot);
       const prev = await latest(spaceId, workflowId);
       // Dedup vs the latest version only: consecutive identical saves coalesce,

@@ -1,5 +1,6 @@
 import type { ErrorType } from "./error-classify";
 import type { RunStore } from "./runs";
+import type { OutcomeFail } from "./outcome";
 
 // Per-flow health. `computeHealth` is pure (testable); the monitor caches a
 // HealthState per workflow, recomputes from recent runs + liveness, and fires a
@@ -18,6 +19,7 @@ export interface HealthState {
   lastRunAt?: string;
   lastError?: { type: ErrorType; message: string };
   livenessFail?: LivenessFail;
+  outcomeFail?: OutcomeFail & { since: string }; // silent-success (run green, no work)
   updatedAt: string;
 }
 
@@ -30,6 +32,7 @@ const FAIL_STREAK = Number(process.env.HEALTH_FAIL_STREAK) || 3;
 export interface ComputeHealthInput {
   recentRuns: { status: string }[]; // newest-first
   livenessFail?: boolean;
+  outcomeFail?: { kind: "expectation" | "drop" };
   failStreak?: number;
 }
 
@@ -39,14 +42,22 @@ export function computeHealth(input: ComputeHealthInput): HealthStatus {
   const completed = input.recentRuns.filter(
     (r) => r.status === "done" || r.status === "failed",
   );
-  if (completed.length === 0) return "nodata";
+  // A stopped schedule/poll is "failing" independent of run history — a poll
+  // that produced no runs and then stopped firing is exactly silent failure, so
+  // liveness takes precedence over the no-runs "nodata" guard below.
   if (input.livenessFail) return "failing";
+  if (completed.length === 0) return "nodata";
+  // hard red: ran green but a declared expectation failed (the flow finished but
+  // didn't do its job — silent success). Requires a completed run, so after nodata.
+  if (input.outcomeFail?.kind === "expectation") return "failing";
   let consecutive = 0;
   for (const r of completed) {
     if (r.status === "failed") consecutive++;
     else break;
   }
   if (consecutive >= streak) return "failing";
+  // soft: a drop-to-empty suspicion, or some (non-streak) failures.
+  if (input.outcomeFail?.kind === "drop") return "degraded";
   const anyFailure = completed.some((r) => r.status === "failed");
   return anyFailure ? "degraded" : "healthy";
 }
@@ -55,6 +66,7 @@ export function computeHealth(input: ComputeHealthInput): HealthStatus {
 export interface RecomputeOpts {
   lastError?: { type: ErrorType; message: string } | null;
   liveness?: LivenessFail | null;
+  outcome?: OutcomeFail | null;
 }
 
 export interface HealthMonitor {
@@ -96,10 +108,20 @@ export function createHealthMonitor(deps: HealthMonitorDeps): HealthMonitor {
     const recentRuns = metas.slice(0, WINDOW); // listRuns is already newest-first
     const livenessFail =
       opts.liveness === undefined ? prev?.livenessFail : opts.liveness ?? undefined;
+    // outcomeFail is set ON a done run (silent success) — so, unlike lastError,
+    // a fresh done run does NOT auto-clear it; the recorder clears it explicitly
+    // (outcome:null) when a run passes its outcome checks.
+    const outcomeBase =
+      opts.outcome === undefined ? prev?.outcomeFail : opts.outcome ?? undefined;
+    const nowIso = new Date(now()).toISOString();
+    const outcomeFail = outcomeBase
+      ? { ...outcomeBase, since: prev?.outcomeFail?.since ?? nowIso }
+      : undefined;
 
     const status = computeHealth({
       recentRuns,
       livenessFail: !!livenessFail,
+      outcomeFail: outcomeFail ? { kind: outcomeFail.kind } : undefined,
     });
 
     // lastError: a fresh successful latest run clears it; otherwise apply the
@@ -115,7 +137,8 @@ export function createHealthMonitor(deps: HealthMonitorDeps): HealthMonitor {
       lastRunAt: latest?.startedAt ?? prev?.lastRunAt,
       lastError,
       livenessFail: livenessFail ?? undefined,
-      updatedAt: new Date(now()).toISOString(),
+      outcomeFail,
+      updatedAt: nowIso,
     };
     cache.set(k, state);
     if (prev?.status !== status) onChange?.(spaceId, state, prev?.status);

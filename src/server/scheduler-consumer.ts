@@ -140,6 +140,11 @@ export function createSchedulerConsumer(deps: SchedulerConsumerDeps): SchedulerC
       msg.ack();
       return;
     }
+    // Record the fire for liveness — the schedule DID fire (observed here), even
+    // if the run below fails or, for polls, finds no new data. Fire-and-forget.
+    void scheduleStore
+      .setLastFired(payload.spaceId, payload.jobId, new Date().toISOString())
+      .catch(() => {});
 
     const wf = await workflows.getWorkflow(payload.spaceId, job.workflowId);
     if (!wf) {

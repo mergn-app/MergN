@@ -13,6 +13,8 @@ export interface ScheduledJob {
   pollConnection?: string;
   cursor: string;
   active: boolean;
+  lastFiredAt?: string; // last time NATS fired this job (liveness signal; NOT a config change)
+  recentFires?: string[]; // last few fire times (oldest→newest) — cron cadence learning
   createdAt: string;
   updatedAt: string;
 }

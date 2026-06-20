@@ -34,7 +34,7 @@ import { createWorkflowStore, type TriggerConfig, type WorkflowStore } from "./s
 import { createVersionStore } from "./workflow-versions";
 import { diffWorkflows } from "./workflow-diff";
 import { createRunStore, type RunDoc, type RunHeader } from "./runs";
-import { maskValue, maskErrorString, type MaskLevel } from "./pii-mask";
+import { maskValue, maskErrorString, resolveMaskLevel, type MaskLevel } from "./pii-mask";
 import { createSettingsStore } from "./settings";
 import { createMcpTokenStore } from "./mcp-tokens";
 import { createMcpOAuth, OAuthError } from "./mcp-oauth";
@@ -46,8 +46,21 @@ import {
   type RateLimitRule,
 } from "./ratelimit";
 import { runWorkflow } from "./run";
-import { emitRun, onRun } from "./run-events";
+import {
+  emitRun,
+  onRun,
+  initRunEvents,
+  jetStreamRunEvents,
+} from "./run-events";
 import { classifyError, type ErrorType } from "./error-classify";
+import {
+  evaluateOutcome,
+  maskedIsEmpty,
+  type OutcomeConfig,
+  type OutcomeFail,
+} from "./outcome";
+import type { LivenessConfig } from "./webhook-liveness";
+import { checkConnectionBindings, bindingsOf } from "./connection-check";
 import { createHealthMonitor } from "./health";
 import { createLivenessEvaluator } from "./liveness";
 import { createRegistry, publicAuth, type ProviderDraft } from "../providers/registry";
@@ -82,7 +95,12 @@ import {
   type WebhookAuthType,
 } from "./webhook-auth";
 import { checkForUpdates } from "./update-check";
-import { connectNats, initSchedulerStream, type NatsCtx } from "./nats";
+import {
+  connectNats,
+  initSchedulerStream,
+  initRunEventsStream,
+  type NatsCtx,
+} from "./nats";
 import { createScheduler, missingRequiredParams, type Scheduler } from "./scheduler";
 import { createSchedulerConsumer, fireWorkflow } from "./scheduler-consumer";
 import { createScheduleStore, type ScheduleStore } from "../store/schedules";
@@ -260,7 +278,22 @@ const registry = createRegistry(store);
 const oauth = createOAuth({ store, vault, registry });
 const connections = createConnections({ store, vault, oauth });
 const workflows = createWorkflowStore(store);
-const versions = createVersionStore(store); // workflow version log
+// workflow version log. pinProviders captures the (secret-free) provider drafts
+// a workflow's funcs require, so restoring a version restores its provider code
+// — not whatever the registry was last re-authored to.
+const versions = createVersionStore(store, {
+  pinProviders: async (spaceId, funcs) => {
+    const ids = new Set<string>();
+    for (const f of funcs as Array<{ requires?: Array<{ provider?: string }> }>)
+      for (const r of f?.requires ?? []) if (r?.provider) ids.add(r.provider);
+    const out: Record<string, unknown> = {};
+    for (const id of ids) {
+      const draft = await registry.getProviderDraft(spaceId, id);
+      if (draft) out[id] = draft; // builtins (e.g. "http") return null → excluded
+    }
+    return out;
+  },
+});
 const mcpTokens = createMcpTokenStore(store);
 const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
@@ -420,6 +453,51 @@ async function llmRateLimit(c: Context): Promise<Response | null> {
   return null;
 }
 
+// Outcome health: did a green (done) run actually do its job? Evaluates the
+// flow's opt-in outcome config against this run's RAW step outputs (no PII
+// leaves — the result is just kind/nodeId/detail). For drift-to-empty it reads
+// a bounded window of prior done runs' (masked) outputs; array/object emptiness
+// survives masking, so the "zero rows" case is caught.
+const OUTCOME_DRIFT_WINDOW = 5;
+async function evaluateRunOutcome(
+  spaceId: string,
+  wf: { id: string; funcs: unknown[]; outcome?: OutcomeConfig },
+  records: StepRecord[],
+  currentRunId: string,
+): Promise<OutcomeFail | null> {
+  const cfg = wf.outcome;
+  if (!cfg) return null;
+  const pureById = new Map(
+    (wf.funcs as Array<{ id: string; pure?: boolean }>).map((f) => [f.id, !!f.pure]),
+  );
+  const outputs = records
+    .filter((r) => r.nodeId !== "trigger" && r.status === "done")
+    .map((r) => ({
+      nodeId: r.nodeId,
+      output: r.output,
+      effectful: !pureById.get(r.nodeId),
+    }));
+
+  let driftBaseline: Record<string, number> | undefined;
+  let driftHistory = 0;
+  if (cfg.driftToEmpty) {
+    const prior = (await runs.listRuns(spaceId, wf.id))
+      .filter((m) => m.status === "done" && m.id !== currentRunId)
+      .slice(0, OUTCOME_DRIFT_WINDOW);
+    driftHistory = prior.length;
+    driftBaseline = {};
+    for (const m of prior) {
+      const run = await runs.getRun(spaceId, m.id);
+      for (const rec of run?.records ?? []) {
+        if (rec.nodeId === "trigger") continue;
+        if (!maskedIsEmpty(rec.output)) // masked history: «string:0» counts as empty
+          driftBaseline[rec.nodeId] = (driftBaseline[rec.nodeId] ?? 0) + 1;
+      }
+    }
+  }
+  return evaluateOutcome({ outputs, config: cfg, driftBaseline, driftHistory });
+}
+
 async function runSavedWorkflow(
   spaceId: string,
   wf: {
@@ -430,6 +508,8 @@ async function runSavedWorkflow(
     config?: Record<string, Record<string, string>>;
     nodeConnections?: Record<string, Record<string, string>>;
     variables?: Record<string, unknown>;
+    outcome?: OutcomeConfig;
+    maskLevel?: MaskLevel;
   },
   input: Record<string, unknown>,
   trigger: string,
@@ -441,7 +521,7 @@ async function runSavedWorkflow(
   // with RAW (unmasked) records for the immediate caller.
   const id = runId ?? randomUUID();
   const startedAt = new Date().toISOString();
-  const maskLevel = MASK_DEFAULT;
+  const maskLevel = resolveMaskLevel(wf.maskLevel, MASK_DEFAULT); // per-flow override
   const merged = { ...(wf.variables ?? {}), ...input };
 
   let workflowVersionId: string | undefined;
@@ -532,7 +612,13 @@ async function runSavedWorkflow(
       })
       .catch(() => {});
   } else {
-    void health.recompute(spaceId, wf.id).catch(() => {}); // refresh / clear
+    // done run — check it actually did its job (silent-success), then refresh.
+    const outcome = wf.outcome
+      ? await evaluateRunOutcome(spaceId, wf, records, id).catch(() => null)
+      : null;
+    void health
+      .recompute(spaceId, wf.id, { outcome: outcome ?? null })
+      .catch(() => {});
   }
   emitRun(spaceId, {
     id,
@@ -597,6 +683,8 @@ const pollRunner = createPollRunner({ registry, connections });
 
 const SCHEDULER_STREAM = process.env.WF_SCHEDULER_STREAM ?? "WF_SCHEDULER";
 const SCHEDULER_SUBJECT_PREFIX = "wf.scheduled";
+const RUN_EVENTS_STREAM = process.env.WF_RUN_EVENTS_STREAM ?? "WF_RUN_EVENTS";
+const RUN_EVENTS_SUBJECT_PREFIX = "mergn.runs";
 
 let nats: NatsCtx | null = null;
 try {
@@ -630,6 +718,17 @@ if (nats) {
     SCHEDULER_SUBJECT_PREFIX,
     Number(process.env.WF_SCHEDULER_REPLICAS) || 1,
   );
+  // Run-event bus over JetStream — crosses the API↔scheduler-consumer process
+  // boundary (a scheduled run's events now reach the UI's live stream) and works
+  // multi-instance. Replaces the in-memory bus (still the fallback if unwired).
+  await initRunEventsStream(
+    nats,
+    RUN_EVENTS_STREAM,
+    RUN_EVENTS_SUBJECT_PREFIX,
+    Number(process.env.WF_SCHEDULER_REPLICAS) || 1,
+  );
+  initRunEvents(jetStreamRunEvents(nats, RUN_EVENTS_STREAM, RUN_EVENTS_SUBJECT_PREFIX));
+  console.log("run-event bus: JetStream");
   schedulerConsumer = createSchedulerConsumer({
     nats,
     streamName: SCHEDULER_STREAM,
@@ -682,7 +781,13 @@ if (nats) {
 
   // Liveness: periodically check that active interval schedules are still
   // firing on cadence; record a liveness fail on the flow's health if not.
-  const liveness = createLivenessEvaluator({ store, scheduleStore, runs, health });
+  const liveness = createLivenessEvaluator({
+    scheduleStore,
+    health,
+    store,
+    workflows,
+    runs,
+  });
   liveness.start();
   console.log("liveness evaluator started");
 }
@@ -1484,6 +1589,9 @@ app.put("/api/workflows/:id", async (c) => {
     inputForm?: unknown;
     variables?: Record<string, unknown>;
     conversationId?: string;
+    outcome?: OutcomeConfig;
+    maskLevel?: MaskLevel;
+    liveness?: LivenessConfig;
   }>();
   const wf = await workflows.saveWorkflow(c.get("spaceId"), {
     id,
@@ -1497,6 +1605,9 @@ app.put("/api/workflows/:id", async (c) => {
     inputForm: body.inputForm,
     variables: body.variables,
     conversationId: body.conversationId,
+    ...(body.outcome ? { outcome: body.outcome } : {}),
+    ...(body.maskLevel ? { maskLevel: body.maskLevel } : {}),
+    ...(body.liveness ? { liveness: body.liveness } : {}),
   });
   if (body.conversationId) {
     await chats.linkWorkflow(
@@ -1602,6 +1713,20 @@ app.post("/api/workflows/:id/versions/:versionId/restore", async (c) => {
     variables: s.variables,
     conversationId: head.conversationId, // keep chat continuity
   });
+  // Restore the version's pinned provider code so HEAD runs exactly what this
+  // version ran (not a later re-author). Drafts are secret-free; credentials
+  // stay live on the connection. This overwrites the provider id space-wide —
+  // intended: "restore = go back to this version's behaviour".
+  for (const [pid, draft] of Object.entries(
+    (s.providers ?? {}) as Record<string, ProviderDraft>,
+  )) {
+    try {
+      await registry.persistProvider(spaceId, draft);
+      registry.registerProviderFromDraft(spaceId, draft);
+    } catch (e) {
+      console.error(`restore: re-register provider ${pid} failed`, e);
+    }
+  }
   const restored = await workflows.getWorkflow(spaceId, id);
   const { version } = await versions.seal(spaceId, restored!, {
     source: "restore",
@@ -1610,7 +1735,18 @@ app.post("/api/workflows/:id/versions/:versionId/restore", async (c) => {
     message: `Restored from ${target.id.slice(0, 8)}`,
   });
   await workflows.setCurrentVersion(spaceId, id, version.id);
-  return c.json({ ok: true, newVersionId: version.id });
+  // Flag any node whose pinned connection is now stale (deleted / different
+  // provider) so the UI can prompt a reconnect instead of a silent run failure.
+  const conns = await connections.listConnections(spaceId);
+  const reconnect = checkConnectionBindings(
+    bindingsOf(restored?.funcs ?? [], restored?.nodeConnections),
+    conns.map((cn) => ({ id: cn.id, provider: cn.provider })),
+  );
+  return c.json({
+    ok: true,
+    newVersionId: version.id,
+    ...(reconnect.length ? { reconnect } : {}),
+  });
 });
 
 app.get("/api/workflows/:id/status", async (c) => {
@@ -2057,7 +2193,7 @@ app.get("/api/runs/stream", async (c) => {
   const workflowId = c.req.query("workflow");
   if (!workflowId) return c.json({ error: "workflow required" }, 400);
   return streamSSE(c, async (stream) => {
-    const off = onRun(spaceId, workflowId, (event) => {
+    const off = await onRun(spaceId, workflowId, (event) => {
       void stream.writeSSE({ data: JSON.stringify(event) });
     });
     const ping = setInterval(() => {

@@ -35,6 +35,11 @@ export interface WorkflowSnapshot {
   trigger?: unknown;
   inputForm?: unknown;
   variables?: Record<string, unknown>;
+  // Pinned provider code (clientSource + metadata, NO secret values) for the
+  // providers this workflow's funcs require — so restoring a version restores
+  // the exact provider behaviour, not whatever the registry holds now. Keyed by
+  // provider id. Content-bearing: a provider-code change is a new version.
+  providers?: Record<string, unknown>;
 }
 
 export interface WorkflowDiff {
@@ -92,6 +97,7 @@ export function canonicalize(s: WorkflowSnapshot): string {
     trigger: s.trigger ?? null,
     inputForm: s.inputForm ?? null,
     variables: s.variables ?? {},
+    providers: s.providers ?? {}, // pinned provider code — change → new version
   });
 }
 
