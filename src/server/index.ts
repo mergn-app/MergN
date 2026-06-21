@@ -34,6 +34,8 @@ import { createWorkflowStore, type TriggerConfig, type WorkflowStore } from "./s
 import { createVersionStore } from "./workflow-versions";
 import { diffWorkflows } from "./workflow-diff";
 import { createRunStore, type RunDoc, type RunHeader } from "./runs";
+import { createBufferStore } from "./trigger-buffer";
+import { replayBuffer, testRunFirst, type ReplayDeps } from "./buffer-replay";
 import { maskValue, maskErrorString, resolveMaskLevel, type MaskLevel } from "./pii-mask";
 import { createSettingsStore } from "./settings";
 import { createMcpTokenStore } from "./mcp-tokens";
@@ -80,7 +82,7 @@ import type { Severity, AlertCategory } from "./alert-router";
 import { createLivenessEvaluator } from "./liveness";
 import { createRegistry, publicAuth, type ProviderDraft } from "../providers/registry";
 import { assertSpace, type DocStore } from "../store/docstore";
-import { createStorage } from "../store/factory";
+import { createStorage, createCipher } from "../store/factory";
 import {
   initUsageCap,
   recordTokens,
@@ -290,6 +292,23 @@ const versions = createVersionStore(store, { pinProviders });
 const mcpTokens = createMcpTokenStore(store);
 const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
+// Same cipher as secret-at-rest (Vault Transit on managed, null on self-host).
+// Used to seal/unseal the raw resume-seed capsule so masked managed runs still
+// resume from step with real values (null → self-host stores raw already).
+const seedCipher = createCipher();
+// No-data-loss trigger buffer (events held while a flow is paused). Shares the
+// cipher so buffered event payloads are encrypted at rest on managed.
+const buffer = createBufferStore(store, seedCipher);
+// Wiring for the no-data-loss buffer drain — it orchestrates the existing
+// idempotency + resume primitives, writing no new dedup/resume logic.
+// runSavedWorkflow is hoisted.
+const replayDeps: ReplayDeps = {
+  buffer,
+  getWorkflow: (s, w) => workflows.getWorkflow(s, w),
+  runSavedWorkflow: (s, wf, input, trigger, runId, resumeFrom) =>
+    runSavedWorkflow(s, wf, input, trigger, runId, resumeFrom),
+  setPaused: (s, w, p) => workflows.setPaused(s, w, p),
+};
 // Run-safety: idempotency dedup for effectful steps + per-space concurrent
 // run ceiling. Both no-op on self-host (no declared mechanisms / uncapped).
 const idempotency = createIdempotencyStore(store);
@@ -598,6 +617,24 @@ async function loadResumeSeed(
   spaceId: string,
   priorRunId: string,
 ): Promise<{ seed: StepRecord[]; input: Record<string, unknown> } | null> {
+  // Prefer the encrypted raw capsule (sealed on failed+masked runs): getRun's
+  // step IO is PII-masked at persist, so under managed masking it can't seed a
+  // correct resume. Self-host (no cipher / mask "full") falls through to getRun,
+  // whose records are already raw.
+  if (seedCipher) {
+    const sealed = await runs.readResumeSeed(spaceId, priorRunId);
+    if (sealed) {
+      try {
+        const raw = JSON.parse(await seedCipher.decrypt(sealed)) as {
+          input: Record<string, unknown>;
+          seed: StepRecord[];
+        };
+        return { seed: raw.seed.filter((r) => r.status === "done"), input: raw.input };
+      } catch (e) {
+        console.error(`resume seed unseal failed [${priorRunId}] — falling back to masked`, e);
+      }
+    }
+  }
   const prior = await runs.getRun(spaceId, priorRunId);
   if (!prior) return null;
   return {
@@ -779,6 +816,20 @@ async function runSavedWorkflow(
   await runs.finalizeRun(spaceId, id, status, finishedAt, engineError, errorType);
 
   if (status === "failed") {
+    // Seal the RAW done-step IO + input so a later resume-from-step (manual or
+    // buffer replay) restores real values even though persisted records are masked.
+    // Only when masking is lossy AND a cipher exists; best-effort (a seal failure
+    // must never fail the run — resume degrades to masked seed). Self-host
+    // ("full" / no cipher) needs no capsule: its records are already raw.
+    if (seedCipher && maskLevel !== "full") {
+      try {
+        const seed = records.filter((r) => r.status === "done");
+        const sealed = await seedCipher.encrypt(JSON.stringify({ input: merged, seed }));
+        await runs.sealResumeSeed(spaceId, id, sealed);
+      } catch (e) {
+        console.error(`resume seed seal failed [${wf.id}/${id}]`, e);
+      }
+    }
     void userLogs.append(spaceId, {
       level: "error",
       source: "run",
@@ -2065,21 +2116,28 @@ app.get("/api/workflows/:id/status", async (c) => {
 });
 
 app.post("/api/workflows/:id/pause", async (c) => {
-  if (!scheduler) return c.json({ error: "scheduler disabled" }, 503);
-  await scheduler.pause(c.get("spaceId"), c.req.param("id"));
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const reason =
+    ((await c.req.json().catch(() => ({}))) as { reason?: string }).reason === "heal" ? "heal" : "manual";
+  // Flow-level pause (durable): webhook events buffer, schedule/poll ticks stop.
+  // Works for a webhook-only flow that has no scheduler job.
+  await workflows.setPaused(spaceId, id, true, reason);
+  if (scheduler) await scheduler.pause(spaceId, id);
   return c.json({ ok: true, state: "paused" });
 });
 
 app.post("/api/workflows/:id/resume", async (c) => {
-  if (!scheduler) return c.json({ error: "scheduler disabled" }, 503);
   const spaceId = c.get("spaceId");
   const id = c.req.param("id");
   const wf = await workflows.getWorkflow(spaceId, id);
   if (wf?.trigger?.kind === "poll" && missingRequiredParams(wf.trigger.poll)) {
     return c.json({ error: "missing required parameters", state: "paused" }, 400);
   }
-  await scheduler.resume(spaceId, id);
-  if (wf && wf.trigger?.kind === "poll") {
+  // resume ≠ replay: clear the flag; buffered events drain via /buffer/replay (D3).
+  await workflows.setPaused(spaceId, id, false);
+  if (scheduler) await scheduler.resume(spaceId, id);
+  if (scheduler && wf && wf.trigger?.kind === "poll") {
     const job = (await scheduleStore.findByWorkflow(spaceId, id))[0];
     if (job) {
       try {
@@ -2097,6 +2155,47 @@ app.post("/api/workflows/:id/resume", async (c) => {
     }
   }
   return c.json({ ok: true, state: "active" });
+});
+
+// ── No-data-loss buffer: list / test / replay / drop held trigger events ──
+app.get("/api/workflows/:id/buffer", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const wf = await workflows.getWorkflow(spaceId, id);
+  const entries = await buffer.list(spaceId, id);
+  // Mask each payload for the UI list — the raw event stays sealed in storage.
+  const rows = entries.map((e) => ({
+    id: e.id,
+    seq: e.seq,
+    status: e.status,
+    receivedAt: e.receivedAt,
+    preview: maskValue(e.payload, MASK_DEFAULT),
+  }));
+  return c.json({
+    entries: rows,
+    paused: !!wf?.paused,
+    pausedAt: wf?.pausedAt,
+    pausedReason: wf?.pausedReason,
+  });
+});
+
+app.post("/api/workflows/:id/buffer/test", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const res = await testRunFirst(replayDeps, spaceId, id, new Date().toISOString());
+  return c.json(res);
+});
+
+app.post("/api/workflows/:id/buffer/replay", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const res = await replayBuffer(replayDeps, spaceId, id);
+  return c.json({ ok: true, ...res });
+});
+
+app.delete("/api/workflows/:id/buffer/:entryId", async (c) => {
+  await buffer.remove(c.get("spaceId"), c.req.param("entryId"));
+  return c.json({ ok: true });
 });
 
 app.post("/api/run", async (c) => {
@@ -2234,6 +2333,29 @@ app.post("/api/hooks/:spaceId/:workflowId", async (c) => {
   } catch {
     body = {};
   }
+  // No-data-loss: a paused flow buffers the event (ack 200) instead of running
+  // it inline — the sender doesn't retry, the event isn't lost. The non-paused
+  // path below is byte-for-byte unchanged.
+  if (wf.paused) {
+    const r = await buffer.enqueue(spaceId, workflowId, body, { headers });
+    if (r.overflow) {
+      // Cap reached — hard-stop (never drop the oldest = data loss). Transition-
+      // only critical signal; 503 + Retry-After so the sender retries/backs off.
+      if (wf.pausedReason !== "buffer-full") {
+        await workflows.setPaused(spaceId, workflowId, true, "buffer-full");
+        void userLogs.append(spaceId, {
+          level: "error",
+          source: "run",
+          message: `Trigger buffer full: ${wf.name}`,
+          detail: "buffer at capacity — flow hard-stopped, new events rejected until drained",
+          workflowId,
+        });
+      }
+      return c.json({ error: "buffer_full" }, 503, { "Retry-After": "60" });
+    }
+    return c.json({ ok: true, buffered: true, entryId: r.entry!.id });
+  }
+
   const run = await runSavedWorkflow(spaceId, wf, body, "webhook");
   return c.json({ ok: true, runId: run.id, status: run.status });
 });

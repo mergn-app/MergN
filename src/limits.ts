@@ -82,4 +82,10 @@ export const LIMITS = {
   // loose (loop-cap never trips, blast-radius unbounded — operator's own machine).
   healAttemptMax: lim("HEAL_ATTEMPT_MAX", NO_CAP), // max heal attempts per flow in a window
   healBlastRadiusMax: lim("HEAL_BLAST_RADIUS_MAX", NO_CAP), // max touched nodes for auto-apply
+
+  // ── No-data-loss buffer (events held while a flow is paused) ──
+  // Max trigger events buffered per paused flow before the flow hard-stops + a
+  // critical alert fires (never drop the oldest — that would lose data). NO_CAP /
+  // self-host = buffer without limit.
+  bufferMaxEntries: lim("BUFFER_MAX_ENTRIES", NO_CAP),
 } as const;

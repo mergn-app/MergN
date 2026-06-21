@@ -10,6 +10,11 @@ import { LIMITS } from "../limits";
 // still readable. Step IO is PII-masked by the caller before appendStep.
 const COLLECTION = "runs";
 const STEPS = "run_steps";
+// Encrypted raw-IO capsule for resume-from-step. Persisted step IO is PII-masked
+// (destructive at write), so a failed run's masked records can't seed a correct
+// resume under managed masking. On a failed+masked run we seal the RAW done-step
+// IO here, encrypted (the caller owns the cipher; this store keeps it opaque).
+const RESUME_SEEDS = "run_resume_seeds";
 
 export interface RunDoc {
   id: string;
@@ -65,6 +70,9 @@ export interface RunStore {
   // reads:
   listRuns(spaceId: string, workflowId?: string, limit?: number): Promise<RunMeta[]>;
   getRun(spaceId: string, id: string): Promise<RunDoc | null>;
+  // resume-seed capsule (opaque encrypted blob; caller encrypts/decrypts):
+  sealResumeSeed(spaceId: string, runId: string, sealed: string): Promise<void>;
+  readResumeSeed(spaceId: string, runId: string): Promise<string | null>;
   // maintenance:
   pruneRuns(spaceId: string): Promise<number>;
   markOrphaned(spaceId: string, maxRunMs: number): Promise<number>;
@@ -165,6 +173,15 @@ export function createRunStore(store: DocStore): RunStore {
       return limit && limit > 0 ? rows.slice(0, limit) : rows;
     },
 
+    async sealResumeSeed(spaceId, runId, sealed) {
+      await store.put(spaceId, RESUME_SEEDS, runId, { id: runId, sealed, at: new Date().toISOString() });
+    },
+
+    async readResumeSeed(spaceId, runId) {
+      const doc = (await store.get(spaceId, RESUME_SEEDS, runId)) as { sealed?: string } | null;
+      return doc?.sealed ?? null;
+    },
+
     async pruneRuns(spaceId) {
       const days = LIMITS.runRetentionDays;
       if (!Number.isFinite(days) || days < 0) return 0; // UNLIMITED / self-host
@@ -180,6 +197,7 @@ export function createRunStore(store: DocStore): RunStore {
         if (Number.isFinite(when) && when < cutoff) {
           for (const s of (await listSteps(spaceId, r.id)) as RunStepDoc[])
             await store.remove(spaceId, STEPS, stepId(r.id, s.seq));
+          await store.remove(spaceId, RESUME_SEEDS, r.id);
           await store.remove(spaceId, COLLECTION, r.id);
           removed++;
         }

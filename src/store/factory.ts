@@ -32,7 +32,7 @@ function createSecretStorage(store: DocStore): Vault {
 // HOW secrets are encrypted at rest. Default: none (self-host stays simple — no
 // extra service). SECRET_ENCRYPTION=vault encrypts with HashiCorp Vault Transit
 // (intended for the managed/prod deployment, where a Vault service is running).
-function createCipher(): Cipher | null {
+export function createCipher(): Cipher | null {
   if (process.env.SECRET_ENCRYPTION === "vault") {
     const address = process.env.VAULT_ADDRESS;
     const token = process.env.VAULT_TOKEN;

@@ -55,6 +55,12 @@ export interface SavedWorkflow {
   outcome?: OutcomeConfig; // opt-in silent-success checks (expectations / drift-to-empty)
   alertsEnabled?: boolean; // send external alerts / run handlers for this flow (default OFF — opt-in)
   maskLevel?: MaskLevel; // per-flow PII masking override (default → MASK_DEFAULT)
+  // No-data-loss pause: while true, webhook events are buffered (not run inline)
+  // and schedule/poll ticks are skipped. Set by the user or by auto-heal at
+  // heal-start; cleared by /resume. Durable so the UI + webhook handler agree.
+  paused?: boolean;
+  pausedAt?: string; // ISO — UI "stopped since"
+  pausedReason?: "manual" | "heal" | "buffer-full";
   liveness?: LivenessConfig; // per-flow liveness config (webhook heartbeat / schedule tol)
   createdAt: string;
   updatedAt: string;
@@ -80,6 +86,13 @@ export interface WorkflowStore {
     spaceId: string,
     id: string,
     versionId: string,
+  ): Promise<void>;
+  // flip the no-data-loss pause flag (durable; webhook handler + UI read it).
+  setPaused(
+    spaceId: string,
+    id: string,
+    paused: boolean,
+    reason?: "manual" | "heal" | "buffer-full",
   ): Promise<void>;
 }
 
@@ -136,6 +149,18 @@ export function createWorkflowStore(store: DocStore): WorkflowStore {
       await store.put(spaceId, COLLECTION, id, {
         ...existing,
         currentVersionId: versionId,
+      } as unknown as Record<string, unknown>);
+    },
+
+    async setPaused(spaceId, id, paused, reason) {
+      const existing = await getWorkflow(spaceId, id);
+      if (!existing) return;
+      const { paused: _p, pausedAt: _a, pausedReason: _r, ...rest } = existing;
+      await store.put(spaceId, COLLECTION, id, {
+        ...rest,
+        ...(paused
+          ? { paused: true, pausedAt: new Date().toISOString(), pausedReason: reason ?? "manual" }
+          : {}),
       } as unknown as Record<string, unknown>);
     },
   };
