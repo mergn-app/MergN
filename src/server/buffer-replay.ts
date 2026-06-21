@@ -95,6 +95,9 @@ export async function testRunFirst(
   if (!wf) return { ran: false };
   const entry = await deps.buffer.peekFirst(spaceId, workflowId);
   if (!entry) return { ran: false };
-  const run = await deps.runSavedWorkflow(spaceId, wf, entry.payload, "webhook", `test-${entry.id}-${now}`, undefined);
+  // runId is a DocStore key (/^[A-Za-z0-9_-]+$/) — strip unsafe chars from `now`
+  // (an ISO timestamp's ":"/"." would break the key).
+  const safe = now.replace(/[^A-Za-z0-9_-]/g, "");
+  const run = await deps.runSavedWorkflow(spaceId, wf, entry.payload, "webhook", `test-${entry.id}-${safe}`, undefined);
   return { ran: true, entryId: entry.id, runId: run.id, status: run.status };
 }

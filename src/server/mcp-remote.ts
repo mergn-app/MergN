@@ -18,6 +18,35 @@ export interface RemoteMcpDeps {
   // Register/refresh a schedule|poll trigger with the scheduler so it actually
   // fires (the editor PUT does this; the MCP save path must too).
   reconcileSchedule?: (spaceId: string, workflowId: string) => Promise<void>;
+
+  // ── Monitoring / self-healing surfaces (each optional; a tool is registered
+  // ONLY when its dep is wired — fail-closed, so a deployment without the heal
+  // engine never exposes diagnose/fix). These are thin wrappers the server builds
+  // over its existing stores; mcp-remote stays decoupled from server internals. ──
+  monitoring?: {
+    listRuns: (spaceId: string, workflowId: string | undefined, limit: number) => Promise<unknown[]>;
+    getRun: (spaceId: string, runId: string) => Promise<unknown | null>;
+    getHealth: (spaceId: string, workflowId?: string) => Promise<unknown>;
+    getAnalytics: (spaceId: string, workflowId?: string) => Promise<unknown>;
+    listVersions: (spaceId: string, workflowId: string) => Promise<unknown[]>;
+    listHealEvents: (spaceId: string, workflowId: string, limit: number) => Promise<unknown[]>;
+    diagnose: (spaceId: string, runId: string, language?: string) => Promise<unknown | null>; // read-only
+  };
+  heal?: {
+    // Mode A — stage a fix proposal for a failed run (returns {eventId} or {fixable:false}).
+    proposeFix: (spaceId: string, runId: string) => Promise<unknown>;
+    // Mode B — apply a staged proposal by its event id (the in-app approve path; human-gated).
+    approveFix: (spaceId: string, workflowId: string, eventId: string) => Promise<unknown>;
+  };
+  // Operational actions (pause/resume/buffer-replay). The server wires this only
+  // when MCP write-capability is enabled (self-host on; managed opt-in).
+  ops?: {
+    pause: (spaceId: string, workflowId: string) => Promise<void>;
+    resume: (spaceId: string, workflowId: string) => Promise<void>;
+    listBuffer: (spaceId: string, workflowId: string) => Promise<unknown>;
+    testBuffer: (spaceId: string, workflowId: string) => Promise<unknown>;
+    replayBuffer: (spaceId: string, workflowId: string) => Promise<unknown>;
+  };
 }
 
 const EVENT_FIELDS: Record<string, string[]> = {
@@ -347,6 +376,110 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
       return json({ ...r, registered: true });
     },
   );
+
+  // ── Monitoring / diagnosis tools (registered only when wired — fail-closed) ──
+  if (deps.monitoring) {
+    const m = deps.monitoring;
+    tool(
+      "list_runs",
+      "List recent run history (newest-first). Each row: id, status (done/failed/running), trigger, errorType, timestamps. Optionally filter by workflowId.",
+      { workflowId: z.string().optional(), limit: z.number().int().positive().max(200).optional() },
+      async (a) => json(await m.listRuns(spaceId, a.workflowId, a.limit ?? 50)),
+    );
+    tool(
+      "get_run",
+      "Full detail of one run: per-step status, error, and resolved input/output (PII-masked on managed deployments). Use to understand WHY a run failed.",
+      { runId: z.string() },
+      async (a) => json(await m.getRun(spaceId, a.runId)),
+    );
+    tool(
+      "get_health",
+      "Health of a workflow (status, lastError, liveness/outcome fails) — or the whole space when workflowId is omitted.",
+      { workflowId: z.string().optional() },
+      async (a) => json(await m.getHealth(spaceId, a.workflowId)),
+    );
+    tool(
+      "get_analytics",
+      "Run analytics: success rate, error breakdown by type (transient/auth/logic/unknown), latency p50/p95, 24h/7d volume. Per-flow or space-wide.",
+      { workflowId: z.string().optional() },
+      async (a) => json(await m.getAnalytics(spaceId, a.workflowId)),
+    );
+    tool(
+      "list_versions",
+      "List a workflow's version history (source: editor/chat/healing/restore, label, time) — see what changed and when, including auto-heal versions.",
+      { workflowId: z.string() },
+      async (a) => json(await m.listVersions(spaceId, a.workflowId)),
+    );
+    tool(
+      "list_heal_events",
+      "List past self-healing attempts for a workflow (status, confidence, diagnosis) — what the auto-healer proposed/applied/rejected.",
+      { workflowId: z.string(), limit: z.number().int().positive().max(100).optional() },
+      async (a) => json(await m.listHealEvents(spaceId, a.workflowId, a.limit ?? 50)),
+    );
+    tool(
+      "diagnose_failure",
+      "Diagnose a failed run: plain-language cause + a proposed fix (with diff) when the error is fixable. Read-only — applies nothing.",
+      { runId: z.string(), language: z.string().optional().describe("e.g. English, Turkish") },
+      async (a) => json(await m.diagnose(spaceId, a.runId, a.language)),
+    );
+  }
+
+  if (deps.heal) {
+    const h = deps.heal;
+    tool(
+      "apply_fix",
+      "Fix a failed run. Mode A (pass runId): diagnoses + STAGES a proposed fix, returns its eventId + what it would change — does NOT apply. Mode B (pass eventId + workflowId + confirm:true): applies that staged fix, creating a new healing version. A fix is never applied without your explicit confirm.",
+      {
+        runId: z.string().optional().describe("Mode A — the failed run to propose a fix for"),
+        eventId: z.string().optional().describe("Mode B — the staged fix event to apply"),
+        workflowId: z.string().optional().describe("Mode B — required with eventId"),
+        confirm: z.boolean().optional().describe("Mode B — set true to apply the staged fix"),
+      },
+      async (a) => {
+        if (a.eventId && a.confirm) {
+          if (!a.workflowId) return json({ error: "workflowId is required with eventId" });
+          return json(await h.approveFix(spaceId, a.workflowId, a.eventId));
+        }
+        if (!a.runId) return json({ error: "Provide runId to propose a fix, or eventId+workflowId+confirm:true to apply a staged one." });
+        return json(await h.proposeFix(spaceId, a.runId));
+      },
+    );
+  }
+
+  // ── Operational actions (write-capability; wired only when enabled) ──
+  if (deps.ops) {
+    const o = deps.ops;
+    tool(
+      "pause_flow",
+      "Pause a workflow: incoming webhook events are safely buffered (not lost), schedule/poll ticks stop. Use to stop a misbehaving flow before fixing it.",
+      { workflowId: z.string() },
+      async (a) => { await o.pause(spaceId, a.workflowId); return json({ ok: true, paused: true }); },
+    );
+    tool(
+      "resume_flow",
+      "Resume a paused workflow (re-enables triggers). Does NOT replay buffered events — use replay_buffer for that.",
+      { workflowId: z.string() },
+      async (a) => { await o.resume(spaceId, a.workflowId); return json({ ok: true, paused: false }); },
+    );
+    tool(
+      "list_buffer",
+      "List the events buffered while a workflow was paused (FIFO order, status, masked payload preview).",
+      { workflowId: z.string() },
+      async (a) => json(await o.listBuffer(spaceId, a.workflowId)),
+    );
+    tool(
+      "test_buffer",
+      "Test-run the FIRST buffered event's REAL payload (does NOT consume it) to verify a fix works before replaying everything. Produces real side effects.",
+      { workflowId: z.string() },
+      async (a) => json(await o.testBuffer(spaceId, a.workflowId)),
+    );
+    tool(
+      "replay_buffer",
+      "Replay all buffered events in FIFO order, then unpause. Idempotent (no double side-effects). Recommended only after diagnose_failure → apply_fix → test_buffer succeed.",
+      { workflowId: z.string() },
+      async (a) => json(await o.replayBuffer(spaceId, a.workflowId)),
+    );
+  }
 
   return server;
 }

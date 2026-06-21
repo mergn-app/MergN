@@ -36,6 +36,7 @@ import { diffWorkflows } from "./workflow-diff";
 import { createRunStore, type RunDoc, type RunHeader } from "./runs";
 import { createBufferStore } from "./trigger-buffer";
 import { replayBuffer, testRunFirst, type ReplayDeps } from "./buffer-replay";
+import { computeAnalytics } from "./analytics";
 import { maskValue, maskErrorString, resolveMaskLevel, type MaskLevel } from "./pii-mask";
 import { createSettingsStore } from "./settings";
 import { createMcpTokenStore } from "./mcp-tokens";
@@ -490,6 +491,10 @@ const healDispatcher = createHealDispatcher({
   onError: (e) => console.error("[heal] orchestrate failed", e),
 });
 
+// MCP write-capability (pause/resume/buffer-replay + apply_fix). Self-host on;
+// managed opt-in. Read + diagnose stay on whenever remote MCP is enabled.
+const MCP_WRITE_ENABLED = !MANAGED || /^(1|true|yes)$/i.test(process.env.MCP_WRITE_ENABLED ?? "");
+
 const remoteMcpDeps: RemoteMcpDeps = {
   workflows,
   registry,
@@ -507,6 +512,93 @@ const remoteMcpDeps: RemoteMcpDeps = {
     const wf = await workflows.getWorkflow(spaceId, id);
     if (wf) await scheduler.reconcile(spaceId, wf);
   },
+  // ── Monitoring / diagnosis (read-only; on whenever remote MCP is enabled) ──
+  monitoring: {
+    listRuns: (s, wf, limit) => runs.listRuns(s, wf, limit),
+    getRun: (s, id) => runs.getRun(s, id),
+    getHealth: async (s, wf) => (wf ? await health.recompute(s, wf) : await health.summary(s)),
+    getAnalytics: async (s, wf) => computeAnalytics(await runs.listRuns(s, wf), Date.now()),
+    listVersions: (s, wf) => versions.list(s, wf),
+    listHealEvents: (s, wf, limit) => healEvents.listForWorkflow(s, wf, limit),
+    diagnose: async (s, runId, language) => {
+      const ctx = await buildDiagnosisContext(
+        { getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow },
+        s,
+        runId,
+      );
+      if (!ctx) return null;
+      return fixEngine.diagnose(s, ctx, { language: language ?? "English" });
+    },
+  },
+  // ── Fix (write-capability): propose (stage) + approve (apply via the in-app
+  // approve path; human-gated, never raw). Wired only when write-enabled. ──
+  heal: MCP_WRITE_ENABLED
+    ? {
+        proposeFix: async (s, runId) => {
+          const ctx = await buildDiagnosisContext(
+            { getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow },
+            s,
+            runId,
+          );
+          if (!ctx) return { fixable: false, error: "run not found or not a failure" };
+          const d = await fixEngine.diagnose(s, ctx, { language: "English" });
+          if (!d.proposedFix) return { fixable: false, plainLanguage: d.plainLanguage, errorType: d.errorType };
+          const ev = await healEvents.record(s, {
+            spaceId: s,
+            workflowId: d.workflowId,
+            runId,
+            mode: "propose",
+            errorType: d.errorType,
+            confidence: d.confidence,
+            diagnosis: d.plainLanguage,
+            proposal: d.proposedFix,
+            status: "proposed",
+          });
+          return {
+            fixable: true,
+            eventId: ev.id,
+            workflowId: d.workflowId,
+            kind: d.proposedFix.kind,
+            plainLanguage: d.plainLanguage,
+            confidence: d.confidence,
+            blastRadius: d.blastRadius,
+            needsConfirm: true,
+          };
+        },
+        approveFix: async (s, workflowId, eventId) => {
+          const ev = await healEvents.get(s, eventId);
+          if (!ev || ev.workflowId !== workflowId) return { ok: false, error: "fix event not found" };
+          if (ev.status !== "proposed") return { ok: false, error: `fix is '${ev.status}', not awaiting approval` };
+          if (!ev.proposal) return { ok: false, error: "fix event has no proposal to apply" };
+          const { versionId } = await fixEngine.applyFix(s, workflowId, ev.proposal, { runId: ev.runId, mode: "propose" });
+          await healEvents.update(s, ev.id, { status: "applied", versionId, approvedBy: "mcp" });
+          return { ok: true, versionId };
+        },
+      }
+    : undefined,
+  // ── Operational actions (write-capability): pause/resume/buffer ──
+  ops: MCP_WRITE_ENABLED
+    ? {
+        pause: async (s, wf) => {
+          await workflows.setPaused(s, wf, true, "manual");
+          if (scheduler) await scheduler.pause(s, wf);
+        },
+        resume: async (s, wf) => {
+          await workflows.setPaused(s, wf, false);
+          if (scheduler) await scheduler.resume(s, wf);
+        },
+        listBuffer: async (s, wf) =>
+          (await buffer.list(s, wf)).map((e) => ({
+            id: e.id,
+            seq: e.seq,
+            status: e.status,
+            receivedAt: e.receivedAt,
+            preview: maskValue(e.payload, MASK_DEFAULT),
+          })),
+        testBuffer: (s, wf) => testRunFirst(replayDeps, s, wf, new Date().toISOString()),
+        replayBuffer: (s, wf) => replayBuffer(replayDeps, s, wf),
+      }
+    : undefined,
 };
 
 setLlmBudgetHooks({
