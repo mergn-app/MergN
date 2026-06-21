@@ -116,6 +116,35 @@ function RunDetailModal({ runId, onClose }: { runId: string; onClose: () => void
   );
 }
 
+// ── log-detail modal: clicking a log shows its full message + detail ──────────
+function LogDetailModal({ log, onClose }: { log: LogEntry; onClose: () => void }) {
+  const { t } = useTranslation();
+  const li = LOG_ICON[log.level] ?? LOG_ICON.info;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
+      <div className={cn(panel, "flex max-h-[80vh] w-full max-w-xl flex-col overflow-hidden")} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2.5">
+          <li.Icon className={cn("size-4", li.cls)} />
+          <span className="text-sm font-medium">{t("monitoring.logDetail")}</span>
+          <span className="rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">{log.source}</span>
+          <span className="ml-auto text-[11px] text-muted-foreground/70">{new Date(log.ts).toLocaleString()}</span>
+          <button onClick={onClose} className="flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
+            <X className="size-4" />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-auto p-4">
+          <div className="text-sm font-medium text-foreground">{log.message}</div>
+          {log.detail ? (
+            <pre className="overflow-auto whitespace-pre-wrap break-words rounded-lg border border-border/40 bg-muted/30 p-3 font-mono text-[11px] leading-relaxed text-foreground/80">{log.detail}</pre>
+          ) : (
+            <div className="text-xs text-muted-foreground">{t("monitoring.noLogDetail")}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── inline alert panel (left of the charts): on/off + settings entry ─────────
 // The toggle is real (per-flow opt-in, default OFF). Channel/severity rules are
 // not built yet — surfaced as "coming soon".
@@ -333,6 +362,7 @@ export function MonitoringPage() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [governanceOpen, setGovernanceOpen] = useState(false);
   const [openRunId, setOpenRunId] = useState<string | null>(null);
+  const [openLog, setOpenLog] = useState<LogEntry | null>(null);
   const [openSource, setOpenSource] = useState<ChangeSource | null>(null);
 
   const goFlow = (id: string) =>
@@ -433,12 +463,17 @@ export function MonitoringPage() {
                   logs.slice(0, 100).map((l: LogEntry) => {
                     const li = LOG_ICON[l.level] ?? LOG_ICON.info;
                     return (
-                      <div key={l.id} className="flex gap-2 rounded-lg px-1 py-1 text-xs">
+                      <button
+                        key={l.id}
+                        type="button"
+                        onClick={() => setOpenLog(l)}
+                        className="flex w-full gap-2 rounded-lg px-1 py-1 text-left text-xs transition-colors hover:bg-background-subtle"
+                      >
                         <li.Icon className={cn("mt-0.5 size-3.5 shrink-0", li.cls)} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center gap-2">
                             <span className="truncate font-medium">{l.message}</span>
-                            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                            <span className="ml-auto shrink-0 rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
                               {l.source}
                             </span>
                           </div>
@@ -446,7 +481,7 @@ export function MonitoringPage() {
                             <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground/70">{l.detail}</div>
                           )}
                         </div>
-                      </div>
+                      </button>
                     );
                   })
                 )}
@@ -462,6 +497,7 @@ export function MonitoringPage() {
       {settingsOpen && workflowId && <FlowSettingsModal workflowId={workflowId} onClose={() => setSettingsOpen(false)} />}
       {governanceOpen && <GovernanceModal onClose={() => setGovernanceOpen(false)} />}
       {openRunId && <RunDetailModal runId={openRunId} onClose={() => setOpenRunId(null)} />}
+      {openLog && <LogDetailModal log={openLog} onClose={() => setOpenLog(null)} />}
       {openSource && workflowId && <ChangeReview source={openSource} workflowId={workflowId} onClose={() => setOpenSource(null)} />}
     </div>
   );

@@ -6,6 +6,7 @@ import type { ProviderDraft, Registry } from "../providers/registry";
 import type { SavedWorkflow } from "./store";
 import type { SealMeta, WorkflowVersion } from "./workflow-versions";
 import { proposeFix } from "./heal-agent";
+import { formatFuncsCode } from "./format-code";
 
 // ── FixEngine ─────────────────────────────────────────────────────────────────
 // Deterministic, background (chat-less) diagnosis + fix-as-version. `diagnose`
@@ -172,6 +173,10 @@ export function createFixEngine(deps: FixEngineDeps): FixEngine {
       try {
         const propose = deps.proposeFix ?? proposeFix;
         const r = await propose(deps.registry, spaceId, ctx, errorType, language);
+        // beautify the re-authored step ONCE, on the apply payload itself, so the
+        // formatted code flows into the diff AND the stored proposal (the "after"
+        // side the review screen renders) — not just a throwaway diff snapshot
+        if (r.apply.funcs) r.apply = { ...r.apply, funcs: (await formatFuncsCode(r.apply.funcs)) as typeof r.apply.funcs };
         const { head, proposed } = await buildSnapshots(deps, spaceId, ctx, r);
         const diff = diffWorkflows(head, proposed);
         const touchedNodeIds = computeTouched(diff, ctx.failedRun.failedNodeId);
@@ -324,7 +329,7 @@ async function buildSnapshots(
     providers: headProviders,
   };
   const proposed: WorkflowSnapshot = {
-    funcs: r.apply.funcs ?? ctx.workflow.funcs,
+    funcs: r.apply.funcs ?? ctx.workflow.funcs, // already beautified by diagnose()
     wires: r.apply.wires ?? ctx.workflow.wires,
     trigger: ctx.workflow.trigger,
     providers: r.apply.providerDraft

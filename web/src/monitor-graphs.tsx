@@ -40,20 +40,30 @@ function LatencyChart({ ordered }: { ordered: RunMeta[] }) {
   const line = withDur.map((p) => `${x(p.i)},${y(p.d)}`).join(" ");
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-1">
-      <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" className="min-h-0 w-full flex-1 overflow-visible">
-        {[0.25, 0.5, 0.75].map((g) => (
-          <line key={g} x1="0" x2="100" y1={H * g} y2={H * g} className="stroke-border/40" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
-        ))}
-        {withDur.length >= 2 && (
-          <polyline points={line} fill="none" className="stroke-emerald-500" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
-        )}
-        {pts.filter((p) => p.failed).map((p) => (
-          <line key={p.i} x1={x(p.i)} x2={x(p.i)} y1="0" y2={H} className="stroke-rose-500/70" strokeWidth="1" vectorEffect="non-scaling-stroke" />
-        ))}
-      </svg>
-      <div className="flex shrink-0 justify-between text-[9px] text-muted-foreground/50">
-        <span>{t("monitoring.graphHint")}</span>
-        <span>~{max}ms</span>
+      <div className="flex min-h-0 flex-1 gap-1.5">
+        {/* y-axis: latency in ms (max → 0) */}
+        <div className="flex w-9 shrink-0 flex-col justify-between py-0 text-right text-[9px] tabular-nums leading-none text-muted-foreground/50">
+          <span>{max}</span>
+          <span>{Math.round(max / 2)}</span>
+          <span>0</span>
+        </div>
+        <svg viewBox={`0 0 100 ${H}`} preserveAspectRatio="none" className="min-h-0 w-full flex-1 overflow-visible">
+          {[0.25, 0.5, 0.75].map((g) => (
+            <line key={g} x1="0" x2="100" y1={H * g} y2={H * g} className="stroke-border/40" strokeWidth="0.5" vectorEffect="non-scaling-stroke" />
+          ))}
+          {withDur.length >= 2 && (
+            <polyline points={line} fill="none" className="stroke-emerald-500" strokeWidth="1.5" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+          )}
+          {pts.filter((p) => p.failed).map((p) => (
+            <line key={p.i} x1={x(p.i)} x2={x(p.i)} y1="0" y2={H} className="stroke-rose-500/70" strokeWidth="1" vectorEffect="non-scaling-stroke" />
+          ))}
+        </svg>
+      </div>
+      {/* x-axis: run order (oldest → newest), with the unit in the middle */}
+      <div className="flex shrink-0 justify-between pl-[42px] text-[9px] text-muted-foreground/50">
+        <span>{t("monitoring.axisOld")}</span>
+        <span className="text-muted-foreground/70">{t("monitoring.axisLatencyMs")}</span>
+        <span>{t("monitoring.axisNew")}</span>
       </div>
     </div>
   );
@@ -128,18 +138,29 @@ function Volume({ runs }: { runs: RunMeta[] }) {
   const max = Math.max(1, ...buckets.map((b) => b.done + b.failed));
   return (
     <Card title={t("monitoring.volume")}>
-      <div className="flex h-16 items-end gap-px">
-        {buckets.map((b, i) => {
-          const total = b.done + b.failed;
-          return (
-            <div key={i} title={`${total} runs`} className="flex flex-1 flex-col justify-end" style={{ height: "100%" }}>
-              {b.failed > 0 && <div className="bg-rose-500" style={{ height: `${(b.failed / max) * 100}%` }} />}
-              {b.done > 0 && <div className="bg-emerald-500/70" style={{ height: `${(b.done / max) * 100}%` }} />}
-            </div>
-          );
-        })}
+      <div className="flex items-stretch gap-1.5">
+        {/* y-axis: run count (peak → 0) */}
+        <div className="flex h-16 w-9 shrink-0 flex-col justify-between text-right text-[9px] tabular-nums leading-none text-muted-foreground/50">
+          <span>{max}</span>
+          <span>0</span>
+        </div>
+        <div className="flex h-16 flex-1 items-end gap-px">
+          {buckets.map((b, i) => {
+            const total = b.done + b.failed;
+            return (
+              <div key={i} title={`${total} runs`} className="flex flex-1 flex-col justify-end" style={{ height: "100%" }}>
+                {b.failed > 0 && <div className="bg-rose-500" style={{ height: `${(b.failed / max) * 100}%` }} />}
+                {b.done > 0 && <div className="bg-emerald-500/70" style={{ height: `${(b.done / max) * 100}%` }} />}
+              </div>
+            );
+          })}
+        </div>
       </div>
-      <div className="mt-1 text-[9px] text-muted-foreground/50">{t("monitoring.volumeHint")}</div>
+      {/* x-axis: hourly buckets over the last 24h (oldest → now) */}
+      <div className="mt-1 flex justify-between pl-[42px] text-[9px] text-muted-foreground/50">
+        <span>{t("monitoring.axis24hAgo")}</span>
+        <span>{t("monitoring.axisNow")}</span>
+      </div>
     </Card>
   );
 }

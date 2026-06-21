@@ -1,4 +1,5 @@
 import type { DocStore } from "../store/docstore";
+import { formatFuncsCode } from "./format-code";
 import type { OutcomeConfig } from "./outcome";
 import type { MaskLevel } from "./pii-mask";
 import type { LivenessConfig } from "./webhook-liveness";
@@ -125,8 +126,12 @@ export function createWorkflowStore(store: DocStore): WorkflowStore {
     async saveWorkflow(spaceId, input) {
       const existing = await getWorkflow(spaceId, input.id);
       const now = new Date().toISOString();
+      // beautify generated step code at the persist chokepoint (covers builder +
+      // applied heal fixes) so what's stored — and shown in the diff — is clean
+      const funcs = await formatFuncsCode(input.funcs ?? []);
       const wf: SavedWorkflow = {
         ...input,
+        funcs,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
