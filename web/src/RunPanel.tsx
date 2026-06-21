@@ -1,7 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Loader2, Check, Pencil } from "lucide-react";
+import { format } from "prettier/standalone";
+import babel from "prettier/plugins/babel";
+import estree from "prettier/plugins/estree";
 import { ArrayEditorDialog } from "./ArrayEditorDialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -56,6 +59,17 @@ function SaveDot({ cur, saved }: { cur: string; saved: boolean }) {
   return null;
 }
 
+function wrapFuncSource(name: string, source: string): string {
+  return `async function ${name}(ctx, input) {\n${source}\n}`;
+}
+
+function unwrapFuncBody(code: string): string {
+  const start = code.indexOf("{");
+  const end = code.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return code.trim();
+  return code.slice(start + 1, end).replace(/^\n/, "").replace(/\n$/, "");
+}
+
 export function RunPanel({
   funcs,
   wires,
@@ -78,6 +92,7 @@ export function RunPanel({
   onStatus,
   onData,
   onRepair,
+  onUpdateFuncCode,
   onConfigChange,
 }: {
   funcs: AuthoredFunc[];
@@ -111,6 +126,7 @@ export function RunPanel({
       declaredInputs: string[];
     },
   ) => void;
+  onUpdateFuncCode: (funcId: string, bodySource: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
@@ -146,6 +162,10 @@ export function RunPanel({
   const [inputMode, setInputMode] = useState<"form" | "json">("form");
   const [regenerating, setRegenerating] = useState(false);
   const [editingArray, setEditingArray] = useState<string | null>(null);
+  const [editingCodeId, setEditingCodeId] = useState<string | null>(null);
+  const [draftCode, setDraftCode] = useState("");
+  const isEditingCode = !!selected && editingCodeId === selected.id;
+  const codeDirtyRef = useRef(false);
 
   useEffect(() => {
     if (!inputForm) return;
@@ -161,6 +181,45 @@ export function RunPanel({
       return next;
     });
   }, [inputForm]);
+
+  useEffect(() => {
+    if (!selected) {
+      setEditingCodeId(null);
+      setDraftCode("");
+      codeDirtyRef.current = false;
+      return;
+    }
+    if (editingCodeId !== selected.id) {
+      setDraftCode(selected.bodySource);
+      codeDirtyRef.current = false;
+    }
+  }, [selected, editingCodeId]);
+
+  useEffect(() => {
+    if (!selected || editingCodeId !== selected.id) return;
+    let cancelled = false;
+    const wrapped = wrapFuncSource(selected.id, selected.bodySource);
+    format(wrapped, {
+      parser: "babel",
+      plugins: [babel, estree],
+      semi: true,
+      singleQuote: false,
+    })
+      .then((out) => {
+        if (!cancelled && !codeDirtyRef.current) setDraftCode(out.trim());
+      })
+      .catch(() => {
+        if (!cancelled && !codeDirtyRef.current) setDraftCode(wrapped);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, editingCodeId]);
+
+  const lockedPrefix = selected
+    ? `async function ${selected.id}(ctx, input) {\n  export default async (ctx, input) => {\n`
+    : "";
+  const lockedSuffix = "\n  };\n}";
 
   const persistInput = (fv: Record<string, unknown>) => {
     const next = { ...variables };
@@ -928,14 +987,53 @@ export function RunPanel({
                 <span className="font-mono text-[10px] text-muted-foreground/60">
                   {selected.id} · v{selected.version}
                 </span>
-                <button
-                  onClick={() =>
-                    navigator.clipboard?.writeText(selected.bodySource)
-                  }
-                  className="ml-auto rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {t("run.copy")}
-                </button>
+                <div className="ml-auto flex items-center gap-1.5">
+                  {isEditingCode ? (
+                    <>
+                      <button
+                        onClick={() => {
+                          onUpdateFuncCode(selected.id, unwrapFuncBody(draftCode));
+                          setEditingCodeId(null);
+                          codeDirtyRef.current = false;
+                        }}
+                        className="rounded-md border border-emerald-500/40 px-1.5 py-0.5 text-[10px] text-emerald-300 transition-colors hover:text-emerald-200"
+                      >
+                        {t("common.save")}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setDraftCode(selected.bodySource);
+                          setEditingCodeId(null);
+                          codeDirtyRef.current = false;
+                        }}
+                        className="rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => {
+                          setEditingCodeId(selected.id);
+                          codeDirtyRef.current = false;
+                        }}
+                        className="inline-flex items-center gap-1 rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() =>
+                          navigator.clipboard?.writeText(selected.bodySource)
+                        }
+                        className="rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                      >
+                        {t("run.copy")}
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
               <div className="min-h-0 flex-1">
                 <CodeBlock
@@ -944,8 +1042,25 @@ export function RunPanel({
                   theme={theme}
                   wrap={false}
                   fill
+                  editable={isEditingCode}
+                  lockedPrefix={isEditingCode ? lockedPrefix : ""}
+                  lockedSuffix={isEditingCode ? lockedSuffix : ""}
+                  value={isEditingCode ? draftCode : undefined}
+                  onChange={
+                    isEditingCode
+                      ? (next) => {
+                          codeDirtyRef.current = true;
+                          setDraftCode(next);
+                        }
+                      : undefined
+                  }
                 />
               </div>
+            {isEditingCode && (
+                <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-300">
+                  ⚠ Function signatures are locked; edit only the body.
+                </div>
+              )}
             </>
           )}
         </div>

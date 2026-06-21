@@ -1249,6 +1249,16 @@ export function App({
                   onStatus={setRunStatus}
                   onData={setRunData}
                   onRepair={onRepair}
+                  onUpdateFuncCode={(funcId, bodySource) =>
+                    {
+                      setFuncs((prev) =>
+                      prev.map((f) =>
+                        f.id === funcId ? { ...f, bodySource } : f,
+                      ),
+                      );
+                      setAutoSave(true);
+                    }
+                  }
                 />
               </div>
             </>
