@@ -853,3 +853,194 @@ export function useRestoreVersion(workflowId: string | null) {
     },
   });
 }
+
+// ── Per-flow heal settings, eligibility, governance, audit ──
+export interface FlowSettings {
+  enabled: boolean;
+  fixMode: FixMode;
+  autoReplay: boolean;
+}
+export interface Eligibility {
+  canHeal: boolean;
+  reason?: "kill-switch" | "disabled" | "plan";
+}
+export interface AuditEntry {
+  id: string;
+  ts: string;
+  kind: "settings.changed" | "killswitch.toggled" | "heal.applied" | "heal.rejected";
+  message: string;
+  workflowId?: string;
+  actor?: string;
+}
+
+export function useFlowSettings(workflowId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["flow-settings", getSpace(), workflowId],
+    queryFn: () => json<FlowSettings>(`/api/workflows/${workflowId}/settings`),
+    enabled: !!workflowId && !!user,
+  });
+}
+
+export function useUpdateFlowSettings(workflowId: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (patch: Partial<FlowSettings>) =>
+      json<FlowSettings>(`/api/workflows/${workflowId}/settings`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["flow-settings", getSpace(), workflowId] });
+      qc.invalidateQueries({ queryKey: ["audit", getSpace()] });
+    },
+  });
+}
+
+export function useEligibility(workflowId: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["eligibility", getSpace(), workflowId],
+    queryFn: () => json<Eligibility>(`/api/workflows/${workflowId}/eligibility`),
+    enabled: !!workflowId && !!user,
+  });
+}
+
+export function useKillSwitch() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["kill-switch", getSpace()],
+    queryFn: () => json<{ on: boolean }>(`/api/governance/kill-switch`),
+    enabled: !!user,
+  });
+}
+
+export function useToggleKillSwitch() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (on: boolean) =>
+      json<{ ok: boolean; on: boolean }>(`/api/governance/kill-switch`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ on }),
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kill-switch", getSpace()] });
+      qc.invalidateQueries({ queryKey: ["eligibility", getSpace()] });
+      qc.invalidateQueries({ queryKey: ["audit", getSpace()] });
+    },
+  });
+}
+
+export function useAuditLog(workflowId?: string | null) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["audit", getSpace(), workflowId ?? "all"],
+    queryFn: () =>
+      json<AuditEntry[]>(`/api/audit${workflowId ? `?workflowId=${encodeURIComponent(workflowId)}` : ""}`),
+    enabled: !!user,
+    refetchInterval: 15000,
+  });
+}
+
+// ── Alert channels + handler flows ──
+export type ChannelKind = "telegram" | "slack" | "discord" | "email" | "webhook";
+export interface AlertChannel {
+  id: string;
+  kind: ChannelKind;
+  label?: string;
+  minSeverity?: "info" | "warn" | "critical";
+  categories?: string[];
+  enabled: boolean;
+  createdAt: string;
+}
+
+export function useAlertChannels() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["alert-channels", getSpace()],
+    queryFn: () => json<AlertChannel[]>(`/api/alert-channels`),
+    enabled: !!user,
+  });
+}
+
+export function useAddAlertChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { kind: ChannelKind; label?: string; minSeverity?: string; secret: Record<string, string> }) =>
+      json<AlertChannel>(`/api/alert-channels`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(input),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alert-channels", getSpace()] }),
+  });
+}
+
+export function usePatchAlertChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { id: string; enabled: boolean }) =>
+      json(`/api/alert-channels/${v.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: v.enabled }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alert-channels", getSpace()] }),
+  });
+}
+
+export function useRemoveAlertChannel() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => json(`/api/alert-channels/${id}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alert-channels", getSpace()] }),
+  });
+}
+
+export function useTestAlert() {
+  return useMutation({ mutationFn: () => json<{ ok?: boolean }>(`/api/alert-channels/test`, { method: "POST" }) });
+}
+
+
+// ── Alert handler flows (registry — user-chosen flows that run on alerts) ──
+export interface AlertHandlerRow { workflowId: string; name: string; enabled: boolean }
+
+export function useAlertHandlers() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["alert-handlers", getSpace()],
+    queryFn: () => json<AlertHandlerRow[]>(`/api/alert-handlers`),
+    enabled: !!user,
+  });
+}
+export function useAddAlertHandler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (workflowId: string) =>
+      json(`/api/alert-handlers`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ workflowId }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alert-handlers", getSpace()] }),
+  });
+}
+export function usePatchAlertHandler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { workflowId: string; enabled: boolean }) =>
+      json(`/api/alert-handlers/${v.workflowId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ enabled: v.enabled }) }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alert-handlers", getSpace()] }),
+  });
+}
+export function useRemoveAlertHandler() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (workflowId: string) => json(`/api/alert-handlers/${workflowId}`, { method: "DELETE" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["alert-handlers", getSpace()] }),
+  });
+}
+
+// Flows eligible to be alert handlers = those with a "monitor" trigger.
+export function useMonitorHandlers() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["monitor-handlers", getSpace()],
+    queryFn: () => json<{ id: string; name: string }[]>(`/api/monitor-handlers`),
+    enabled: !!user,
+  });
+}

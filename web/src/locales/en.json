@@ -429,5 +429,45 @@
     "noHistory": "No history yet.",
     "pickNode": "Select a node",
     "pickNodeHint": "Click a highlighted node to see its change."
+  },
+  "settings": {
+    "title": "Flow settings",
+    "close": "Close",
+    "heal": "Self-healing",
+    "healHint": "Auto-diagnose + fix when this flow fails",
+    "mode": "Fix mode",
+    "modeHint": "What happens when a fix is found",
+    "modeNotify": "Notify",
+    "modePropose": "Propose",
+    "modeAuto": "Auto",
+    "autoReplay": "Auto-replay",
+    "autoReplayHint": "Replay buffered events after a successful fix",
+    "alerts": "Alerts",
+    "alertsHint": "Send external alerts for this flow",
+    "gatedPlan": "Requires a Pro plan",
+    "gatedKill": "Global kill-switch is on",
+    "gatedDisabled": "Disabled for this deployment"
+  },
+  "governance": {
+    "title": "Governance",
+    "kill": "Global kill-switch",
+    "killHint": "Instantly stop all automatic fixes across every flow",
+    "audit": "Audit trail",
+    "auditEmpty": "No events yet"
+  },
+  "alert": {
+    "title": "Alert channels",
+    "channels": "Channels",
+    "noChannels": "No channels yet",
+    "addChannel": "Add a channel",
+    "add": "Add",
+    "test": "Send test",
+    "tested": "Sent ✓",
+    "label": "Label (optional)",
+    "handlers": "Flows that run on alerts",
+    "noHandlers": "None — give a flow a 'monitor' trigger to handle alerts",
+    "handlersHint": "A flow with a 'monitor' trigger auto-runs on every alert, receiving the event as its input — run custom logic instead of (or with) a channel.",
+    "addHandler": "Add a handler flow",
+    "pickFlow": "Select a flow…"
   }
 }

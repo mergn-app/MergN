@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   ArrowLeft,
   Settings,
+  ShieldAlert,
   History,
   Bell,
   AlertCircle,
@@ -32,6 +33,7 @@ import {
 import { healthColor } from "./status-palette";
 import { ChangeReview, type ChangeSource } from "./ChangeReview";
 import { VersionRow, FixRow } from "./VersionRow";
+import { FlowSettingsModal, GovernanceModal, ChannelList, HandlerList } from "./SettingsPanels";
 import { MonitorGraphs } from "./monitor-graphs";
 
 // run-status colors (distinct from health-status — never mix)
@@ -112,59 +114,10 @@ function RunDetailModal({ runId, onClose }: { runId: string; onClose: () => void
   );
 }
 
-// ── settings modal (per-flow). The alerts toggle is real (default OFF); the
-// fuller per-flow settings form lands later. ──────────────────────────────────
-function SettingsModal({ workflowId, onClose }: { workflowId: string; onClose: () => void }) {
-  const { t } = useTranslation();
-  const enabled = useAlertsEnabled(workflowId).data ?? false;
-  const toggle = useToggleAlerts(workflowId);
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onClick={onClose}>
-      <div className={cn(panel, "w-full max-w-md")} onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center gap-2 border-b border-border/40 px-4 py-2.5">
-          <Settings className="size-4 text-muted-foreground" />
-          <span className="text-sm font-medium">{t("monitoring.settings")}</span>
-          <button onClick={onClose} className="ml-auto flex size-7 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted hover:text-foreground">
-            <X className="size-4" />
-          </button>
-        </div>
-        <div className="space-y-4 p-4">
-          {/* real toggle: send external alerts for this flow (default OFF) */}
-          <div className="flex items-start gap-3">
-            <button
-              type="button"
-              disabled={toggle.isPending}
-              onClick={() => toggle.mutate(!enabled)}
-              className={cn(
-                "mt-0.5 flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors disabled:opacity-50",
-                enabled ? "bg-emerald-500/80" : "bg-muted-foreground/30",
-              )}
-            >
-              <span className={cn("size-4 rounded-full bg-background shadow-sm ring-1 ring-black/5 transition-transform", enabled && "translate-x-4")} />
-            </button>
-            <div className="min-w-0">
-              <div className="text-sm font-medium">{t("monitoring.alertsToggle")}</div>
-              <div className="text-xs text-muted-foreground">{t("monitoring.alertsToggleHint")}</div>
-            </div>
-          </div>
-          <div className="space-y-1 border-t border-border/40 pt-3 text-xs text-muted-foreground">
-            <p>{t("monitoring.settingsIntro")}</p>
-            <ul className="list-inside list-disc space-y-1 text-muted-foreground/80">
-              <li>{t("monitoring.settingsHeal")}</li>
-              <li>{t("monitoring.settingsLiveness")}</li>
-            </ul>
-            <p className="text-muted-foreground/60">{t("monitoring.settingsSoon")}</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── inline alert panel (left of the charts): on/off + settings entry ─────────
 // The toggle is real (per-flow opt-in, default OFF). Channel/severity rules are
 // not built yet — surfaced as "coming soon".
-function AlertPanel({ workflowId, onConfigure }: { workflowId: string; onConfigure: () => void }) {
+function AlertPanel({ workflowId }: { workflowId: string }) {
   const { t } = useTranslation();
   const enabled = useAlertsEnabled(workflowId).data ?? false;
   const toggle = useToggleAlerts(workflowId);
@@ -202,18 +155,10 @@ function AlertPanel({ workflowId, onConfigure }: { workflowId: string; onConfigu
           </div>
         </div>
 
-        {/* channels & severity rules — not built yet */}
-        <div className="space-y-1.5 border-t border-border/40 pt-3">
-          <button
-            type="button"
-            onClick={onConfigure}
-            className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-muted-foreground transition-colors hover:bg-background-subtle hover:text-foreground"
-          >
-            <Settings className="size-3.5 shrink-0" />
-            <span className="flex-1">{t("monitoring.alertChannels")}</span>
-            <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground/70">{t("monitoring.settingsSoon")}</span>
-          </button>
-          <p className="px-2 text-[11px] leading-relaxed text-muted-foreground/70">{t("monitoring.alertChannelsSoon")}</p>
+        {/* channels + handler-flow lists (add new ones from ⚙ flow settings) */}
+        <div className="space-y-3 border-t border-border/40 pt-3">
+          <ChannelList />
+          <HandlerList />
         </div>
       </div>
     </div>
@@ -357,6 +302,7 @@ export function MonitoringPage() {
   const runs = useRuns(workflowId || null).data ?? [];
   const logs = (useLogs(true).data ?? []).filter((l) => l.workflowId === workflowId);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [governanceOpen, setGovernanceOpen] = useState(false);
   const [openRunId, setOpenRunId] = useState<string | null>(null);
   const [openSource, setOpenSource] = useState<ChangeSource | null>(null);
 
@@ -391,8 +337,15 @@ export function MonitoringPage() {
             <div className="ml-auto flex shrink-0 items-center gap-1">
               {/* version history lives in the right-column timeline now (consolidated) */}
               <button
+                onClick={() => setGovernanceOpen(true)}
+                title={t("governance.title")}
+                className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              >
+                <ShieldAlert className="size-4" />
+              </button>
+              <button
                 onClick={() => setSettingsOpen(true)}
-                title={t("monitoring.settings")}
+                title={t("settings.title")}
                 className="flex size-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
                 <Settings className="size-4" />
@@ -402,7 +355,7 @@ export function MonitoringPage() {
 
           {/* alert panel (left half) + charts (right half) — top half of the column */}
           <div className="flex min-h-0 flex-1 gap-2 border-b border-border/40 p-2">
-            <AlertPanel workflowId={workflowId} onConfigure={() => setSettingsOpen(true)} />
+            <AlertPanel workflowId={workflowId} />
             <div className={cn(panel, "min-w-0 flex-1 overflow-hidden p-3")}>
               <MonitorGraphs runs={runs} />
             </div>
@@ -477,7 +430,8 @@ export function MonitoringPage() {
         {workflowId && <HistoryPanel workflowId={workflowId} onOpen={setOpenSource} />}
       </div>
 
-      {settingsOpen && workflowId && <SettingsModal workflowId={workflowId} onClose={() => setSettingsOpen(false)} />}
+      {settingsOpen && workflowId && <FlowSettingsModal workflowId={workflowId} onClose={() => setSettingsOpen(false)} />}
+      {governanceOpen && <GovernanceModal onClose={() => setGovernanceOpen(false)} />}
       {openRunId && <RunDetailModal runId={openRunId} onClose={() => setOpenRunId(null)} />}
       {openSource && workflowId && <ChangeReview source={openSource} workflowId={workflowId} onClose={() => setOpenSource(null)} />}
     </div>

@@ -429,5 +429,45 @@
     "noHistory": "Aucun historique pour l'instant.",
     "pickNode": "Choisir un nœud",
     "pickNodeHint": "Cliquez sur un nœud surligné pour voir son changement."
+  },
+  "settings": {
+    "title": "Paramètres du flux",
+    "close": "Fermer",
+    "heal": "Auto-réparation",
+    "healHint": "Auto-diagnostic + correction quand ce flux échoue",
+    "mode": "Mode de correction",
+    "modeHint": "Ce qui se passe quand une correction est trouvée",
+    "modeNotify": "Notifier",
+    "modePropose": "Proposer",
+    "modeAuto": "Auto",
+    "autoReplay": "Relecture auto",
+    "autoReplayHint": "Rejouer les événements en mémoire tampon après une correction réussie",
+    "alerts": "Alertes",
+    "alertsHint": "Envoyer des alertes externes pour ce flux",
+    "gatedPlan": "Nécessite un plan Pro",
+    "gatedKill": "Le coupe-circuit global est activé",
+    "gatedDisabled": "Désactivé pour ce déploiement"
+  },
+  "governance": {
+    "title": "Gouvernance",
+    "kill": "Coupe-circuit global",
+    "killHint": "Arrêter instantanément toutes les corrections automatiques sur tous les flux",
+    "audit": "Journal d'audit",
+    "auditEmpty": "Aucun événement pour l'instant"
+  },
+  "alert": {
+    "title": "Canaux d'alerte",
+    "channels": "Canaux",
+    "noChannels": "Aucun canal pour l'instant",
+    "addChannel": "Ajouter un canal",
+    "add": "Ajouter",
+    "test": "Envoyer un test",
+    "tested": "Envoyé ✓",
+    "label": "Libellé (optionnel)",
+    "handlers": "Flux exécutés lors des alertes",
+    "noHandlers": "Aucun — donnez à un flux un déclencheur 'monitor' pour gérer les alertes",
+    "handlersHint": "Un flux avec déclencheur 'monitor' s'exécute automatiquement à chaque alerte, recevant l'événement en entrée — pour une logique personnalisée au lieu d'(ou avec) un canal.",
+    "addHandler": "Ajouter un flux gestionnaire",
+    "pickFlow": "Sélectionner un flux…"
   }
 }

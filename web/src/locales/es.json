@@ -429,5 +429,45 @@
     "noHistory": "Aún no hay historial.",
     "pickNode": "Elige un nodo",
     "pickNodeHint": "Haz clic en un nodo resaltado para ver su cambio."
+  },
+  "settings": {
+    "title": "Ajustes del flujo",
+    "close": "Cerrar",
+    "heal": "Autorreparación",
+    "healHint": "Auto-diagnóstico + arreglo cuando este flujo falla",
+    "mode": "Modo de arreglo",
+    "modeHint": "Qué ocurre cuando se encuentra un arreglo",
+    "modeNotify": "Notificar",
+    "modePropose": "Proponer",
+    "modeAuto": "Automático",
+    "autoReplay": "Reproducción automática",
+    "autoReplayHint": "Reproducir eventos en búfer tras un arreglo exitoso",
+    "alerts": "Alertas",
+    "alertsHint": "Enviar alertas externas para este flujo",
+    "gatedPlan": "Requiere un plan Pro",
+    "gatedKill": "El interruptor de emergencia global está activo",
+    "gatedDisabled": "Desactivado para este despliegue"
+  },
+  "governance": {
+    "title": "Gobernanza",
+    "kill": "Interruptor de emergencia global",
+    "killHint": "Detener al instante todos los arreglos automáticos en cada flujo",
+    "audit": "Registro de auditoría",
+    "auditEmpty": "Aún no hay eventos"
+  },
+  "alert": {
+    "title": "Canales de alerta",
+    "channels": "Canales",
+    "noChannels": "Aún no hay canales",
+    "addChannel": "Añadir canal",
+    "add": "Añadir",
+    "test": "Enviar prueba",
+    "tested": "Enviado ✓",
+    "label": "Etiqueta (opcional)",
+    "handlers": "Flujos que se ejecutan con alertas",
+    "noHandlers": "Ninguno — da a un flujo un disparador 'monitor' para manejar alertas",
+    "handlersHint": "Un flujo con disparador 'monitor' se ejecuta automáticamente en cada alerta, recibiendo el evento como entrada — para lógica personalizada en lugar de (o junto a) un canal.",
+    "addHandler": "Añadir flujo manejador",
+    "pickFlow": "Selecciona un flujo…"
   }
 }

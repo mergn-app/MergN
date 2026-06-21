@@ -37,6 +37,8 @@ import { createRunStore, type RunDoc, type RunHeader } from "./runs";
 import { createBufferStore } from "./trigger-buffer";
 import { replayBuffer, testRunFirst, type ReplayDeps } from "./buffer-replay";
 import { computeAnalytics } from "./analytics";
+import { createFlowSettingsStore, type FlowSettings } from "./flow-settings";
+import { createGovernance, createAuditStore } from "./governance";
 import { maskValue, maskErrorString, resolveMaskLevel, type MaskLevel } from "./pii-mask";
 import { createSettingsStore } from "./settings";
 import { createMcpTokenStore } from "./mcp-tokens";
@@ -77,6 +79,7 @@ import {
   type HealthStatus,
 } from "./health";
 import { createAlertChannelStore } from "./alert-store";
+import { createAlertHandlerStore } from "./alert-handlers";
 import { createAlertService } from "./alert-service";
 import type { ChannelKind, ChannelSecret } from "./alert-channels";
 import type { Severity, AlertCategory } from "./alert-router";
@@ -310,6 +313,11 @@ const replayDeps: ReplayDeps = {
     runSavedWorkflow(s, wf, input, trigger, runId, resumeFrom),
   setPaused: (s, w, p) => workflows.setPaused(s, w, p),
 };
+// Governance + per-flow policy. Declared before canHeal so the gate can
+// read the global kill-switch.
+const flowSettings = createFlowSettingsStore(store);
+const governance = createGovernance(store);
+const audit = createAuditStore(store);
 // Run-safety: idempotency dedup for effectful steps + per-space concurrent
 // run ceiling. Both no-op on self-host (no declared mechanisms / uncapped).
 const idempotency = createIdempotencyStore(store);
@@ -354,37 +362,25 @@ const userLogs = createLogStore(store);
 // Alerting: deliver health transitions to the activity log (always) + any
 // configured external channels (Telegram/Slack/Discord/email), engine-bypass.
 const alertChannels = createAlertChannelStore(store, vault);
+const alertHandlers = createAlertHandlerStore(store);
 const alerts = createAlertService({
   channels: alertChannels,
   logs: userLogs,
   workflowName: async (spaceId, workflowId) =>
     (await workflows.getWorkflow(spaceId, workflowId))?.name,
-  // a flow is a handler if its trigger is "monitor" (loop guard reads this)
-  isHandler: async (spaceId, workflowId) =>
-    (await workflows.getWorkflow(spaceId, workflowId))?.trigger?.kind === "monitor",
+  // a flow is a handler if it's an enabled entry in the registry (loop guard)
+  isHandler: (spaceId, workflowId) => alertHandlers.isEnabled(spaceId, workflowId),
   // external alerts are opt-in per flow (default OFF) — no notification spam
   alertsEnabled: async (spaceId, workflowId) =>
     (await workflows.getWorkflow(spaceId, workflowId))?.alertsEnabled === true,
-  // every monitor-trigger flow auto-fires on matching events (no binding step)
-  listHandlers: async (spaceId) => {
-    const out: { workflowId: string; events?: string[] }[] = [];
-    for (const m of await workflows.listWorkflows(spaceId)) {
-      const wf = await workflows.getWorkflow(spaceId, m.id);
-      if (wf?.trigger?.kind === "monitor")
-        out.push({ workflowId: wf.id, events: wf.trigger.monitor?.events });
-    }
-    return out;
-  },
-  // run a monitor-handler flow with the alert payload as its input
+  // the user's chosen handler flows (enabled entries fire on every alert)
+  listHandlers: async (spaceId) =>
+    (await alertHandlers.list(spaceId)).filter((h) => h.enabled).map((h) => ({ workflowId: h.workflowId })),
+  // run a registered handler flow with the alert payload as its input
   dispatchWorkflow: async (spaceId, workflowId, payload) => {
     const wf = await workflows.getWorkflow(spaceId, workflowId);
-    if (!wf || wf.trigger?.kind !== "monitor") return; // only dispatch handlers
-    await runSavedWorkflow(
-      spaceId,
-      wf,
-      payload as unknown as Record<string, unknown>,
-      "monitor",
-    );
+    if (!wf) return;
+    await runSavedWorkflow(spaceId, wf, payload as unknown as Record<string, unknown>, "monitor");
   },
 });
 onHealthTransition = (spaceId, state, prev) =>
@@ -450,6 +446,7 @@ async function canUseRemoteMcp(spaceId: string): Promise<boolean> {
 const HEAL_DISABLED = /^(1|true|yes)$/i.test(process.env.HEAL_DISABLED ?? "");
 async function canHeal(spaceId: string): Promise<boolean> {
   if (HEAL_DISABLED) return false;
+  if (await governance.killSwitch()) return false; // deployment-wide emergency stop
   if (!MANAGED) return true; // self-host: open, uncapped
   if (!billing.enabled()) return false;
   const plan = await billing.planOf(spaceId);
@@ -481,13 +478,33 @@ const healOrchestrator = createHealOrchestrator({
   buildContext: (spaceId, runId) =>
     buildDiagnosisContext({ getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow }, spaceId, runId),
   events: healEvents,
-  getFlowMode: async () => ({ enabled: HEAL_DEFAULT_ENABLED, fixMode: HEAL_DEFAULT_MODE }),
+  getFlowMode: async (spaceId, workflowId) => {
+    // untouched flows fall back to the deployment env defaults
+    const s = await flowSettings.get(spaceId, workflowId, {
+      enabled: HEAL_DEFAULT_ENABLED,
+      fixMode: HEAL_DEFAULT_MODE,
+      autoReplay: false,
+    });
+    return { enabled: s.enabled, fixMode: s.fixMode };
+  },
   canHeal,
   caps: () => ({ blastMax: LIMITS.healBlastRadiusMax, attemptMax: LIMITS.healAttemptMax, windowMs: HEAL_WINDOW_MS }),
   log: (spaceId, e) => void userLogs.append(spaceId, { ...e, source: "healing" }).catch(() => {}),
 });
 const healDispatcher = createHealDispatcher({
-  orchestrate: (t) => healOrchestrator.orchestrate(t),
+  orchestrate: async (t) => {
+    const ev = await healOrchestrator.orchestrate(t);
+    if (ev?.status === "applied") {
+      void audit.record(t.spaceId, { kind: "heal.applied", message: ev.diagnosis || "auto-heal applied", workflowId: t.workflowId, actor: "system" });
+      // auto-replay: opt-in per flow + still gated by canHeal (a kill-switch
+      // stops the automatic continuation; the manual Replay button is unaffected).
+      const s = await flowSettings.get(t.spaceId, t.workflowId);
+      if (s.autoReplay && (await canHeal(t.spaceId))) {
+        await replayBuffer(replayDeps, t.spaceId, t.workflowId).catch((e) => console.error("[heal] auto-replay failed", e));
+      }
+    }
+    return ev;
+  },
   onError: (e) => console.error("[heal] orchestrate failed", e),
 });
 
@@ -2013,6 +2030,40 @@ app.post("/api/alert-channels/test", async (c) => {
   return c.json({ ok: true });
 });
 
+// ── Alert handler flows (the user's chosen flows that run on an alert) ──
+app.get("/api/alert-handlers", async (c) => {
+  const spaceId = c.get("spaceId");
+  const entries = await alertHandlers.list(spaceId);
+  const rows = await Promise.all(
+    entries.map(async (h) => ({
+      workflowId: h.workflowId,
+      enabled: h.enabled,
+      name: (await workflows.getWorkflow(spaceId, h.workflowId))?.name ?? h.workflowId,
+    })),
+  );
+  return c.json(rows);
+});
+
+app.post("/api/alert-handlers", async (c) => {
+  const spaceId = c.get("spaceId");
+  const { workflowId } = await c.req.json<{ workflowId?: string }>().catch(() => ({ workflowId: undefined }));
+  if (!workflowId) return c.json({ error: "workflowId required" }, 400);
+  if (!(await workflows.getWorkflow(spaceId, workflowId))) return c.json({ error: "workflow not found" }, 404);
+  return c.json(await alertHandlers.add(spaceId, workflowId));
+});
+
+app.patch("/api/alert-handlers/:workflowId", async (c) => {
+  const { enabled } = await c.req.json<{ enabled?: boolean }>().catch(() => ({ enabled: undefined }));
+  if (typeof enabled !== "boolean") return c.json({ error: "enabled (boolean) required" }, 400);
+  await alertHandlers.setEnabled(c.get("spaceId"), c.req.param("workflowId"), enabled);
+  return c.json({ ok: true });
+});
+
+app.delete("/api/alert-handlers/:workflowId", async (c) => {
+  await alertHandlers.remove(c.get("spaceId"), c.req.param("workflowId"));
+  return c.json({ ok: true });
+});
+
 app.put("/api/workflows/:id", async (c) => {
   const id = c.req.param("id");
   if (!/^[A-Za-z0-9_-]+$/.test(id)) return c.json({ error: "bad id" }, 400);
@@ -2785,6 +2836,7 @@ app.post("/api/workflows/:id/fix/:eventId/approve", async (c) => {
     approvedBy: c.get("userId"),
   });
   void userLogs.append(spaceId, { level: "info", source: "healing", message: `Fix approved & applied: ${ev.diagnosis}`, workflowId: id }).catch(() => {});
+  void audit.record(spaceId, { kind: "heal.applied", message: `Fix approved & applied: ${ev.diagnosis}`, workflowId: id, actor: c.get("userId") ?? "user" });
   return c.json(updated);
 });
 
@@ -2793,7 +2845,52 @@ app.post("/api/workflows/:id/fix/:eventId/reject", async (c) => {
   const ev = await healEvents.get(spaceId, c.req.param("eventId"));
   if (!ev || ev.workflowId !== c.req.param("id")) return c.json({ error: "fix event not found" }, 404);
   if (ev.status !== "proposed") return c.json({ error: `fix is '${ev.status}', not awaiting approval` }, 409);
+  void audit.record(spaceId, { kind: "heal.rejected", message: `Fix rejected: ${ev.diagnosis}`, workflowId: c.req.param("id"), actor: c.get("userId") ?? "user" });
   return c.json(await healEvents.update(spaceId, ev.id, { status: "rejected" }));
+});
+
+// ── Per-flow settings, eligibility, governance (kill-switch + audit) ──
+app.get("/api/workflows/:id/settings", async (c) => {
+  return c.json(await flowSettings.get(c.get("spaceId"), c.req.param("id")));
+});
+
+app.put("/api/workflows/:id/settings", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const body = await c.req.json<Partial<FlowSettings>>().catch(() => ({}) as Partial<FlowSettings>);
+  const patch: Partial<FlowSettings> = {};
+  if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
+  if (body.fixMode === "notify" || body.fixMode === "propose" || body.fixMode === "auto") patch.fixMode = body.fixMode;
+  if (typeof body.autoReplay === "boolean") patch.autoReplay = body.autoReplay;
+  const next = await flowSettings.set(spaceId, id, patch);
+  void audit.record(spaceId, { kind: "settings.changed", message: `Healing settings changed (enabled=${next.enabled}, mode=${next.fixMode}, autoReplay=${next.autoReplay})`, workflowId: id, actor: c.get("userId") ?? "user" });
+  return c.json(next);
+});
+
+// Why is auto-heal allowed/blocked for this flow? (drives the "why disabled" badge)
+app.get("/api/workflows/:id/eligibility", async (c) => {
+  const spaceId = c.get("spaceId");
+  const allowed = await canHeal(spaceId);
+  const killed = await governance.killSwitch();
+  const reason = allowed ? undefined : killed ? "kill-switch" : HEAL_DISABLED ? "disabled" : "plan";
+  return c.json({ canHeal: allowed, reason });
+});
+
+app.get("/api/governance/kill-switch", async (c) =>
+  c.json({ on: await governance.killSwitch() }),
+);
+
+app.put("/api/governance/kill-switch", async (c) => {
+  const { on } = await c.req.json<{ on?: boolean }>().catch(() => ({ on: undefined }));
+  if (typeof on !== "boolean") return c.json({ error: "on (boolean) required" }, 400);
+  await governance.setKillSwitch(on);
+  void audit.record(c.get("spaceId"), { kind: "killswitch.toggled", message: `Global auto-fix kill-switch turned ${on ? "ON" : "OFF"}`, actor: c.get("userId") ?? "user" });
+  return c.json({ ok: true, on });
+});
+
+app.get("/api/audit", async (c) => {
+  const limit = Math.max(0, Number(c.req.query("limit")) || 100);
+  return c.json(await audit.list(c.get("spaceId"), { workflowId: c.req.query("workflowId") || undefined, limit }));
 });
 
 app.get("/api/spaces", async (c) => {

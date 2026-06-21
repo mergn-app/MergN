@@ -429,5 +429,45 @@
     "noHistory": "Noch kein Verlauf.",
     "pickNode": "Knoten wählen",
     "pickNodeHint": "Klicke einen markierten Knoten an, um seine Änderung zu sehen."
+  },
+  "settings": {
+    "title": "Flow-Einstellungen",
+    "close": "Schließen",
+    "heal": "Selbstheilung",
+    "healHint": "Auto-Diagnose + Fix bei Fehlern dieses Flows",
+    "mode": "Fix-Modus",
+    "modeHint": "Was passiert, wenn ein Fix gefunden wird",
+    "modeNotify": "Melden",
+    "modePropose": "Vorschlagen",
+    "modeAuto": "Automatisch",
+    "autoReplay": "Auto-Replay",
+    "autoReplayHint": "Gepufferte Ereignisse nach erfolgreichem Fix erneut abspielen",
+    "alerts": "Benachrichtigungen",
+    "alertsHint": "Externe Benachrichtigungen für diesen Flow senden",
+    "gatedPlan": "Erfordert einen Pro-Plan",
+    "gatedKill": "Globaler Not-Aus ist aktiv",
+    "gatedDisabled": "Für dieses Deployment deaktiviert"
+  },
+  "governance": {
+    "title": "Governance",
+    "kill": "Globaler Not-Aus",
+    "killHint": "Alle automatischen Fixes in jedem Flow sofort stoppen",
+    "audit": "Audit-Protokoll",
+    "auditEmpty": "Noch keine Ereignisse"
+  },
+  "alert": {
+    "title": "Alarmkanäle",
+    "channels": "Kanäle",
+    "noChannels": "Noch keine Kanäle",
+    "addChannel": "Kanal hinzufügen",
+    "add": "Hinzufügen",
+    "test": "Test senden",
+    "tested": "Gesendet ✓",
+    "label": "Bezeichnung (optional)",
+    "handlers": "Flows, die bei Alarmen laufen",
+    "noHandlers": "Keine — gib einem Flow einen 'monitor'-Trigger, um Alarme zu behandeln",
+    "handlersHint": "Ein Flow mit 'monitor'-Trigger läuft bei jedem Alarm automatisch und erhält das Ereignis als Eingabe — für eigene Logik statt (oder zusätzlich zu) einem Kanal.",
+    "addHandler": "Handler-Flow hinzufügen",
+    "pickFlow": "Flow auswählen…"
   }
 }

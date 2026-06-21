@@ -429,5 +429,45 @@
     "noHistory": "Henüz geçmiş yok.",
     "pickNode": "Bir node seç",
     "pickNodeHint": "Değişikliği görmek için renkli bir node'a tıkla."
+  },
+  "settings": {
+    "title": "Flow ayarları",
+    "close": "Kapat",
+    "heal": "Self-healing",
+    "healHint": "Flow patladığında otomatik teşhis + düzeltme",
+    "mode": "Düzeltme modu",
+    "modeHint": "Bir fix bulunduğunda ne olacak",
+    "modeNotify": "Bildir",
+    "modePropose": "Öner",
+    "modeAuto": "Otomatik",
+    "autoReplay": "Otomatik replay",
+    "autoReplayHint": "Başarılı fix sonrası biriken event'leri çalıştır",
+    "alerts": "Alarmlar",
+    "alertsHint": "Bu flow için dış alarm gönder",
+    "gatedPlan": "Pro plan gerekli",
+    "gatedKill": "Global kill-switch açık",
+    "gatedDisabled": "Bu deployment'ta kapalı"
+  },
+  "governance": {
+    "title": "Yönetişim",
+    "kill": "Global kill-switch",
+    "killHint": "Tüm flow'larda otomatik fix'i anında durdur",
+    "audit": "Denetim kaydı",
+    "auditEmpty": "Henüz kayıt yok"
+  },
+  "alert": {
+    "title": "Alarm kanalları",
+    "channels": "Kanallar",
+    "noChannels": "Henüz kanal yok",
+    "addChannel": "Kanal ekle",
+    "add": "Ekle",
+    "test": "Test gönder",
+    "tested": "Gönderildi ✓",
+    "label": "Etiket (opsiyonel)",
+    "handlers": "Alarmda çalışan flow'lar",
+    "noHandlers": "Yok — bir flow'un trigger'ını 'monitor' yaparak ekle",
+    "handlersHint": "Trigger'ı 'monitor' olan bir flow her alarmda otomatik çalışır, olayı girdi olarak alır — kanal yerine (ya da kanalla birlikte) özel mantık çalıştır.",
+    "addHandler": "Handler flow ekle",
+    "pickFlow": "Bir flow seç…"
   }
 }
