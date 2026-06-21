@@ -149,9 +149,9 @@ function Canvas({
       <Background />
       <Controls />
       {nodes.length > 1 && (
-        // sit left of the monitoring entry icon (absolute right-3 top-3) so they
-        // don't overlap in graph view
-        <Panel position="top-right" style={{ marginRight: "3rem" }}>
+        // sit just left of the monitoring entry pill (absolute right-3 top-3),
+        // top-aligned to it (marginTop matches the pill's top-3), tight gap
+        <Panel position="top-right" style={{ marginRight: "7rem", marginTop: "0.75rem" }}>
           <button
             onClick={() => {
               onArrange();

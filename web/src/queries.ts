@@ -355,7 +355,7 @@ export function useDeleteConversation() {
       json<{ ok: boolean }>(`/api/chat/conversations/${id}`, {
         method: "DELETE",
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["conversations"] }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ["conversations"] }),
   });
 }
 
@@ -718,7 +718,7 @@ export interface WorkflowVersionMeta {
   createdAt: string;
 }
 
-// ── self-healing: diff + fix events (M9 consumes the M8 contract) ─────────────
+// ── self-healing: diff + fix events (mirrors the server contract) ─────────────
 // mirror of the server WorkflowDiff (src/server/workflow-diff.ts) — kept in sync.
 export interface WorkflowDiff {
   nodes: {

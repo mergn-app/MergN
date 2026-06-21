@@ -312,6 +312,7 @@
   },
   "monitoring": {
     "open": "Abrir monitoreo",
+    "monitor": "Monitor",
     "back": "Volver al editor",
     "flows": "Flujos",
     "noFlows": "Aún no hay flujos",

@@ -43,12 +43,15 @@ export function WorkflowStatusIcon({
       title={title}
       aria-label={t("monitoring.open")}
       className={cn(
-        "flex size-7 shrink-0 items-center justify-center rounded-lg transition-colors",
-        onClick && "hover:bg-muted",
+        // same pill shape as the canvas action buttons (auto-arrange / trigger);
+        // the sinus-rhythm Activity glyph stays as the icon, colored by health
+        "flex shrink-0 items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-foreground/90 transition-colors",
+        onClick && "hover:border-border",
         className,
       )}
     >
-      <Activity className={cn("size-4", c.text, c.pulse && "animate-pulse")} />
+      <Activity className={cn("size-3.5", c.text, c.pulse && "animate-pulse")} />
+      {t("monitoring.monitor")}
     </Btn>
   );
 }

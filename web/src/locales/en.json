@@ -312,6 +312,7 @@
   },
   "monitoring": {
     "open": "Open monitoring",
+    "monitor": "Monitor",
     "back": "Back to editor",
     "flows": "Flows",
     "noFlows": "No flows yet",
@@ -469,5 +470,54 @@
     "handlersHint": "A flow with a 'monitor' trigger auto-runs on every alert, receiving the event as its input — run custom logic instead of (or with) a channel.",
     "addHandler": "Add a handler flow",
     "pickFlow": "Select a flow…"
+  },
+  "doctor": {
+    "tab": "Doctor",
+    "emptyTitle": "MergN Doctor",
+    "emptySubtitle": "Ask about this flow's health, diagnose a failure, or have me fix it.",
+    "placeholder": "Ask the Doctor about this flow…",
+    "working": "Doctor is working…",
+    "clearChat": "Clear chat",
+    "review": "Review",
+    "suggest": {
+      "health": "Is this flow healthy?",
+      "lastFail": "Why did the last run fail?",
+      "summary": "Summarize what happened recently."
+    },
+    "fixCard": {
+      "title": "Proposed fix"
+    },
+    "versionCard": {
+      "title": "Switch to an earlier version",
+      "fallback": "Version {{seq}}"
+    },
+    "status": {
+      "proposed": "Needs review",
+      "applied": "Applied",
+      "rejected": "Rejected",
+      "reverted": "Reverted",
+      "failed": "Failed"
+    },
+    "tool": {
+      "list_runs": "Reading runs",
+      "get_run": "Reading a run",
+      "get_health": "Checking health",
+      "get_analytics": "Reading analytics",
+      "list_versions": "Reading versions",
+      "list_heal_events": "Reading fix history",
+      "get_buffer": "Checking the buffer",
+      "diagnose_failure": "Diagnosing",
+      "fix_failure": "Preparing a fix",
+      "suggest_version": "Comparing versions",
+      "pause_flow": "Pausing the flow",
+      "resume_flow": "Resuming the flow",
+      "test_buffer": "Testing a buffered event",
+      "replay_buffer": "Replaying the buffer",
+      "retry_run": "Retrying the run",
+      "compare_runs": "Comparing runs",
+      "check_connection": "Checking connections",
+      "revert_heal": "Reverting a heal",
+      "incident_summary": "Writing a summary"
+    }
   }
 }

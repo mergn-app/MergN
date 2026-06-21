@@ -1545,6 +1545,257 @@ function makeTools(
   };
 }
 
+// ── MergN Doctor: a monitoring/self-healing chat scoped to ONE flow. Reads run
+// history/health/analytics/versions/heal-events/buffer; diagnoses + fixes; never
+// builds workflows (that's the editor). Fix + version suggestions stream a card
+// to the UI that opens the ChangeReview screen. ──
+const DOCTOR_SYSTEM = [
+  "You are Doctor, MergN's monitoring & self-healing assistant for ONE workflow (given below).",
+  "You READ this flow's run history, health, analytics, version history, self-heal events and buffered events; you explain failures in plain language; and you can FIX them.",
+  "You do NOT build or author workflows — never propose new steps, wires, or providers. If the user wants to build or edit the flow's logic, tell them to use the editor.",
+  "Workflow to diagnose: use the tools to ground EVERY claim in real data — never invent run counts, errors, or numbers.",
+  "When a run fails, work in this order: (1) check_connection — many failures are just an expired/missing credential; (2) compare_runs — diff the failed run against the last good one to see what changed (often a missing input); (3) for a transient error (timeout/rate-limit/blip) try retry_run, which resumes from the failed step with no double side-effects; (4) only then diagnose_failure + fix_failure for a real code/wiring bug.",
+  "fix_failure: if the flow's auto-fix is on you apply the fix (a new healing version is created); otherwise you stage a proposal the user reviews + approves in the diff screen.",
+  "If a recent change broke the flow, suggest switching to an earlier version with suggest_version. If a self-heal itself made things worse, use revert_heal to roll back to the pre-heal version. Both open a diff for the user to confirm.",
+  "Use incident_summary to write a short postmortem of what happened and what you did.",
+  "After a failure, events may buffer while the flow is paused. Use get_buffer to see how many, test_buffer to verify a fix on the first real event, and replay_buffer to process the backlog (idempotent; each resumes from where it left off). You can pause_flow / resume_flow.",
+  "Be concise and concrete. Answer in the user's language.",
+].join("\n");
+
+// Builds the per-request flow context appended to DOCTOR_SYSTEM (health snapshot
+// + last failed run) so the Doctor is grounded without the user pasting anything.
+async function buildDoctorContext(spaceId: string, workflowId: string): Promise<string> {
+  const wf = await workflows.getWorkflow(spaceId, workflowId);
+  const state = await health.recompute(spaceId, workflowId).catch(() => null);
+  const recent = await runs.listRuns(spaceId, workflowId, 1).catch(() => []);
+  const lastFailed = (await runs.listRuns(spaceId, workflowId, 20).catch(() => [])).find((r) => r.status === "failed");
+  const lines = [
+    `\n\n--- FLOW UNDER CARE ---`,
+    `name: ${wf?.name ?? workflowId}`,
+    `id: ${workflowId}`,
+    state ? `health: ${state.status}${state.lastError ? ` (last error: ${state.lastError.type})` : ""}` : "",
+    recent[0] ? `last run: ${recent[0].status} at ${recent[0].startedAt}` : "no runs yet",
+    lastFailed ? `most recent FAILED run id: ${lastFailed.id} (${lastFailed.errorType ?? "unknown"})` : "",
+    `--- end ---`,
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+// The Doctor's tool set — bound to one workflowId. Read + diagnose + fix (auto or
+// propose by the flow's settings) + version-switch + buffer ops. Calls the same
+// stores the rest of the app uses; no new engine.
+function makeDoctorTools(spaceId: string, writer: UIMessageStreamWriter, workflowId: string) {
+  const diagCtx = (runId: string) =>
+    buildDiagnosisContext({ getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow }, spaceId, runId);
+  // this chat is bound to ONE flow — a runId only counts if it belongs to it
+  // (prevents acting on another flow's run that shares the same space)
+  const ownRun = async (runId: string) => {
+    const r = await runs.getRun(spaceId, runId);
+    return r && r.workflowId === workflowId ? r : null;
+  };
+
+  return {
+    list_runs: tool({
+      description: "List this flow's recent runs (newest first): id, status, errorType, timestamps. Use to see what's failing and pick a run to diagnose.",
+      inputSchema: z.object({ limit: z.number().int().positive().max(50).optional() }),
+      execute: async ({ limit }) => runs.listRuns(spaceId, workflowId, limit ?? 20),
+    }),
+    get_run: tool({
+      description: "Full detail of one run: per-step status, error, and resolved input/output (PII-masked on managed). Use after list_runs to understand WHY a run failed.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => (await ownRun(runId)) ?? { error: "run not found for this flow" },
+    }),
+    get_health: tool({
+      description: "This flow's current health: status, lastError, liveness/outcome fails.",
+      inputSchema: z.object({}),
+      execute: async () => (await health.recompute(spaceId, workflowId)) ?? { status: "nodata" },
+    }),
+    get_analytics: tool({
+      description: "This flow's run analytics: success rate, error breakdown by type, latency p50/p95, 24h/7d volume.",
+      inputSchema: z.object({}),
+      execute: async () => computeAnalytics(await runs.listRuns(spaceId, workflowId), Date.now()),
+    }),
+    list_versions: tool({
+      description: "This flow's version history (source: editor/chat/healing/restore, label, time). Use to spot when a change landed, then suggest_version to roll back.",
+      inputSchema: z.object({}),
+      execute: async () => versions.list(spaceId, workflowId),
+    }),
+    list_heal_events: tool({
+      description: "Past self-healing attempts for this flow (status, confidence, diagnosis).",
+      inputSchema: z.object({ limit: z.number().int().positive().max(50).optional() }),
+      execute: async ({ limit }) => healEvents.listForWorkflow(spaceId, workflowId, limit ?? 30),
+    }),
+    get_buffer: tool({
+      description: "Events buffered while this flow was paused (count + FIFO list with masked previews). Use to tell the user how many runs are waiting to be replayed.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const entries = await buffer.list(spaceId, workflowId);
+        return {
+          count: entries.length,
+          entries: entries.map((e) => ({ id: e.id, seq: e.seq, status: e.status, receivedAt: e.receivedAt, preview: maskValue(e.payload, MASK_DEFAULT) })),
+        };
+      },
+    }),
+    diagnose_failure: tool({
+      description: "Diagnose a failed run: plain-language cause + whether a fix is possible. Read-only.",
+      inputSchema: z.object({ runId: z.string(), language: z.string().optional() }),
+      execute: async ({ runId, language }) => {
+        if (!(await ownRun(runId))) return { error: "run not found for this flow" };
+        const ctx = await diagCtx(runId);
+        if (!ctx) return { error: "run not found or not a failure" };
+        return fixEngine.diagnose(spaceId, ctx, { language: language ?? "English" });
+      },
+    }),
+    fix_failure: tool({
+      description: "Fix a failed run. If this flow's auto-fix is ON it applies the fix directly (new healing version); otherwise it stages a proposal and opens the review screen for the user to approve. Never applies silently when auto-fix is off.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => {
+        if (!(await ownRun(runId))) return { error: "run not found for this flow" };
+        const ctx = await diagCtx(runId);
+        if (!ctx) return { error: "run not found or not a failure" };
+        const d = await fixEngine.diagnose(spaceId, ctx);
+        if (!d.proposedFix) return { fixable: false, plainLanguage: d.plainLanguage, errorType: d.errorType };
+        const settings = await flowSettings.get(spaceId, workflowId);
+        const allowed = await canHeal(spaceId);
+        if (settings.enabled && settings.fixMode === "auto" && allowed) {
+          const { versionId } = await fixEngine.applyFix(spaceId, workflowId, d.proposedFix, { runId, mode: "auto" });
+          await healEvents.record(spaceId, { spaceId, workflowId, runId, mode: "auto", errorType: d.errorType, confidence: d.confidence, diagnosis: d.plainLanguage, proposal: d.proposedFix, status: "applied", versionId });
+          void audit.record(spaceId, { kind: "heal.applied", message: `Doctor auto-applied a fix: ${d.plainLanguage}`, workflowId, actor: "doctor" });
+          return { applied: true, versionId, plainLanguage: d.plainLanguage, kind: d.proposedFix.kind };
+        }
+        const ev = await healEvents.record(spaceId, { spaceId, workflowId, runId, mode: "propose", errorType: d.errorType, confidence: d.confidence, diagnosis: d.plainLanguage, proposal: d.proposedFix, status: "proposed" });
+        writer.write({ type: "data-doctor-fix", id: `fix-${randomUUID()}`, data: { event: ev } });
+        return { proposed: true, eventId: ev.id, plainLanguage: d.plainLanguage, kind: d.proposedFix.kind, confidence: d.confidence };
+      },
+    }),
+    suggest_version: tool({
+      description: "Suggest rolling this flow back to an earlier version (from list_versions). Opens the version diff for the user to review + confirm the switch.",
+      inputSchema: z.object({ versionId: z.string() }),
+      execute: async ({ versionId }) => {
+        const version = (await versions.list(spaceId, workflowId)).find((v) => v.id === versionId);
+        if (!version) return { error: "version not found" };
+        writer.write({ type: "data-doctor-version", id: `ver-${randomUUID()}`, data: { version } });
+        return { suggested: true, versionId, seq: version.seq, source: version.source };
+      },
+    }),
+    pause_flow: tool({
+      description: "Pause this flow: webhook events buffer (not lost), schedule/poll ticks stop. Use to stop a misbehaving flow before fixing.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        await workflows.setPaused(spaceId, workflowId, true, "manual");
+        if (scheduler) await scheduler.pause(spaceId, workflowId);
+        return { ok: true, paused: true };
+      },
+    }),
+    resume_flow: tool({
+      description: "Resume this paused flow (re-enables triggers). Does NOT replay buffered events — use replay_buffer for that.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        await workflows.setPaused(spaceId, workflowId, false);
+        if (scheduler) await scheduler.resume(spaceId, workflowId);
+        return { ok: true, paused: false };
+      },
+    }),
+    test_buffer: tool({
+      description: "Test-run the first buffered event's REAL payload (does not consume it) to verify a fix before replaying everything.",
+      inputSchema: z.object({}),
+      execute: async () => testRunFirst(replayDeps, spaceId, workflowId, new Date().toISOString()),
+    }),
+    replay_buffer: tool({
+      description: "Replay all buffered events FIFO, then unpause. Idempotent; each resumes from where it left off. Use after a fix is verified.",
+      inputSchema: z.object({}),
+      execute: async () => replayBuffer(replayDeps, spaceId, workflowId),
+    }),
+    retry_run: tool({
+      description: "Re-run a failed run, RESUMING from the step that failed (completed steps are not redone — no double side-effects). First move for a transient error (timeout, rate-limit, brief outage) before attempting a code fix.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => {
+        if (!(await ownRun(runId))) return { error: "run not found for this flow" };
+        const wf = await workflows.getWorkflow(spaceId, workflowId);
+        if (!wf) return { error: "workflow not found" };
+        const run = await runSavedWorkflow(spaceId, wf, {}, "manual", undefined, { runId });
+        return { ok: true, newRunId: run.id, status: run.status };
+      },
+    }),
+    compare_runs: tool({
+      description: "Compare a failed run to this flow's most recent SUCCESSFUL run, step by step — surfaces what changed (e.g. an input field that's now empty/missing). Read-only; the strongest root-cause tool.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => {
+        const failed = await ownRun(runId);
+        if (!failed) return { error: "run not found for this flow" };
+        const goodMeta = (await runs.listRuns(spaceId, workflowId)).find((r) => r.status === "done");
+        const good = goodMeta ? await runs.getRun(spaceId, goodMeta.id) : null;
+        const byNode = (recs: { nodeId: string; status: string; resolvedInput?: unknown; output?: unknown; error?: string }[]) =>
+          Object.fromEntries(
+            recs.filter((x) => x.nodeId !== "trigger").map((x) => [x.nodeId, { status: x.status, resolvedInput: x.resolvedInput, output: x.output, error: x.error }]),
+          );
+        return {
+          failedRunId: runId,
+          lastGoodRunId: good?.id ?? null,
+          input: { failed: failed.input, lastGood: good?.input ?? null },
+          steps: { failed: byNode(failed.records ?? []), lastGood: good ? byNode(good.records ?? []) : null },
+          note: good ? "Compare each node's resolvedInput between failed and lastGood to spot what changed." : "No successful run to compare against — diagnose from the failed run alone.",
+        };
+      },
+    }),
+    check_connection: tool({
+      description: "Check whether a failure is caused by a missing or expired provider connection (credential). Looks at the failed step's required provider + the user's connections. Use when the error looks like auth/401/403/token/credential.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => {
+        const run = await ownRun(runId);
+        if (!run) return { error: "run not found for this flow" };
+        const failedStep = (run.records ?? []).find((r) => r.status === "failed");
+        const wf = await workflows.getWorkflow(spaceId, workflowId);
+        const func = (wf?.funcs as Array<{ id: string; requires?: { provider?: string }[] }> | undefined)?.find((f) => f.id === failedStep?.nodeId);
+        const providers = (func?.requires ?? []).map((r) => r.provider).filter((p): p is string => !!p);
+        const conns = await connections.listConnections(spaceId);
+        const providerStatus = providers.map((p) => ({ provider: p, connected: conns.some((c) => c.provider === p) }));
+        const authish = run.errorType === "auth" || /401|403|unauthor|forbidden|token|credential|api[_ -]?key|expired/i.test(failedStep?.error ?? "");
+        return {
+          failedStep: failedStep?.nodeId,
+          error: failedStep?.error,
+          errorType: run.errorType,
+          providers: providerStatus,
+          looksLikeAuth: authish,
+          hint: providerStatus.some((s) => !s.connected)
+            ? "A required provider has NO connection — ask the user to connect it (it can't authenticate)."
+            : authish
+              ? "Auth-style error but a connection exists — the credential is likely expired/invalid; ask the user to reconnect it."
+              : "Doesn't look connection-related.",
+        };
+      },
+    }),
+    revert_heal: tool({
+      description: "Roll back a self-heal that made things worse: targets the version BEFORE the most recent healing change and opens the diff for the user to confirm the rollback.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const vers = await versions.list(spaceId, workflowId); // newest-first
+        const lastHeal = vers.find((v) => v.source === "healing");
+        if (!lastHeal) return { error: "no healing version to revert" };
+        const parent = lastHeal.parentVersionId ? vers.find((v) => v.id === lastHeal.parentVersionId) : null;
+        if (!parent) return { error: "the healing version has no pre-heal parent to revert to" };
+        writer.write({ type: "data-doctor-version", id: `ver-${randomUUID()}`, data: { version: parent } });
+        return { reverting: true, toVersionId: parent.id, toSeq: parent.seq, fromHealVersion: lastHeal.id };
+      },
+    }),
+    incident_summary: tool({
+      description: "Produce a postmortem of this flow's recent incident: failures, what was diagnosed, which fixes were applied/proposed/rejected, and kill-switch/settings events. Use to summarize 'what happened'.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const heals = await healEvents.listForWorkflow(spaceId, workflowId, 20);
+        const auditEvts = await audit.list(spaceId, { workflowId, limit: 20 });
+        const failedRuns = (await runs.listRuns(spaceId, workflowId, 40)).filter((r) => r.status === "failed").slice(0, 10);
+        return {
+          failedRuns: failedRuns.map((r) => ({ id: r.id, errorType: r.errorType, at: r.startedAt })),
+          healEvents: heals.map((e) => ({ status: e.status, confidence: e.confidence, diagnosis: e.diagnosis, mode: e.mode, at: e.at })),
+          audit: auditEvts.map((a) => ({ kind: a.kind, message: a.message, at: a.ts, actor: a.actor })),
+          note: "Write a short postmortem: what failed, the likely cause, what was done, and the current state.",
+        };
+      },
+    }),
+  };
+}
+
 function oauthResultPage(ok: boolean, detail: string): string {
   const payload = JSON.stringify({ type: "oauth-result", ok, detail });
   const title = ok ? "Connected" : "Connection failed";
@@ -1689,9 +1940,10 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.get("/api/chat/conversations", async (c) => {
-  return c.json(
-    await chats.listConversations(c.get("spaceId"), c.get("userId")),
-  );
+  // builder list — exclude Doctor (monitoring) chats, which live per-flow under
+  // a `doctor_<workflowId>_` conversation id.
+  const all = await chats.listConversations(c.get("spaceId"), c.get("userId"));
+  return c.json(all.filter((d) => !d.id.startsWith("doctor_")));
 });
 
 app.get("/api/chat/conversations/:id", async (c) => {
@@ -1900,6 +2152,94 @@ app.post("/api/chat", async (c) => {
         message: "Chat/build stream error",
         detail: msg,
       });
+      return msg;
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream });
+});
+
+// MergN Doctor — a monitoring/self-healing chat scoped to one flow. Same agentic
+// stream + budget/plan guards as /api/chat, but a diagnostic persona + a
+// read/diagnose/fix/version/buffer tool set (no workflow authoring).
+app.post("/api/doctor/chat", async (c) => {
+  const spaceId = c.get("spaceId");
+  const userId = c.get("userId");
+  const { message: rawMessage, conversationId, workflowId } = await c.req.json<{
+    message: UIMessage;
+    conversationId: string;
+    workflowId?: string;
+  }>();
+  if (!/^[A-Za-z0-9_-]+$/.test(conversationId ?? "")) return c.json({ error: "bad conversation id" }, 400);
+  if (!workflowId) return c.json({ error: "workflowId required" }, 400);
+
+  await ensureSpaceLlm(spaceId);
+  const ownKey = spaceUsesOwnKey(spaceId);
+  if (!ownKey) {
+    const userLimit = await rateLimiter.take(`chat:user:${userId}`, CHAT_USER_LIMIT);
+    const limit: RateLimitResult = userLimit.ok ? await rateLimiter.take("chat:global", CHAT_GLOBAL_LIMIT) : userLimit;
+    if (!limit.ok)
+      return c.json({ error: "rate_limited", message: "You're sending messages a bit too fast. Please wait a moment and try again.", retryAfterMs: limit.retryAfterMs }, 429, { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) });
+    if (await usageCapExceeded())
+      return c.json({ error: "usage_cap", message: "The AI usage limit for this deployment has been reached. Please try again later." }, 402);
+  }
+
+  const message = clampUserMessage(rawMessage);
+  const previous = (await chats.getConversation(spaceId, userId, conversationId))?.messages ?? [];
+  const plan = await billing.planOf(spaceId);
+  const spaceUsage = await usage.get(spaceId);
+  const isNewChat = previous.length === 0;
+  if (MANAGED && billing.enabled() && plan.limits.chats >= 0 && isNewChat && spaceUsage.chats >= plan.limits.chats)
+    return c.json({ error: "plan_limit", limit: "chats", plan: plan.slug, message: `You've used all ${plan.limits.chats} chats on the Free plan this month. Upgrade to Pro to keep building.` }, 402);
+  if (!ownKey && MANAGED && billing.enabled() && plan.limits.aiTokens >= 0 && spaceUsage.aiTokens >= plan.limits.aiTokens)
+    return c.json({ error: "plan_limit", limit: "tokens", plan: plan.slug, message: "You've used all your AI tokens for this month. They reset at the start of next month, or contact us for a higher limit." }, 402);
+
+  const messages = [...(previous as UIMessage[]), message];
+  const modelMessages = await convertToModelMessages(messages);
+  const system = DOCTOR_SYSTEM + (await buildDoctorContext(spaceId, workflowId));
+  const sessionId = `doctor-${randomUUID()}`;
+
+  const stream = createUIMessageStream({
+    originalMessages: messages,
+    generateId: createIdGenerator({ prefix: "msg", size: 16 }),
+    execute: ({ writer }) => {
+      const result = streamText({
+        model: getModel(spaceId),
+        system,
+        messages: modelMessages,
+        stopWhen: [
+          stepCountIs(20),
+          ({ steps }) => !ownKey && steps.reduce((sum, s) => sum + (s.usage?.totalTokens ?? 0), 0) >= LIMITS.promptTokenCap,
+        ],
+        maxOutputTokens: LIMITS.maxOutputTokens,
+        tools: withResultLimits(makeDoctorTools(spaceId, writer, workflowId)),
+        providerOptions: { google: { thinkingConfig: { includeThoughts: true } } },
+        experimental_telemetry: trace("doctor-chat", { spaceId, sessionId }),
+        onFinish: (event) => {
+          const t = event.totalUsage?.totalTokens ?? 0;
+          if (!ownKey) {
+            void recordTokens(t);
+            void usage.addTokens(spaceId, t);
+          }
+          void flushTraces();
+        },
+      });
+      void result.consumeStream();
+      writer.merge(
+        result.toUIMessageStream({
+          sendReasoning: true,
+          messageMetadata: ({ part }) => (part.type === "finish" ? { totalUsage: part.totalUsage } : undefined),
+        }),
+      );
+    },
+    onFinish: async ({ messages }) => {
+      await chats.saveConversation(spaceId, userId, conversationId, messages);
+      if (isNewChat) await usage.recordChat(spaceId);
+    },
+    onError: (error) => {
+      console.error("DOCTOR STREAM ERROR:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      void userLogs.append(spaceId, { level: "error", source: "chat", message: "Doctor stream error", detail: msg });
       return msg;
     },
   });

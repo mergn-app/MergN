@@ -11,6 +11,7 @@ import {
   AlertTriangle,
   Info,
   X,
+  Stethoscope,
   Workflow as WorkflowIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ import { ChangeReview, type ChangeSource } from "./ChangeReview";
 import { VersionRow, FixRow } from "./VersionRow";
 import { FlowSettingsModal, GovernanceModal, ChannelList, HandlerList } from "./SettingsPanels";
 import { MonitorGraphs } from "./monitor-graphs";
+import { DoctorChat } from "./DoctorChat";
 
 // run-status colors (distinct from health-status — never mix)
 const RUN_DOT: Record<string, string> = {
@@ -256,34 +258,61 @@ function HealthHeader({ health }: { health?: HealthState }) {
 // ── right: unified history — pending fixes (need review) + version timeline ───
 // A fix IS a version, so both live in one list. Clicking any entry opens the same
 // full-screen change-review surface.
-function HistoryPanel({ workflowId, onOpen }: { workflowId: string; onOpen: (s: ChangeSource) => void }) {
+function HistoryBody({ workflowId, onOpen }: { workflowId: string; onOpen: (s: ChangeSource) => void }) {
   const { t } = useTranslation();
   const pending = (useHealEvents(workflowId || null).data ?? []).filter((e) => e.status === "proposed");
   const versions = useWorkflowVersions(workflowId || null).data ?? [];
   const empty = pending.length === 0 && versions.length === 0;
   return (
+    <div className="min-h-0 flex-1 space-y-1.5 overflow-auto p-2">
+      {empty ? (
+        <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted-foreground/70">
+          {t("review.noHistory")}
+        </div>
+      ) : (
+        <>
+          {/* pending proposed fixes — need review, pinned to the top */}
+          {pending.map((e) => (
+            <FixRow key={e.id} e={e} time={rel(e.at)} onClick={() => onOpen({ kind: "fix", event: e })} />
+          ))}
+          {/* version timeline (newest-first) */}
+          {versions.map((v) => (
+            <VersionRow key={v.id} v={v} time={rel(v.createdAt)} onClick={() => onOpen({ kind: "version", version: v })} />
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+// Right column: history timeline + the Doctor chat, tabbed. The Doctor reads,
+// diagnoses and repairs this flow; its fix/version cards open the same review.
+function RightColumn({ workflowId, onOpen }: { workflowId: string; onOpen: (s: ChangeSource) => void }) {
+  const { t } = useTranslation();
+  const [tab, setTab] = useState<"doctor" | "history">("doctor");
+  const tabCls = (active: boolean) =>
+    cn(
+      "flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors",
+      active ? "bg-secondary text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+    );
+  return (
     <div className={cn(panel, "flex w-[400px] shrink-0 flex-col overflow-hidden")}>
-      <div className="flex items-center gap-2 border-b border-border/40 px-3 py-2.5 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground/70">
-        <History className="size-3.5" />
-        {t("review.history")}
+      <div className="flex items-center gap-1 border-b border-border/40 px-2 py-1.5">
+        <button type="button" onClick={() => setTab("doctor")} className={tabCls(tab === "doctor")}>
+          <Stethoscope className="size-3.5" />
+          {t("doctor.tab")}
+        </button>
+        <button type="button" onClick={() => setTab("history")} className={tabCls(tab === "history")}>
+          <History className="size-3.5" />
+          {t("review.history")}
+        </button>
       </div>
-      <div className="min-h-0 flex-1 space-y-1.5 overflow-auto p-2">
-        {empty ? (
-          <div className="flex h-full items-center justify-center p-4 text-center text-xs text-muted-foreground/70">
-            {t("review.noHistory")}
-          </div>
-        ) : (
-          <>
-            {/* pending proposed fixes — need review, pinned to the top */}
-            {pending.map((e) => (
-              <FixRow key={e.id} e={e} time={rel(e.at)} onClick={() => onOpen({ kind: "fix", event: e })} />
-            ))}
-            {/* version timeline (newest-first) */}
-            {versions.map((v) => (
-              <VersionRow key={v.id} v={v} time={rel(v.createdAt)} onClick={() => onOpen({ kind: "version", version: v })} />
-            ))}
-          </>
-        )}
+      {/* both stay mounted — switching tabs must NOT drop an in-flight Doctor chat */}
+      <div className={cn("flex min-h-0 flex-1 flex-col", tab !== "doctor" && "hidden")}>
+        <DoctorChat key={workflowId} workflowId={workflowId} onOpen={onOpen} />
+      </div>
+      <div className={cn("flex min-h-0 flex-1 flex-col", tab !== "history" && "hidden")}>
+        <HistoryBody workflowId={workflowId} onOpen={onOpen} />
       </div>
     </div>
   );
@@ -426,8 +455,8 @@ export function MonitoringPage() {
           </div>
         </div>
 
-        {/* right — self-healing fixes (the AI's proposed/applied repairs) */}
-        {workflowId && <HistoryPanel workflowId={workflowId} onOpen={setOpenSource} />}
+        {/* right — history timeline + Doctor chat (tabbed) */}
+        {workflowId && <RightColumn workflowId={workflowId} onOpen={setOpenSource} />}
       </div>
 
       {settingsOpen && workflowId && <FlowSettingsModal workflowId={workflowId} onClose={() => setSettingsOpen(false)} />}

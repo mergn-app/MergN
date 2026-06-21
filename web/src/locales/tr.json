@@ -312,6 +312,7 @@
   },
   "monitoring": {
     "open": "Monitoringi aç",
+    "monitor": "Monitör",
     "back": "Editöre dön",
     "flows": "Akışlar",
     "noFlows": "Henüz akış yok",
@@ -469,5 +470,54 @@
     "handlersHint": "Trigger'ı 'monitor' olan bir flow her alarmda otomatik çalışır, olayı girdi olarak alır — kanal yerine (ya da kanalla birlikte) özel mantık çalıştır.",
     "addHandler": "Handler flow ekle",
     "pickFlow": "Bir flow seç…"
+  },
+  "doctor": {
+    "tab": "Doctor",
+    "emptyTitle": "MergN Doctor",
+    "emptySubtitle": "Bu flow'un sağlığını sor, bir hatayı teşhis et ya da düzeltmemi iste.",
+    "placeholder": "Doctor'a bu flow'u sor…",
+    "working": "Doctor çalışıyor…",
+    "clearChat": "Sohbeti temizle",
+    "review": "İncele",
+    "suggest": {
+      "health": "Bu flow sağlıklı mı?",
+      "lastFail": "Son çalıştırma neden patladı?",
+      "summary": "Son zamanlarda ne olduğunu özetle."
+    },
+    "fixCard": {
+      "title": "Önerilen düzeltme"
+    },
+    "versionCard": {
+      "title": "Daha eski bir sürüme dön",
+      "fallback": "Sürüm {{seq}}"
+    },
+    "status": {
+      "proposed": "İnceleme bekliyor",
+      "applied": "Uygulandı",
+      "rejected": "Reddedildi",
+      "reverted": "Geri alındı",
+      "failed": "Başarısız"
+    },
+    "tool": {
+      "list_runs": "Çalıştırmalar okunuyor",
+      "get_run": "Çalıştırma okunuyor",
+      "get_health": "Sağlık kontrol ediliyor",
+      "get_analytics": "Analitik okunuyor",
+      "list_versions": "Sürümler okunuyor",
+      "list_heal_events": "Düzeltme geçmişi okunuyor",
+      "get_buffer": "Buffer kontrol ediliyor",
+      "diagnose_failure": "Teşhis ediliyor",
+      "fix_failure": "Düzeltme hazırlanıyor",
+      "suggest_version": "Sürümler karşılaştırılıyor",
+      "pause_flow": "Flow duraklatılıyor",
+      "resume_flow": "Flow devam ettiriliyor",
+      "test_buffer": "Buffer'daki olay test ediliyor",
+      "replay_buffer": "Buffer yeniden oynatılıyor",
+      "retry_run": "Çalıştırma yeniden deneniyor",
+      "compare_runs": "Çalıştırmalar karşılaştırılıyor",
+      "check_connection": "Bağlantılar kontrol ediliyor",
+      "revert_heal": "Düzeltme geri alınıyor",
+      "incident_summary": "Özet yazılıyor"
+    }
   }
 }
