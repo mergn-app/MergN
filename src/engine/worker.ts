@@ -64,7 +64,7 @@ export class Worker {
     const key = `${item.runId}:${node.funcId}`
 
     if (def.pure) {
-      const output = await this.runtime.run(def, { idempotencyKey: key, connections: {} }, input)
+      const output = await this.runtime.run(def, { idempotencyKey: key, connections: {}, spaceId: this.safety?.spaceId, workflowId: this.workflow.id }, input)
       await this.log.append(this.record(item, node, 'done', input, output, key))
     } else {
       await this.log.append(this.record(item, node, 'pending', input, undefined, key))
@@ -96,7 +96,7 @@ export class Worker {
       if (!claim.claimed) return claim.cachedOutput // already done — don't re-fire
     }
     const clients = await this.connections.inject(node)
-    const ctx: FuncContext = { idempotencyKey: key, connections: clients }
+    const ctx: FuncContext = { idempotencyKey: key, connections: clients, spaceId: this.safety?.spaceId, workflowId: this.workflow.id }
     const output = await this.runtime.run(def, ctx, input)
     if (idem && ik) await idem.complete(this.safety!.spaceId, ik, output)
     return output

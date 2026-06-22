@@ -14,6 +14,10 @@ export type ProviderClient = unknown;
 export interface FuncContext {
   idempotencyKey: string;
   connections: Record<string, ProviderClient>;
+  // Tenant identity, host-side only — forwarded to the remote code-exec service
+  // for per-tenant logging / abuse detection. NEVER exposed to the func code.
+  spaceId?: string;
+  workflowId?: string;
 }
 
 export type FuncHandler = (

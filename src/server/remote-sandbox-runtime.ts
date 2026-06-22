@@ -26,8 +26,11 @@ interface RemoteCarrier {
 }
 
 // ctx.connections holds RemoteProviderCarrier objects (from RemoteConnectionsResolver),
-// not live clients. Turn them into the proxy `providers` payload the code-exec service
-// expects. The secret travels host->host (caller->code-exec), never into the microVM.
+// not live clients. Turn them into the `providers` payload the code-exec service
+// expects. The code-exec service injects each secret via microsandbox `secretEnv`:
+// the func code only ever sees an opaque placeholder, and the real value is
+// substituted ONLY into outbound requests to the provider's own egress host —
+// so a malicious/buggy func can't read or exfiltrate the credential.
 function toProviders(connections: Record<string, unknown>): ProviderPayload[] {
   const out: ProviderPayload[] = [];
   for (const [name, value] of Object.entries(connections ?? {})) {
@@ -80,6 +83,10 @@ export class RemoteSandboxRuntime implements Runtime {
         timeoutSec: this.timeoutSec,
         providers: providers.length ? providers : undefined,
         dependencies: dependencies.length ? dependencies : undefined,
+        // tenant identity — used by the code-exec service for per-tenant logging
+        // and abuse detection only (never for execution)
+        spaceId: ctx.spaceId,
+        workflowId: ctx.workflowId,
       }),
     });
 
