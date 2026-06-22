@@ -8,7 +8,7 @@ const MSG_MAX = 500;
 const DETAIL_MAX = 4000;
 
 export type LogLevel = "error" | "warn" | "info";
-export type LogSource = "build" | "run" | "chat" | "client" | "system";
+export type LogSource = "build" | "run" | "chat" | "client" | "system" | "alert" | "healing";
 
 export interface LogEntry {
   id: string;

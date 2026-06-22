@@ -2,6 +2,7 @@
   "common": {
     "save": "Guardar",
     "saving": "guardando…",
+    "saved": "Guardado",
     "delete": "Eliminar",
     "loading": "cargando…",
     "loadingPage": "Cargando…",
@@ -79,8 +80,8 @@
     "chat": "Chat",
     "history": "Historial",
     "node": "Nodo",
-    "logs": "Registros",
-    "files": "Archivos"
+    "files": "Archivos",
+    "versions": "Versiones"
   },
   "logsPanel": {
     "refresh": "Actualizar",
@@ -315,5 +316,176 @@
     "created": "Creado el {{date}}",
     "planLocked": "El MCP remoto está disponible en planes de pago. Mejora tu plan para conectar.",
     "error": "No se pudo crear el token. Inténtalo de nuevo."
+  },
+  "health": {
+    "healthy": "Saludable",
+    "degraded": "Degradado",
+    "failing": "Con fallos",
+    "nodata": "Sin datos",
+    "cause": {
+      "scheduleStopped": "la programación dejó de ejecutarse",
+      "webhookSilent": "los eventos de webhook esperados dejaron de llegar"
+    }
+  },
+  "monitoring": {
+    "open": "Abrir monitoreo",
+    "monitor": "Monitor",
+    "back": "Volver al editor",
+    "flows": "Flujos",
+    "noFlows": "Aún no hay flujos",
+    "activity": "Actividad",
+    "runs": "Ejecuciones",
+    "noRuns": "Aún no hay ejecuciones",
+    "logs": "Registros",
+    "noLogs": "Sin registros para este flujo",
+    "versions": "Historial de versiones",
+    "settings": "Ajustes",
+    "assistant": "Asistente",
+    "assistantSoon": "Asistente de monitoreo — próximamente",
+    "graphHint": "latencia por ejecución, reciente a la derecha",
+    "runDetail": "Detalle de ejecución",
+    "noSteps": "Sin registros de pasos",
+    "settingsIntro": "Ajustes de monitoreo por flujo:",
+    "settingsHeal": "Auto-reparación on/off + modo",
+    "settingsAlerts": "Qué eventos te alertan + canales",
+    "settingsLiveness": "Comprobaciones de liveness y outcome",
+    "settingsSoon": "La edición llega con el hito de ajustes.",
+    "latency": "Latencia",
+    "successRate": "Tasa de éxito",
+    "lastN": "últimos {{n}}",
+    "errorTypes": "Tipos de error",
+    "noErrors": "Sin errores",
+    "volume": "Volumen de ejecuciones (24h)",
+    "volumeHint": "ejecuciones por hora",
+    "alertsToggle": "Enviar alertas externas",
+    "alertsToggleHint": "Desactivado por defecto. Si está activo, los errores/recuperaciones de este flujo notifican a tus canales y ejecutan flujos manejadores de alertas. (El registro de actividad los guarda igualmente.)",
+    "alerts": "Alertas",
+    "alertsOn": "Alertas activas",
+    "alertsOff": "Alertas desactivadas",
+    "alertChannels": "Canales y reglas",
+    "alertChannelsSoon": "La elección de destinos (Discord, Slack, correo) y reglas por severidad llegará pronto. Por ahora el interruptor controla todos los canales configurados."
+  },
+  "heal": {
+    "fixes": "Correcciones",
+    "fixTitle": "Corrección propuesta",
+    "noFixes": "Aún no hay correcciones para este flujo.",
+    "changes": "Cambios",
+    "noChanges": "Sin cambios estructurales.",
+    "triggerChanged": "Disparador cambiado",
+    "approve": "Aprobar",
+    "reject": "Rechazar",
+    "undo": "Deshacer",
+    "status": {
+      "proposed": "Propuesta",
+      "applied": "Aplicada",
+      "rejected": "Rechazada",
+      "reverted": "Revertida",
+      "failed": "Fallida"
+    },
+    "mode": {
+      "notify": "Notificar",
+      "propose": "Proponer",
+      "auto": "Automático"
+    },
+    "confidence": {
+      "high": "Confianza alta",
+      "medium": "Confianza media",
+      "low": "Confianza baja"
+    },
+    "badge": {
+      "code": "Código del paso cambiado",
+      "input": "Entradas cambiadas",
+      "wire": "Cableado cambiado",
+      "gate": "Condición cambiada",
+      "provider": "Proveedor cambiado"
+    },
+    "reason": {
+      "cap-exceeded": "Límite de ejecución",
+      "not-logic": "No auto-corregible",
+      "low-confidence": "Confianza baja",
+      "danger-downstream": "Downstream riesgoso",
+      "blast-too-wide": "Demasiado amplio",
+      "loop-cap": "Límite de bucle",
+      "fix-ineffective": "Corrección ineficaz",
+      "kill-switch": "Sanación apagada"
+    }
+  },
+  "versions": {
+    "title": "Historial de versiones",
+    "save": "Guardar versión",
+    "label": "Etiqueta (opcional)",
+    "noChange": "Sin cambios desde la última versión.",
+    "empty": "Aún no hay versiones — guarda una arriba.",
+    "restore": "Restaurar esta versión",
+    "confirm": "Confirmar",
+    "source": {
+      "editor": "Edición",
+      "chat": "Chat IA",
+      "mcp": "MCP",
+      "run-snapshot": "Ejecución",
+      "healing": "Autorreparación",
+      "restore": "Restauración"
+    }
+  },
+  "review": {
+    "title": "Revisión de cambios",
+    "switchTo": "Cambiar a esta versión",
+    "added": "Añadido",
+    "modified": "Modificado",
+    "removed": "Eliminado",
+    "oldNew": "viejo → nuevo",
+    "outputs": "Salidas",
+    "present": "definido",
+    "cat": {
+      "code": "Código",
+      "input": "Entradas",
+      "provider": "Proveedor",
+      "gate": "Condición",
+      "wire": "Cableado"
+    },
+    "history": "Historial",
+    "noHistory": "Aún no hay historial.",
+    "pickNode": "Elige un nodo",
+    "pickNodeHint": "Haz clic en un nodo resaltado para ver su cambio."
+  },
+  "settings": {
+    "title": "Ajustes del flujo",
+    "close": "Cerrar",
+    "heal": "Autorreparación",
+    "healHint": "Auto-diagnóstico + arreglo cuando este flujo falla",
+    "mode": "Modo de arreglo",
+    "modeHint": "Qué ocurre cuando se encuentra un arreglo",
+    "modeNotify": "Notificar",
+    "modePropose": "Proponer",
+    "modeAuto": "Automático",
+    "autoReplay": "Reproducción automática",
+    "autoReplayHint": "Reproducir eventos en búfer tras un arreglo exitoso",
+    "alerts": "Alertas",
+    "alertsHint": "Enviar alertas externas para este flujo",
+    "gatedPlan": "Requiere un plan Pro",
+    "gatedKill": "El interruptor de emergencia global está activo",
+    "gatedDisabled": "Desactivado para este despliegue"
+  },
+  "governance": {
+    "title": "Gobernanza",
+    "kill": "Interruptor de emergencia global",
+    "killHint": "Detener al instante todos los arreglos automáticos en cada flujo",
+    "audit": "Registro de auditoría",
+    "auditEmpty": "Aún no hay eventos"
+  },
+  "alert": {
+    "title": "Canales de alerta",
+    "channels": "Canales",
+    "noChannels": "Aún no hay canales",
+    "addChannel": "Añadir canal",
+    "add": "Añadir",
+    "test": "Enviar prueba",
+    "tested": "Enviado ✓",
+    "label": "Etiqueta (opcional)",
+    "handlers": "Flujos que se ejecutan con alertas",
+    "noHandlers": "Ninguno — da a un flujo un disparador 'monitor' para manejar alertas",
+    "handlersHint": "Un flujo con disparador 'monitor' se ejecuta automáticamente en cada alerta, recibiendo el evento como entrada — para lógica personalizada en lugar de (o junto a) un canal.",
+    "addHandler": "Añadir flujo manejador",
+    "pickFlow": "Selecciona un flujo…"
   }
 }

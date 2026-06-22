@@ -17,6 +17,7 @@ import { useSpaces } from "./queries";
 import { setSpace, getLastSpace } from "./space";
 import { BillingPage, BillingModal } from "./BillingPage";
 import { LegalPage } from "./LegalPage";
+import { MonitoringPage } from "./MonitoringPage";
 
 // Billing overlay lives ABOVE the route Outlet so opening it never unmounts the
 // builder (App) underneath — chat, run and the open flow keep going.
@@ -144,6 +145,13 @@ const billingRoute = createRoute({
   component: BillingPage,
 });
 
+const monitorRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/s/$spaceId/w/$workflowId/monitor",
+  loader: ({ params }) => setSpace(params.spaceId),
+  component: MonitoringPage,
+});
+
 const termsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/terms",
@@ -164,6 +172,7 @@ const routeTree = rootRoute.addChildren([
   spaceRoute,
   workflowRoute,
   billingRoute,
+  monitorRoute,
   termsRoute,
   privacyRoute,
 ]);

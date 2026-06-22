@@ -15,6 +15,38 @@ export interface RemoteMcpDeps {
     wf: { id: string; name: string; funcs: unknown[]; wires: unknown[]; config?: Record<string, Record<string, string>>; variables?: Record<string, unknown> },
     input: Record<string, unknown>,
   ) => Promise<{ records: Array<{ nodeId: string; status: string; output?: unknown; error?: string }> }>;
+  // Register/refresh a schedule|poll trigger with the scheduler so it actually
+  // fires (the editor PUT does this; the MCP save path must too).
+  reconcileSchedule?: (spaceId: string, workflowId: string) => Promise<void>;
+
+  // ── Monitoring / self-healing surfaces (each optional; a tool is registered
+  // ONLY when its dep is wired — fail-closed, so a deployment without the heal
+  // engine never exposes diagnose/fix). These are thin wrappers the server builds
+  // over its existing stores; mcp-remote stays decoupled from server internals. ──
+  monitoring?: {
+    listRuns: (spaceId: string, workflowId: string | undefined, limit: number) => Promise<unknown[]>;
+    getRun: (spaceId: string, runId: string) => Promise<unknown | null>;
+    getHealth: (spaceId: string, workflowId?: string) => Promise<unknown>;
+    getAnalytics: (spaceId: string, workflowId?: string) => Promise<unknown>;
+    listVersions: (spaceId: string, workflowId: string) => Promise<unknown[]>;
+    listHealEvents: (spaceId: string, workflowId: string, limit: number) => Promise<unknown[]>;
+    diagnose: (spaceId: string, runId: string, language?: string) => Promise<unknown | null>; // read-only
+  };
+  heal?: {
+    // Mode A — stage a fix proposal for a failed run (returns {eventId} or {fixable:false}).
+    proposeFix: (spaceId: string, runId: string) => Promise<unknown>;
+    // Mode B — apply a staged proposal by its event id (the in-app approve path; human-gated).
+    approveFix: (spaceId: string, workflowId: string, eventId: string) => Promise<unknown>;
+  };
+  // Operational actions (pause/resume/buffer-replay). The server wires this only
+  // when MCP write-capability is enabled (self-host on; managed opt-in).
+  ops?: {
+    pause: (spaceId: string, workflowId: string) => Promise<void>;
+    resume: (spaceId: string, workflowId: string) => Promise<void>;
+    listBuffer: (spaceId: string, workflowId: string) => Promise<unknown>;
+    testBuffer: (spaceId: string, workflowId: string) => Promise<unknown>;
+    replayBuffer: (spaceId: string, workflowId: string) => Promise<unknown>;
+  };
 }
 
 const EVENT_FIELDS: Record<string, string[]> = {
@@ -22,6 +54,11 @@ const EVENT_FIELDS: Record<string, string[]> = {
   schedule: ["timestamp"],
   poll: [],
   manual: [],
+  // an alert-handler flow receives the monitoring event as these input fields
+  monitor: [
+    "category", "severity", "status", "title", "detail",
+    "sourceWorkflowId", "sourceWorkflowName", "at",
+  ],
 };
 const text = (s: string) => ({ content: [{ type: "text" as const, text: s }] });
 const json = (v: unknown) => text(JSON.stringify(v, null, 2));
@@ -74,6 +111,7 @@ WIRING / DATA:
 - Mark fixed per-step settings as add_step configInputs — the user fills them in the app; at runtime you STILL read them as input.<field>.
 - Return only outputs a later step or the final action consumes; never echo an input as an output; for a list return the list, not per-item scalars.
 - Webhook trigger: input.payload (reserved name) = the ENTIRE trigger body. Read fields off it: const obj = input.payload?.data?.object ?? input.payload?.object ?? input.payload; const name = obj.name.
+- RECURRING workflow ("run every N seconds/minutes/hours", "every 15s", "daily at 9", a cron): create_workflow with triggerKind:'schedule' AND set the cadence there (intervalValue+intervalUnit, e.g. 15+second, OR cron). A schedule step exposes input.timestamp. Just BUILD it — if the CONTENT (what the step outputs/does) is vague, use a sensible placeholder and ask about the content after; do NOT refuse or stall over an ambiguous word.
 - TEST INPUT for run_workflow IS the trigger body itself. For a webhook flow pass the raw body directly, e.g. { name, email, budget } — do NOT wrap it as { payload: {...} }. Wrapping double-nests it (input.payload becomes { payload: {...} }). A real webhook delivers the bare body, so test with the bare body too.
 
 PROVIDERS:
@@ -136,15 +174,25 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
     });
   });
 
-  tool("create_workflow", "Create an empty workflow. triggerKind: manual|webhook|schedule|poll.",
-    { name: z.string(), triggerKind: z.enum(["manual", "webhook", "schedule", "poll"]).default("manual") },
-    async ({ name, triggerKind }) => {
+  tool("create_workflow", "Create an empty workflow. triggerKind: manual|webhook|schedule|poll|monitor. For a RECURRING (schedule) workflow set its cadence here: intervalValue + intervalUnit (second|minute|hour|day) e.g. 15+second = every 15s, OR a cron expression. The schedule registers immediately and starts firing. triggerKind:'monitor' makes an ALERT-HANDLER flow that runs when a monitoring event (error / silent-failure / silent-success / heal) fires — it does NOT run on its own; its steps read the event from input.category, input.severity, input.sourceWorkflowName, input.detail, etc. Use it for 'when any flow fails, do X' (log to a sheet, call my API, escalate).",
+    { name: z.string(), triggerKind: z.enum(["manual", "webhook", "schedule", "poll", "monitor"]).default("manual"),
+      intervalValue: z.number().optional(), intervalUnit: z.enum(["second", "minute", "hour", "day"]).optional(), cron: z.string().optional() },
+    async ({ name, triggerKind, intervalValue, intervalUnit, cron }) => {
       const id = randomUUID();
       const ef = EVENT_FIELDS[triggerKind] ?? [];
       const trigger: any = { kind: triggerKind };
       if (ef.length) trigger.eventFields = ef;
+      if (triggerKind === "schedule") {
+        if (cron) trigger.schedule = { mode: "cron", cron };
+        else if (intervalValue) trigger.schedule = { mode: "interval", intervalValue, intervalUnit: intervalUnit ?? "minute" };
+      }
       await save({ id, name, funcs: [], wires: [], positions: { trigger: { x: 0, y: 180 } }, config: {}, trigger });
-      return json({ id, name, triggerKind, eventFields: ef });
+      // schedule/poll must be registered with the scheduler to actually fire
+      if (triggerKind === "schedule" || triggerKind === "poll") {
+        try { await deps.reconcileSchedule?.(spaceId, id); }
+        catch (e) { console.error(`[mcp:create_workflow] schedule reconcile failed`, e); }
+      }
+      return json({ id, name, triggerKind, schedule: trigger.schedule, eventFields: ef });
     },
   );
 
@@ -328,6 +376,110 @@ export function createRemoteMcpServer(spaceId: string, deps: RemoteMcpDeps): Mcp
       return json({ ...r, registered: true });
     },
   );
+
+  // ── Monitoring / diagnosis tools (registered only when wired — fail-closed) ──
+  if (deps.monitoring) {
+    const m = deps.monitoring;
+    tool(
+      "list_runs",
+      "List recent run history (newest-first). Each row: id, status (done/failed/running), trigger, errorType, timestamps. Optionally filter by workflowId.",
+      { workflowId: z.string().optional(), limit: z.number().int().positive().max(200).optional() },
+      async (a) => json(await m.listRuns(spaceId, a.workflowId, a.limit ?? 50)),
+    );
+    tool(
+      "get_run",
+      "Full detail of one run: per-step status, error, and resolved input/output (PII-masked on managed deployments). Use to understand WHY a run failed.",
+      { runId: z.string() },
+      async (a) => json(await m.getRun(spaceId, a.runId)),
+    );
+    tool(
+      "get_health",
+      "Health of a workflow (status, lastError, liveness/outcome fails) — or the whole space when workflowId is omitted.",
+      { workflowId: z.string().optional() },
+      async (a) => json(await m.getHealth(spaceId, a.workflowId)),
+    );
+    tool(
+      "get_analytics",
+      "Run analytics: success rate, error breakdown by type (transient/auth/logic/unknown), latency p50/p95, 24h/7d volume. Per-flow or space-wide.",
+      { workflowId: z.string().optional() },
+      async (a) => json(await m.getAnalytics(spaceId, a.workflowId)),
+    );
+    tool(
+      "list_versions",
+      "List a workflow's version history (source: editor/chat/healing/restore, label, time) — see what changed and when, including auto-heal versions.",
+      { workflowId: z.string() },
+      async (a) => json(await m.listVersions(spaceId, a.workflowId)),
+    );
+    tool(
+      "list_heal_events",
+      "List past self-healing attempts for a workflow (status, confidence, diagnosis) — what the auto-healer proposed/applied/rejected.",
+      { workflowId: z.string(), limit: z.number().int().positive().max(100).optional() },
+      async (a) => json(await m.listHealEvents(spaceId, a.workflowId, a.limit ?? 50)),
+    );
+    tool(
+      "diagnose_failure",
+      "Diagnose a failed run: plain-language cause + a proposed fix (with diff) when the error is fixable. Read-only — applies nothing.",
+      { runId: z.string(), language: z.string().optional().describe("e.g. English, Turkish") },
+      async (a) => json(await m.diagnose(spaceId, a.runId, a.language)),
+    );
+  }
+
+  if (deps.heal) {
+    const h = deps.heal;
+    tool(
+      "apply_fix",
+      "Fix a failed run. Mode A (pass runId): diagnoses + STAGES a proposed fix, returns its eventId + what it would change — does NOT apply. Mode B (pass eventId + workflowId + confirm:true): applies that staged fix, creating a new healing version. A fix is never applied without your explicit confirm.",
+      {
+        runId: z.string().optional().describe("Mode A — the failed run to propose a fix for"),
+        eventId: z.string().optional().describe("Mode B — the staged fix event to apply"),
+        workflowId: z.string().optional().describe("Mode B — required with eventId"),
+        confirm: z.boolean().optional().describe("Mode B — set true to apply the staged fix"),
+      },
+      async (a) => {
+        if (a.eventId && a.confirm) {
+          if (!a.workflowId) return json({ error: "workflowId is required with eventId" });
+          return json(await h.approveFix(spaceId, a.workflowId, a.eventId));
+        }
+        if (!a.runId) return json({ error: "Provide runId to propose a fix, or eventId+workflowId+confirm:true to apply a staged one." });
+        return json(await h.proposeFix(spaceId, a.runId));
+      },
+    );
+  }
+
+  // ── Operational actions (write-capability; wired only when enabled) ──
+  if (deps.ops) {
+    const o = deps.ops;
+    tool(
+      "pause_flow",
+      "Pause a workflow: incoming webhook events are safely buffered (not lost), schedule/poll ticks stop. Use to stop a misbehaving flow before fixing it.",
+      { workflowId: z.string() },
+      async (a) => { await o.pause(spaceId, a.workflowId); return json({ ok: true, paused: true }); },
+    );
+    tool(
+      "resume_flow",
+      "Resume a paused workflow (re-enables triggers). Does NOT replay buffered events — use replay_buffer for that.",
+      { workflowId: z.string() },
+      async (a) => { await o.resume(spaceId, a.workflowId); return json({ ok: true, paused: false }); },
+    );
+    tool(
+      "list_buffer",
+      "List the events buffered while a workflow was paused (FIFO order, status, masked payload preview).",
+      { workflowId: z.string() },
+      async (a) => json(await o.listBuffer(spaceId, a.workflowId)),
+    );
+    tool(
+      "test_buffer",
+      "Test-run the FIRST buffered event's REAL payload (does NOT consume it) to verify a fix works before replaying everything. Produces real side effects.",
+      { workflowId: z.string() },
+      async (a) => json(await o.testBuffer(spaceId, a.workflowId)),
+    );
+    tool(
+      "replay_buffer",
+      "Replay all buffered events in FIFO order, then unpause. Idempotent (no double side-effects). Recommended only after diagnose_failure → apply_fix → test_buffer succeed.",
+      { workflowId: z.string() },
+      async (a) => json(await o.replayBuffer(spaceId, a.workflowId)),
+    );
+  }
 
   return server;
 }

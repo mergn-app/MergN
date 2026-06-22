@@ -2,6 +2,7 @@
   "common": {
     "save": "Speichern",
     "saving": "wird gespeichert…",
+    "saved": "Gespeichert",
     "delete": "Löschen",
     "loading": "wird geladen…",
     "loadingPage": "Wird geladen…",
@@ -79,8 +80,8 @@
     "chat": "Chat",
     "history": "Verlauf",
     "node": "Knoten",
-    "logs": "Logs",
-    "files": "Dateien"
+    "files": "Dateien",
+    "versions": "Versionen"
   },
   "logsPanel": {
     "refresh": "Aktualisieren",
@@ -315,5 +316,176 @@
     "created": "Erstellt am {{date}}",
     "planLocked": "Remote-MCP ist in kostenpflichtigen Plänen verfügbar. Upgrade zum Verbinden.",
     "error": "Token konnte nicht erstellt werden. Bitte erneut versuchen."
+  },
+  "health": {
+    "healthy": "Gesund",
+    "degraded": "Beeinträchtigt",
+    "failing": "Fehlerhaft",
+    "nodata": "Keine Daten",
+    "cause": {
+      "scheduleStopped": "der Zeitplan löst nicht mehr aus",
+      "webhookSilent": "erwartete Webhook-Ereignisse bleiben aus"
+    }
+  },
+  "monitoring": {
+    "open": "Monitoring öffnen",
+    "monitor": "Monitor",
+    "back": "Zurück zum Editor",
+    "flows": "Flows",
+    "noFlows": "Noch keine Flows",
+    "activity": "Aktivität",
+    "runs": "Läufe",
+    "noRuns": "Noch keine Läufe",
+    "logs": "Logs",
+    "noLogs": "Keine Logs für diesen Flow",
+    "versions": "Versionsverlauf",
+    "settings": "Einstellungen",
+    "assistant": "Assistent",
+    "assistantSoon": "Monitoring-Assistent — bald verfügbar",
+    "graphHint": "Latenz pro Lauf, neueste rechts",
+    "runDetail": "Lauf-Detail",
+    "noSteps": "Keine Schritt-Datensätze",
+    "settingsIntro": "Flow-spezifische Monitoring-Einstellungen:",
+    "settingsHeal": "Self-Healing an/aus + Modus",
+    "settingsAlerts": "Welche Ereignisse benachrichtigen + Kanäle",
+    "settingsLiveness": "Liveness- & Outcome-Prüfungen",
+    "settingsSoon": "Die Bearbeitung kommt mit dem Einstellungs-Meilenstein.",
+    "latency": "Latenz",
+    "successRate": "Erfolgsrate",
+    "lastN": "letzte {{n}}",
+    "errorTypes": "Fehlertypen",
+    "noErrors": "Keine Fehler",
+    "volume": "Lauf-Volumen (24h)",
+    "volumeHint": "Läufe pro Stunde",
+    "alertsToggle": "Externe Alerts senden",
+    "alertsToggleHint": "Standardmäßig aus. Wenn an, benachrichtigen Fehler/Wiederherstellungen dieses Flows deine Kanäle und starten Alert-Handler-Flows. (Das Aktivitätsprotokoll erfasst sie ohnehin.)",
+    "alerts": "Alerts",
+    "alertsOn": "Alerts an",
+    "alertsOff": "Alerts aus",
+    "alertChannels": "Kanäle & Regeln",
+    "alertChannelsSoon": "Die Auswahl der Ziele (Discord, Slack, E-Mail) und Regeln je Schweregrad kommt bald. Vorerst steuert der Schalter alle konfigurierten Kanäle."
+  },
+  "heal": {
+    "fixes": "Korrekturen",
+    "fixTitle": "Vorgeschlagene Korrektur",
+    "noFixes": "Noch keine Korrekturen für diesen Flow.",
+    "changes": "Änderungen",
+    "noChanges": "Keine strukturellen Änderungen.",
+    "triggerChanged": "Trigger geändert",
+    "approve": "Übernehmen",
+    "reject": "Ablehnen",
+    "undo": "Rückgängig",
+    "status": {
+      "proposed": "Vorgeschlagen",
+      "applied": "Angewendet",
+      "rejected": "Abgelehnt",
+      "reverted": "Zurückgesetzt",
+      "failed": "Fehlgeschlagen"
+    },
+    "mode": {
+      "notify": "Melden",
+      "propose": "Vorschlagen",
+      "auto": "Automatisch"
+    },
+    "confidence": {
+      "high": "Hohe Sicherheit",
+      "medium": "Mittlere Sicherheit",
+      "low": "Geringe Sicherheit"
+    },
+    "badge": {
+      "code": "Schritt-Code geändert",
+      "input": "Eingaben geändert",
+      "wire": "Verdrahtung geändert",
+      "gate": "Bedingung geändert",
+      "provider": "Provider geändert"
+    },
+    "reason": {
+      "cap-exceeded": "Laufsicherheits-Limit",
+      "not-logic": "Nicht auto-korrigierbar",
+      "low-confidence": "Geringe Sicherheit",
+      "danger-downstream": "Riskanter Downstream",
+      "blast-too-wide": "Zu weitreichend",
+      "loop-cap": "Schleifen-Limit",
+      "fix-ineffective": "Korrektur wirkungslos",
+      "kill-switch": "Heilung aus"
+    }
+  },
+  "versions": {
+    "title": "Versionsverlauf",
+    "save": "Version speichern",
+    "label": "Label (optional)",
+    "noChange": "Keine Änderungen seit der letzten Version.",
+    "empty": "Noch keine Versionen — oben eine speichern.",
+    "restore": "Diese Version wiederherstellen",
+    "confirm": "Bestätigen",
+    "source": {
+      "editor": "Bearbeitung",
+      "chat": "KI-Chat",
+      "mcp": "MCP",
+      "run-snapshot": "Lauf",
+      "healing": "Selbstheilung",
+      "restore": "Wiederherstellung"
+    }
+  },
+  "review": {
+    "title": "Änderungsübersicht",
+    "switchTo": "Zu dieser Version wechseln",
+    "added": "Hinzugefügt",
+    "modified": "Geändert",
+    "removed": "Entfernt",
+    "oldNew": "alt → neu",
+    "outputs": "Ausgaben",
+    "present": "gesetzt",
+    "cat": {
+      "code": "Code",
+      "input": "Eingaben",
+      "provider": "Provider",
+      "gate": "Bedingung",
+      "wire": "Verdrahtung"
+    },
+    "history": "Verlauf",
+    "noHistory": "Noch kein Verlauf.",
+    "pickNode": "Knoten wählen",
+    "pickNodeHint": "Klicke einen markierten Knoten an, um seine Änderung zu sehen."
+  },
+  "settings": {
+    "title": "Flow-Einstellungen",
+    "close": "Schließen",
+    "heal": "Selbstheilung",
+    "healHint": "Auto-Diagnose + Fix bei Fehlern dieses Flows",
+    "mode": "Fix-Modus",
+    "modeHint": "Was passiert, wenn ein Fix gefunden wird",
+    "modeNotify": "Melden",
+    "modePropose": "Vorschlagen",
+    "modeAuto": "Automatisch",
+    "autoReplay": "Auto-Replay",
+    "autoReplayHint": "Gepufferte Ereignisse nach erfolgreichem Fix erneut abspielen",
+    "alerts": "Benachrichtigungen",
+    "alertsHint": "Externe Benachrichtigungen für diesen Flow senden",
+    "gatedPlan": "Erfordert einen Pro-Plan",
+    "gatedKill": "Globaler Not-Aus ist aktiv",
+    "gatedDisabled": "Für dieses Deployment deaktiviert"
+  },
+  "governance": {
+    "title": "Governance",
+    "kill": "Globaler Not-Aus",
+    "killHint": "Alle automatischen Fixes in jedem Flow sofort stoppen",
+    "audit": "Audit-Protokoll",
+    "auditEmpty": "Noch keine Ereignisse"
+  },
+  "alert": {
+    "title": "Alarmkanäle",
+    "channels": "Kanäle",
+    "noChannels": "Noch keine Kanäle",
+    "addChannel": "Kanal hinzufügen",
+    "add": "Hinzufügen",
+    "test": "Test senden",
+    "tested": "Gesendet ✓",
+    "label": "Bezeichnung (optional)",
+    "handlers": "Flows, die bei Alarmen laufen",
+    "noHandlers": "Keine — gib einem Flow einen 'monitor'-Trigger, um Alarme zu behandeln",
+    "handlersHint": "Ein Flow mit 'monitor'-Trigger läuft bei jedem Alarm automatisch und erhält das Ereignis als Eingabe — für eigene Logik statt (oder zusätzlich zu) einem Kanal.",
+    "addHandler": "Handler-Flow hinzufügen",
+    "pickFlow": "Flow auswählen…"
   }
 }

@@ -19,11 +19,13 @@ import {
   Zap,
   Wand2,
   Loader2,
+  Check,
   Network,
   Plug,
 } from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
-import { LogsPanel } from "./LogsPanel";
+import { VersionsPanel } from "./VersionsPanel";
+import { ChangeReview, type ChangeSource } from "./ChangeReview";
 import { FilesPanel } from "./FilesPanel";
 import { Chat } from "./Chat";
 import { TriggerDialog } from "./TriggerDialog";
@@ -57,9 +59,11 @@ import {
   pauseWorkflow,
   resumeWorkflow,
   reportLog,
+  useHealth,
   type ConnectionMeta,
   type ActivationState,
 } from "./queries";
+import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 import type {
   AuthoredFunc,
   InputForm,
@@ -68,6 +72,7 @@ import type {
   Wire,
   WorkflowOp,
 } from "./types";
+import { buildWorkflowDoc, stableStringify } from "./workflow-doc";
 import { useNavigate } from "@tanstack/react-router";
 import { summarizeWorkflow, outputsOf } from "./lineage";
 import { useAuth } from "./authContext";
@@ -144,7 +149,9 @@ function Canvas({
       <Background />
       <Controls />
       {nodes.length > 1 && (
-        <Panel position="top-right">
+        // sit just left of the monitoring entry pill (absolute right-3 top-3),
+        // top-aligned to it (marginTop matches the pill's top-3), tight gap
+        <Panel position="top-right" style={{ marginRight: "7rem", marginTop: "0.75rem" }}>
           <button
             onClick={() => {
               onArrange();
@@ -214,7 +221,9 @@ export function App({
   const [statusVersion, setStatusVersion] = useState(0);
   const [inputForm, setInputForm] = useState<InputForm | null>(null);
   const [formSyncing, setFormSyncing] = useState(false);
-  const [autoSave, setAutoSave] = useState(false);
+  // Last-persisted snapshot of the workflow doc (stable-stringified). `dirty` is
+  // derived by comparing the live doc to this — see the autosave funnel below.
+  const persistedDoc = useRef<string>("");
   const [leftPanelMinimized, setLeftPanelMinimized] = useState(() => {
     try {
       return localStorage.getItem("leftPanelMinimized") === "true";
@@ -294,6 +303,7 @@ export function App({
   const saveMutation = useSaveWorkflow();
   const { user, requireAuth, signOut, managed, remoteMcp } = useAuth();
   const [mcpOpen, setMcpOpen] = useState(false);
+  const [openSource, setOpenSource] = useState<ChangeSource | null>(null);
   const { data: connections = NO_CONNECTIONS } = useConnections();
   const conversationsQuery = useConversations();
   const deleteConversation = useDeleteConversation();
@@ -512,6 +522,7 @@ export function App({
   const [fireAnchor, setFireAnchor] = useState<number | null>(null);
   const [firePulse, setFirePulse] = useState(0);
   const [fireStatus, setFireStatus] = useState<"done" | "failed">("done");
+  const flowHealth = useHealth(workflowId);
   useRunStream(workflowId, trigger.kind !== "manual", (status) => {
     setFireAnchor(Date.now());
     setFireStatus(status);
@@ -685,7 +696,6 @@ export function App({
         setName(o.name);
       }
     }
-    setAutoSave(true);
   }, [ops]);
 
   useEffect(() => {
@@ -896,7 +906,6 @@ export function App({
     setNodes((ns) =>
       ns.map((n) => (pos[n.id] ? { ...n, position: pos[n.id] } : n)),
     );
-    setAutoSave(true);
   }, [funcs, wires, trigger, setNodes]);
 
   const reset = () => {
@@ -916,24 +925,58 @@ export function App({
     setVariables({});
     setPersistedVars({});
     setLoadedConvId(null);
+    persistedDoc.current = ""; // fresh workflow: baseline empty until first save
   };
 
-  const save = async () => {
-    const id = workflowId ?? crypto.randomUUID();
-    const positions = Object.fromEntries(nodes.map((n) => [n.id, n.position]));
-    await saveMutation.mutateAsync({
-      id,
+  // ── Autosave funnel ───────────────────────────────────────────────────────
+  // Everything persisted is derived into one `doc`; any change to it flips
+  // `dirty`, and the single debounced effect below saves. No mutation site has
+  // to mark dirty — add a field to buildWorkflowDoc and it's covered.
+  const positions = useMemo(
+    () =>
+      Object.fromEntries(nodes.map((n) => [n.id, n.position])) as Record<
+        string,
+        { x: number; y: number }
+      >,
+    [nodes],
+  );
+  const doc = useMemo(
+    () =>
+      buildWorkflowDoc({
+        name,
+        funcs,
+        wires,
+        positions,
+        config: configValues,
+        nodeConnections,
+        trigger,
+        inputForm,
+        variables,
+      }),
+    [
       name,
       funcs,
       wires,
       positions,
-      config: configValues,
+      configValues,
       nodeConnections,
       trigger,
       inputForm,
       variables,
+    ],
+  );
+  const serializedDoc = useMemo(() => stableStringify(doc), [doc]);
+  const dirty = serializedDoc !== persistedDoc.current;
+
+  const save = async () => {
+    const id = workflowId ?? crypto.randomUUID();
+    const snapshot = serializedDoc; // capture: state may change during the await
+    await saveMutation.mutateAsync({
+      id,
+      ...doc,
       conversationId: conversationId ?? undefined,
     });
+    persistedDoc.current = snapshot;
     setPersistedVars(variables);
     setWorkflowId(id);
     setSavedTrigger(trigger);
@@ -948,7 +991,6 @@ export function App({
 
   const applyVariables = useCallback((vars: Record<string, unknown>) => {
     setVariables(vars);
-    setAutoSave(true);
   }, []);
 
   const setTriggerParam = useCallback((key: string, value: string) => {
@@ -959,7 +1001,6 @@ export function App({
         poll: { ...t.poll, params: { ...(t.poll.params ?? {}), [key]: value } },
       };
     });
-    setAutoSave(true);
   }, []);
 
   const openWorkflow = (id: string) => {
@@ -982,14 +1023,17 @@ export function App({
     if (spaceId) void navigate({ to: "/s/$spaceId", params: { spaceId } });
   };
 
+  // The ONE autosave point: any change to the derived doc → debounced save.
+  // Guards: a logged-in user, an actual change, not an empty brand-new workflow,
+  // and no save already in flight (avoid overlap — the next change catches up).
   useEffect(() => {
-    if (!autoSave || funcs.length === 0 || !user) return;
-    const t = setTimeout(() => {
-      setAutoSave(false);
-      void save();
-    }, 350);
+    if (!user || !dirty) return;
+    if (!workflowId && funcs.length === 0) return;
+    if (saveMutation.isPending) return;
+    const t = setTimeout(() => void save(), 350);
     return () => clearTimeout(t);
-  }, [autoSave, funcs, user, variables, trigger]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serializedDoc, dirty, user, workflowId, funcs.length, saveMutation.isPending]);
 
   const load = async (id: string) => {
     const wf = await fetchWorkflow(id);
@@ -1008,6 +1052,21 @@ export function App({
     setPersistedVars(wf.variables ?? {});
     setConversationId(wf.conversationId ?? wf.id);
     setLoadedConvId(wf.conversationId ?? wf.id);
+    // Seed the baseline so a freshly loaded workflow isn't seen as dirty (no
+    // spurious save-on-open). Built the same way as the live doc so they match.
+    persistedDoc.current = stableStringify(
+      buildWorkflowDoc({
+        name: wf.name ?? "untitled",
+        funcs: wf.funcs ?? [],
+        wires: wf.wires ?? [],
+        positions: wf.positions ?? {},
+        config: wf.config ?? {},
+        nodeConnections: wf.nodeConnections ?? {},
+        trigger: wf.trigger ?? { kind: "manual" },
+        inputForm: wf.inputForm ?? null,
+        variables: wf.variables ?? {},
+      }),
+    );
   };
 
   useEffect(() => {
@@ -1032,6 +1091,28 @@ export function App({
             <Badge variant="secondary" className="font-normal">
               {t("header.funcCount", { n: funcs.length })}
             </Badge>
+            {user && (workflowId || funcs.length > 0) && (
+              <span
+                className="flex items-center gap-1.5 text-xs text-muted-foreground"
+                title={
+                  dirty || saveMutation.isPending
+                    ? t("common.saving")
+                    : t("common.saved")
+                }
+              >
+                {dirty || saveMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />
+                    <span className="hidden sm:inline">{t("common.saving")}</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="h-3.5 w-3.5 text-green-500" />
+                    <span className="hidden sm:inline">{t("common.saved")}</span>
+                  </>
+                )}
+              </span>
+            )}
             {user && remoteMcp && (
               <Button
                 size="sm"
@@ -1092,6 +1173,14 @@ export function App({
       </div>
 
       {mcpOpen && <McpConnectDialog onClose={() => setMcpOpen(false)} />}
+      {openSource && workflowId && (
+        <ChangeReview
+          source={openSource}
+          workflowId={workflowId}
+          onClose={() => setOpenSource(null)}
+          onApplied={() => void load(workflowId)}
+        />
+      )}
 
       <div className="flex min-h-0 flex-1 gap-2 p-2">
         {user && (
@@ -1102,15 +1191,26 @@ export function App({
             currentId={workflowId}
             onLoad={openWorkflow}
             name={name}
-            onName={(value) => {
-              setName(value);
-              setAutoSave(true);
-            }}
+            onName={setName}
             onNew={newWorkflow}
             missing={missingProviders}
           />
         )}
         <div className="relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border/40 bg-card">
+          {workflowId && (
+            <div className="absolute right-3 top-3 z-10">
+              <WorkflowStatusIcon
+                health={flowHealth.data}
+                onClick={() =>
+                  spaceId &&
+                  void navigate({
+                    to: "/s/$spaceId/w/$workflowId/monitor",
+                    params: { spaceId, workflowId },
+                  })
+                }
+              />
+            </div>
+          )}
           <div className="absolute left-3 top-3 z-10 flex items-center gap-2">
             <div className="flex rounded-lg border border-border/50 bg-muted p-0.5 text-xs">
               {(["story", "pipeline", "graph"] as const).map((v) => (
@@ -1231,6 +1331,7 @@ export function App({
                   wires={wires}
                   config={configValues}
                   onConfigChange={onConfigChange}
+                  savePending={dirty || saveMutation.isPending}
                   nodeConnections={nodeConnections}
                   workflowId={workflowId}
                   workflowName={name}
@@ -1305,7 +1406,7 @@ export function App({
             />
           }
           files={<FilesPanel />}
-          logs={<LogsPanel active={activeTab === "logs"} />}
+          versions={<VersionsPanel workflowId={workflowId} onOpen={(v) => setOpenSource({ kind: "version", version: v })} />}
           node={
             <NodePanel
               func={selected}
@@ -1318,6 +1419,7 @@ export function App({
               onConnectionChange={(name, id) =>
                 selected && onConnectionChange(selected.id, name, id)
               }
+              savePending={dirty || saveMutation.isPending}
             />
           }
         />

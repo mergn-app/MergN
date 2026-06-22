@@ -225,14 +225,23 @@ export function createScheduler(deps: SchedulerDeps): Scheduler {
 
   async function pause(spaceId: string, workflowId: string): Promise<void> {
     const jobs = await scheduleStore.findByWorkflow(spaceId, workflowId);
-    for (const job of jobs) await pauseJob(spaceId, job);
+    const now = new Date().toISOString();
+    // pauseJob cancels the recurring schedule (no tick delivered while paused), so
+    // there's nothing to count — just stamp `missedSince` for the UI's "stopped
+    // since" (missed-tick count, if wanted, is derived from this against `spec`).
+    for (const job of jobs) {
+      await pauseJob(spaceId, job);
+      await scheduleStore.upsert({ ...job, active: false, missedSince: now, updatedAt: now });
+    }
   }
 
   async function resume(spaceId: string, workflowId: string): Promise<void> {
     const jobs = await scheduleStore.findByWorkflow(spaceId, workflowId);
+    const now = new Date().toISOString();
     for (const job of jobs) {
       await publishSchedule({ ...job, active: true });
-      await scheduleStore.setActive(spaceId, job.jobId, true);
+      const { missedSince: _missed, ...rest } = job;
+      await scheduleStore.upsert({ ...rest, active: true, updatedAt: now });
     }
   }
 

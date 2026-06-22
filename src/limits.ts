@@ -59,7 +59,33 @@ export const LIMITS = {
   // ── Structural caps ──
   maxPlanSteps: lim("MAX_PLAN_STEPS", NO_CAP),
   maxSpacesPerUser: lim("MAX_SPACES_PER_USER", NO_CAP),
+  // Workflow version-history retention (max kept versions per workflow before
+  // the oldest UNLABELED editor/chat versions are pruned; healing/restore/pinned
+  // are always kept). NO_CAP / self-host = keep everything.
+  versionRetentionMax: lim("VERSION_RETENTION_MAX", NO_CAP),
+  // Run-history retention in days (run docs + their step records pruned past
+  // this window). UNLIMITED (-1) / self-host = keep everything forever.
+  runRetentionDays: lim("RUN_RETENTION_DAYS", UNLIMITED),
 
   // ── File storage (per-space total upload quota) ──
   maxStorageBytes: lim("MAX_STORAGE_BYTES", NO_CAP),
+
+  // ── Run-safety caps (stop a runaway run before AI/replay can re-trigger it) ──
+  // Deterministic ceilings, no AI involved. Managed enforces; self-host
+  // (ENFORCE_LIMITS off) → NO_CAP → the guards run but always pass (uncapped).
+  maxFanOut: lim("MAX_FAN_OUT", NO_CAP), // nodes enqueued per scheduler tick (back-pressure)
+  maxRunInvocations: lim("MAX_RUN_INVOCATIONS", NO_CAP), // total steps processed in one run
+  maxSpaceConcurrency: lim("MAX_SPACE_CONCURRENCY", NO_CAP), // concurrent active runs per space
+
+  // ── Self-healing caps (auto-fix gating; "an obedient bot burns the house down") ──
+  // Managed enforces; self-host (ENFORCE_LIMITS off) → NO_CAP → auto-fix gating is
+  // loose (loop-cap never trips, blast-radius unbounded — operator's own machine).
+  healAttemptMax: lim("HEAL_ATTEMPT_MAX", NO_CAP), // max heal attempts per flow in a window
+  healBlastRadiusMax: lim("HEAL_BLAST_RADIUS_MAX", NO_CAP), // max touched nodes for auto-apply
+
+  // ── No-data-loss buffer (events held while a flow is paused) ──
+  // Max trigger events buffered per paused flow before the flow hard-stops + a
+  // critical alert fires (never drop the oldest — that would lose data). NO_CAP /
+  // self-host = buffer without limit.
+  bufferMaxEntries: lim("BUFFER_MAX_ENTRIES", NO_CAP),
 } as const;

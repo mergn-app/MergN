@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 
-export type RightTab = "chat" | "files" | "logs" | "node";
+export type RightTab = "chat" | "files" | "versions" | "node";
 
 function TabButton({
   active,
@@ -33,14 +33,14 @@ export function RightPanel({
   onTab,
   chat,
   files,
-  logs,
+  versions,
   node,
 }: {
   active: RightTab;
   onTab: (tab: RightTab) => void;
   chat: ReactNode;
   files: ReactNode;
-  logs: ReactNode;
+  versions: ReactNode;
   node: ReactNode;
 }) {
   const { t } = useTranslation();
@@ -53,8 +53,8 @@ export function RightPanel({
         <TabButton active={active === "files"} onClick={() => onTab("files")}>
           {t("panel.files")}
         </TabButton>
-        <TabButton active={active === "logs"} onClick={() => onTab("logs")}>
-          {t("panel.logs")}
+        <TabButton active={active === "versions"} onClick={() => onTab("versions")}>
+          {t("panel.versions")}
         </TabButton>
         <TabButton active={active === "node"} onClick={() => onTab("node")}>
           {t("panel.node")}
@@ -74,10 +74,10 @@ export function RightPanel({
       <div
         className={cn(
           "min-h-0 flex-1 overflow-hidden",
-          active === "logs" ? "flex" : "hidden",
+          active === "versions" ? "flex" : "hidden",
         )}
       >
-        {logs}
+        {versions}
       </div>
       <div
         className={cn(

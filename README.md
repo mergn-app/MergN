@@ -70,7 +70,7 @@ This pulls the latest changes and restarts the containers.
 **Requires:** Node 22+ and Docker (for NATS — required to start).
 
 ```bash
-git clone https://github.com/flowbaker/MergN.git && cd MergN
+git clone https://github.com/mergn-app/MergN.git && cd MergN
 npm install
 cd web && npm install && cd ..
 ```

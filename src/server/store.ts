@@ -1,4 +1,8 @@
 import type { DocStore } from "../store/docstore";
+import { formatFuncsCode } from "./format-code";
+import type { OutcomeConfig } from "./outcome";
+import type { MaskLevel } from "./pii-mask";
+import type { LivenessConfig } from "./webhook-liveness";
 
 const COLLECTION = "workflows";
 
@@ -24,11 +28,16 @@ export interface PollTriggerConfig {
 }
 
 export interface TriggerConfig {
-  kind: "manual" | "webhook" | "schedule" | "poll" | "event";
+  // "monitor" = an alert-handler flow: runs automatically when a monitoring
+  // event fires on any flow (error / silent-failure / silent-success / heal).
+  // Behaves like "manual" for scheduling/webhook paths (no job/endpoint).
+  kind: "manual" | "webhook" | "schedule" | "poll" | "event" | "monitor";
   enabled?: boolean;
   schedule?: ScheduleTriggerConfig;
   poll?: PollTriggerConfig;
   eventFields?: string[];
+  // for kind:"monitor" — only fire on these event categories (default: all).
+  monitor?: { events?: string[] };
 }
 
 export interface SavedWorkflow {
@@ -43,6 +52,17 @@ export interface SavedWorkflow {
   inputForm?: unknown;
   variables?: Record<string, unknown>;
   conversationId?: string;
+  currentVersionId?: string; // latest sealed version (run-stamp / history pointer)
+  outcome?: OutcomeConfig; // opt-in silent-success checks (expectations / drift-to-empty)
+  alertsEnabled?: boolean; // send external alerts / run handlers for this flow (default OFF — opt-in)
+  maskLevel?: MaskLevel; // per-flow PII masking override (default → MASK_DEFAULT)
+  // No-data-loss pause: while true, webhook events are buffered (not run inline)
+  // and schedule/poll ticks are skipped. Set by the user or by auto-heal at
+  // heal-start; cleared by /resume. Durable so the UI + webhook handler agree.
+  paused?: boolean;
+  pausedAt?: string; // ISO — UI "stopped since"
+  pausedReason?: "manual" | "heal" | "buffer-full";
+  liveness?: LivenessConfig; // per-flow liveness config (webhook heartbeat / schedule tol)
   createdAt: string;
   updatedAt: string;
 }
@@ -62,6 +82,19 @@ export interface WorkflowStore {
     input: Omit<SavedWorkflow, "createdAt" | "updatedAt">,
   ): Promise<SavedWorkflow>;
   deleteWorkflow(spaceId: string, id: string): Promise<void>;
+  // point HEAD at its latest sealed version without bumping content/updatedAt.
+  setCurrentVersion(
+    spaceId: string,
+    id: string,
+    versionId: string,
+  ): Promise<void>;
+  // flip the no-data-loss pause flag (durable; webhook handler + UI read it).
+  setPaused(
+    spaceId: string,
+    id: string,
+    paused: boolean,
+    reason?: "manual" | "heal" | "buffer-full",
+  ): Promise<void>;
 }
 
 export function createWorkflowStore(store: DocStore): WorkflowStore {
@@ -93,8 +126,12 @@ export function createWorkflowStore(store: DocStore): WorkflowStore {
     async saveWorkflow(spaceId, input) {
       const existing = await getWorkflow(spaceId, input.id);
       const now = new Date().toISOString();
+      // beautify generated step code at the persist chokepoint (covers builder +
+      // applied heal fixes) so what's stored — and shown in the diff — is clean
+      const funcs = await formatFuncsCode(input.funcs ?? []);
       const wf: SavedWorkflow = {
         ...input,
+        funcs,
         createdAt: existing?.createdAt ?? now,
         updatedAt: now,
       };
@@ -109,6 +146,27 @@ export function createWorkflowStore(store: DocStore): WorkflowStore {
 
     async deleteWorkflow(spaceId, id) {
       await store.remove(spaceId, COLLECTION, id);
+    },
+
+    async setCurrentVersion(spaceId, id, versionId) {
+      const existing = await getWorkflow(spaceId, id);
+      if (!existing) return;
+      await store.put(spaceId, COLLECTION, id, {
+        ...existing,
+        currentVersionId: versionId,
+      } as unknown as Record<string, unknown>);
+    },
+
+    async setPaused(spaceId, id, paused, reason) {
+      const existing = await getWorkflow(spaceId, id);
+      if (!existing) return;
+      const { paused: _p, pausedAt: _a, pausedReason: _r, ...rest } = existing;
+      await store.put(spaceId, COLLECTION, id, {
+        ...rest,
+        ...(paused
+          ? { paused: true, pausedAt: new Date().toISOString(), pausedReason: reason ?? "manual" }
+          : {}),
+      } as unknown as Record<string, unknown>);
     },
   };
 }

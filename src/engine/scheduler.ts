@@ -9,6 +9,9 @@ export class Scheduler {
     private workflow: Workflow,
     private log: RunLogStore,
     private queue: Queue,
+    // Max nodes enqueued per tick (run-safety back-pressure, injected by the
+    // caller so the engine carries no policy). Default = no cap.
+    private maxFanOut: number = Number.MAX_SAFE_INTEGER,
   ) {}
 
   async tick(runId: string): Promise<void> {
@@ -56,12 +59,21 @@ export class Scheduler {
     }
 
     // 2) enqueue runnable nodes: all dependencies done, not already handled.
+    // Bounded by maxFanOut per tick: excess ready nodes are simply re-evaluated
+    // on a later tick (the queue dedups by runId+nodeId, so nothing is dropped
+    // or double-processed). At the default no-cap this enqueues everything,
+    // identical to before.
+    let enqueued = 0
     for (const node of this.workflow.nodes) {
+      if (enqueued >= this.maxFanOut) break
       const current = status.get(node.nodeId)
       if (current === 'done' || current === 'pending' || current === 'skipped')
         continue
       const ready = dependenciesOf(node).every((dep) => status.get(dep) === 'done')
-      if (ready) await this.queue.enqueue({ runId, nodeId: node.nodeId })
+      if (ready) {
+        await this.queue.enqueue({ runId, nodeId: node.nodeId })
+        enqueued++
+      }
     }
   }
 }

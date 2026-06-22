@@ -1,6 +1,7 @@
 import type {
   FuncNode,
   FuncDefinition,
+  EffectfulFunc,
   FuncContext,
   ProviderClient,
   StepRecord,
@@ -10,6 +11,17 @@ import type { Workflow } from './graph'
 import type { RunLogStore } from './log'
 import type { Queue, QueueItem } from './queue'
 import type { Scheduler } from './scheduler'
+import { eventHash, type IdempotencyStore } from './idempotency'
+
+// Per-run identity + idempotency wiring, injected by runWorkflow. `runKey` is
+// the REAL run id (the engine's internal log uses a fixed "run" id, which must
+// never be the idempotency key — it would collide across every run). Absent on
+// the legacy path → no dedup (behaviour unchanged).
+export interface RunSafety {
+  spaceId: string
+  runKey: string
+  idempotency?: IdempotencyStore
+}
 
 export interface FuncRegistry {
   get(funcId: string, version: number): Promise<FuncDefinition>
@@ -36,6 +48,7 @@ export class Worker {
     private log: RunLogStore,
     private queue: Queue,
     private scheduler: Scheduler,
+    private safety?: RunSafety,
   ) {}
 
   async process(item: QueueItem): Promise<void> {
@@ -55,14 +68,38 @@ export class Worker {
       await this.log.append(this.record(item, node, 'done', input, output, key))
     } else {
       await this.log.append(this.record(item, node, 'pending', input, undefined, key))
-      const clients = await this.connections.inject(node)
-      const ctx: FuncContext = { idempotencyKey: key, connections: clients }
-      const output = await this.runtime.run(def, ctx, input)
+      const output = await this.executeEffect(node, def, input, key)
       await this.log.append(this.record(item, node, 'done', input, output, key))
     }
 
     await this.queue.ack(item)
     await this.scheduler.tick(item.runId)
+  }
+
+  // Runs an effectful step's side-effect, guarded by idempotency when the func
+  // opts in (mechanism !== "none") and a store is wired. On a dedup hit the
+  // side-effect is NOT re-fired — the recorded output is reused. Otherwise it
+  // runs and the output is sealed under the (real runId, funcId, eventHash) key.
+  private async executeEffect(
+    node: FuncNode,
+    def: EffectfulFunc,
+    input: Record<string, unknown>,
+    key: string,
+  ): Promise<unknown> {
+    const idem = this.safety?.idempotency
+    const guarded = !!idem && def.effect.idempotency.mechanism !== 'none'
+    const ik = guarded
+      ? { runId: this.safety!.runKey, funcId: node.funcId, eventHash: eventHash(input) }
+      : undefined
+    if (idem && ik) {
+      const claim = await idem.claim(this.safety!.spaceId, ik)
+      if (!claim.claimed) return claim.cachedOutput // already done — don't re-fire
+    }
+    const clients = await this.connections.inject(node)
+    const ctx: FuncContext = { idempotencyKey: key, connections: clients }
+    const output = await this.runtime.run(def, ctx, input)
+    if (idem && ik) await idem.complete(this.safety!.spaceId, ik, output)
+    return output
   }
 
   private findNode(nodeId: string): FuncNode {

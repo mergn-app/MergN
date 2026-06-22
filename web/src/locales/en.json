@@ -2,6 +2,7 @@
   "common": {
     "save": "Save",
     "saving": "saving…",
+    "saved": "Saved",
     "delete": "Delete",
     "loading": "loading…",
     "loadingPage": "Loading…",
@@ -79,8 +80,8 @@
     "chat": "Chat",
     "history": "History",
     "node": "Node",
-    "logs": "Logs",
-    "files": "Files"
+    "files": "Files",
+    "versions": "Versions"
   },
   "logsPanel": {
     "refresh": "Refresh",
@@ -315,5 +316,232 @@
     "created": "Created {{date}}",
     "planLocked": "Remote MCP is available on paid plans. Upgrade to connect.",
     "error": "Could not create token. Please try again."
+  },
+  "health": {
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "failing": "Failing",
+    "nodata": "No data",
+    "cause": {
+      "scheduleStopped": "the schedule stopped firing",
+      "webhookSilent": "expected webhook events stopped arriving"
+    }
+  },
+  "monitoring": {
+    "open": "Open monitoring",
+    "monitor": "Monitor",
+    "back": "Back to editor",
+    "flows": "Flows",
+    "noFlows": "No flows yet",
+    "activity": "Activity",
+    "runs": "Runs",
+    "noRuns": "No runs yet",
+    "logs": "Logs",
+    "noLogs": "No logs for this flow",
+    "versions": "Version history",
+    "settings": "Settings",
+    "assistant": "Assistant",
+    "assistantSoon": "Monitoring assistant — coming soon",
+    "graphHint": "latency per run, newest right",
+    "runDetail": "Run detail",
+    "logDetail": "Log detail",
+    "noLogDetail": "No additional detail",
+    "noSteps": "No step records",
+    "settingsIntro": "Per-flow monitoring settings:",
+    "settingsHeal": "Self-healing on/off + mode",
+    "settingsAlerts": "Which events alert you + channels",
+    "settingsLiveness": "Liveness & outcome (silent-success) checks",
+    "settingsSoon": "Editing these lands with the settings milestone.",
+    "latency": "Latency",
+    "successRate": "Success rate",
+    "lastN": "last {{n}}",
+    "errorTypes": "Error types",
+    "noErrors": "No errors",
+    "volume": "Run volume (24h)",
+    "volumeHint": "runs per hour",
+    "axisOld": "← older",
+    "axisNew": "newer →",
+    "axisLatencyMs": "latency (ms)",
+    "axis24hAgo": "24h ago",
+    "axisNow": "now",
+    "alertsToggle": "Send external alerts",
+    "alertsToggleHint": "Off by default. When on, this flow's errors/recoveries notify your channels and run alert-handler flows. (The activity log records them either way.)",
+    "alerts": "Alerts",
+    "alertsOn": "Alerts on",
+    "alertsOff": "Alerts off",
+    "alertChannels": "Channels & rules",
+    "alertChannelsSoon": "Choosing destinations (Discord, Slack, email) and per-severity rules is coming soon. For now the toggle controls all configured channels."
+  },
+  "heal": {
+    "fixes": "Fixes",
+    "fixTitle": "Proposed fix",
+    "noFixes": "No fixes yet for this flow.",
+    "changes": "Changes",
+    "noChanges": "No structural changes.",
+    "triggerChanged": "Trigger changed",
+    "approve": "Approve",
+    "reject": "Reject",
+    "undo": "Undo",
+    "status": {
+      "proposed": "Proposed",
+      "applied": "Applied",
+      "rejected": "Rejected",
+      "reverted": "Reverted",
+      "failed": "Failed"
+    },
+    "mode": {
+      "notify": "Notify",
+      "propose": "Propose",
+      "auto": "Auto"
+    },
+    "confidence": {
+      "high": "High confidence",
+      "medium": "Medium confidence",
+      "low": "Low confidence"
+    },
+    "badge": {
+      "code": "Step code changed",
+      "input": "Inputs changed",
+      "wire": "Wiring changed",
+      "gate": "Condition changed",
+      "provider": "Provider changed"
+    },
+    "reason": {
+      "cap-exceeded": "Run-safety cap",
+      "not-logic": "Not auto-fixable",
+      "low-confidence": "Low confidence",
+      "danger-downstream": "Risky downstream",
+      "blast-too-wide": "Too wide",
+      "loop-cap": "Loop limit",
+      "fix-ineffective": "Fix ineffective",
+      "kill-switch": "Healing off"
+    }
+  },
+  "versions": {
+    "title": "Version history",
+    "save": "Save version",
+    "label": "Label (optional)",
+    "noChange": "No changes since the last version.",
+    "empty": "No versions yet — save one above.",
+    "restore": "Restore this version",
+    "confirm": "Confirm",
+    "source": {
+      "editor": "Edit",
+      "chat": "AI chat",
+      "mcp": "MCP",
+      "run-snapshot": "Run",
+      "healing": "Self-heal",
+      "restore": "Restore"
+    }
+  },
+  "review": {
+    "title": "Change review",
+    "switchTo": "Switch to this version",
+    "added": "Added",
+    "modified": "Modified",
+    "removed": "Removed",
+    "oldNew": "old → new",
+    "outputs": "Outputs",
+    "present": "set",
+    "cat": {
+      "code": "Code",
+      "input": "Inputs",
+      "provider": "Provider",
+      "gate": "Condition",
+      "wire": "Wiring"
+    },
+    "history": "History",
+    "noHistory": "No history yet.",
+    "pickNode": "Select a node",
+    "pickNodeHint": "Click a highlighted node to see its change."
+  },
+  "settings": {
+    "title": "Flow settings",
+    "close": "Close",
+    "heal": "Self-healing",
+    "healHint": "Auto-diagnose + fix when this flow fails",
+    "mode": "Fix mode",
+    "modeHint": "What happens when a fix is found",
+    "modeNotify": "Notify",
+    "modePropose": "Propose",
+    "modeAuto": "Auto",
+    "autoReplay": "Auto-replay",
+    "autoReplayHint": "Replay buffered events after a successful fix",
+    "alerts": "Alerts",
+    "alertsHint": "Send external alerts for this flow",
+    "gatedPlan": "Requires a Pro plan",
+    "gatedKill": "Global kill-switch is on",
+    "gatedDisabled": "Disabled for this deployment"
+  },
+  "governance": {
+    "title": "Governance",
+    "kill": "Global kill-switch",
+    "killHint": "Instantly stop all automatic fixes across every flow",
+    "audit": "Audit trail",
+    "auditEmpty": "No events yet"
+  },
+  "alert": {
+    "title": "Alert channels",
+    "channels": "Channels",
+    "noChannels": "No channels yet",
+    "addChannel": "Add a channel",
+    "add": "Add",
+    "test": "Send test",
+    "tested": "Sent ✓",
+    "label": "Label (optional)",
+    "handlers": "Flows that run on alerts",
+    "noHandlers": "None — give a flow a 'monitor' trigger to handle alerts",
+    "handlersHint": "A flow with a 'monitor' trigger auto-runs on every alert, receiving the event as its input — run custom logic instead of (or with) a channel.",
+    "addHandler": "Add a handler flow",
+    "pickFlow": "Select a flow…"
+  },
+  "doctor": {
+    "tab": "Doctor",
+    "emptyTitle": "MergN Doctor",
+    "emptySubtitle": "Ask about this flow's health, diagnose a failure, or have me fix it.",
+    "placeholder": "Ask the Doctor about this flow…",
+    "working": "Doctor is working…",
+    "clearChat": "Clear chat",
+    "review": "Review",
+    "suggest": {
+      "health": "Is this flow healthy?",
+      "lastFail": "Why did the last run fail?",
+      "summary": "Summarize what happened recently."
+    },
+    "fixCard": {
+      "title": "Proposed fix"
+    },
+    "versionCard": {
+      "title": "Switch to an earlier version",
+      "fallback": "Version {{seq}}"
+    },
+    "status": {
+      "proposed": "Needs review",
+      "applied": "Applied",
+      "rejected": "Rejected",
+      "reverted": "Reverted",
+      "failed": "Failed"
+    },
+    "tool": {
+      "list_runs": "Reading runs",
+      "get_run": "Reading a run",
+      "get_health": "Checking health",
+      "get_analytics": "Reading analytics",
+      "list_versions": "Reading versions",
+      "list_heal_events": "Reading fix history",
+      "get_buffer": "Checking the buffer",
+      "diagnose_failure": "Diagnosing",
+      "fix_failure": "Preparing a fix",
+      "suggest_version": "Comparing versions",
+      "pause_flow": "Pausing the flow",
+      "resume_flow": "Resuming the flow",
+      "test_buffer": "Testing a buffered event",
+      "replay_buffer": "Replaying the buffer",
+      "retry_run": "Retrying the run",
+      "compare_runs": "Comparing runs",
+      "check_connection": "Checking connections",
+      "revert_heal": "Reverting a heal",
+      "incident_summary": "Writing a summary"
+    }
   }
 }

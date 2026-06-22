@@ -8,3 +8,6 @@ data/
 .DS_Store
 deploy/flowbaker/
 docker-compose.prod.yml
+
+# local research/design notes — not tracked
+docs/research/

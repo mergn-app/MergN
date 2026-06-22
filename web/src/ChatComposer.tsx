@@ -11,6 +11,7 @@ export function ChatComposer({
   disabled = false,
   submitDisabled,
   inputRef: externalRef,
+  placeholder,
 }: {
   value: string;
   onChange: (value: string) => void;
@@ -18,6 +19,7 @@ export function ChatComposer({
   disabled?: boolean;
   submitDisabled?: boolean;
   inputRef?: RefObject<HTMLTextAreaElement | null>;
+  placeholder?: string;
 }) {
   const { t } = useTranslation();
   const internalRef = useRef<HTMLTextAreaElement>(null);
@@ -56,7 +58,7 @@ export function ChatComposer({
                 onSubmit();
               }
             }}
-            placeholder={t("chat.placeholder")}
+            placeholder={placeholder ?? t("chat.placeholder")}
             className="max-h-52 min-h-20 flex-1 resize-none self-stretch border-none bg-transparent px-1 py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground focus-visible:ring-0"
           />
           <Button

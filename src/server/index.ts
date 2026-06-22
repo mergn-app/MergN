@@ -31,7 +31,15 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { authorFunc } from "../agent/func-author";
 import { createWorkflowStore, type TriggerConfig, type WorkflowStore } from "./store";
-import { createRunStore, type RunDoc } from "./runs";
+import { createVersionStore } from "./workflow-versions";
+import { diffWorkflows } from "./workflow-diff";
+import { createRunStore, type RunDoc, type RunHeader } from "./runs";
+import { createBufferStore } from "./trigger-buffer";
+import { replayBuffer, testRunFirst, type ReplayDeps } from "./buffer-replay";
+import { computeAnalytics } from "./analytics";
+import { createFlowSettingsStore, type FlowSettings } from "./flow-settings";
+import { createGovernance, createAuditStore } from "./governance";
+import { maskValue, maskErrorString, resolveMaskLevel, type MaskLevel } from "./pii-mask";
 import { createSettingsStore } from "./settings";
 import { createMcpTokenStore } from "./mcp-tokens";
 import { createMcpOAuth, OAuthError } from "./mcp-oauth";
@@ -43,10 +51,42 @@ import {
   type RateLimitRule,
 } from "./ratelimit";
 import { runWorkflow } from "./run";
-import { emitRun, onRun } from "./run-events";
+import { createIdempotencyStore } from "./idempotency";
+import { createConcurrencyGuard } from "./concurrency";
+import { createFixEngine, type FixMode } from "./fix-engine";
+import { buildDiagnosisContext } from "./diagnosis-context";
+import { createHealEventStore } from "./heal-events";
+import { createHealOrchestrator } from "./heal-modes";
+import { createHealDispatcher } from "./heal-dispatcher";
+import {
+  emitRun,
+  onRun,
+  initRunEvents,
+  jetStreamRunEvents,
+} from "./run-events";
+import { classifyError, type ErrorType } from "./error-classify";
+import {
+  evaluateOutcome,
+  maskedIsEmpty,
+  type OutcomeConfig,
+  type OutcomeFail,
+} from "./outcome";
+import type { LivenessConfig } from "./webhook-liveness";
+import { checkConnectionBindings, bindingsOf } from "./connection-check";
+import {
+  createHealthMonitor,
+  type HealthState,
+  type HealthStatus,
+} from "./health";
+import { createAlertChannelStore } from "./alert-store";
+import { createAlertHandlerStore } from "./alert-handlers";
+import { createAlertService } from "./alert-service";
+import type { ChannelKind, ChannelSecret } from "./alert-channels";
+import type { Severity, AlertCategory } from "./alert-router";
+import { createLivenessEvaluator } from "./liveness";
 import { createRegistry, publicAuth, type ProviderDraft } from "../providers/registry";
 import { assertSpace, type DocStore } from "../store/docstore";
-import { createStorage } from "../store/factory";
+import { createStorage, createCipher } from "../store/factory";
 import {
   initUsageCap,
   recordTokens,
@@ -77,7 +117,12 @@ import {
   type WebhookAuthType,
 } from "./webhook-auth";
 import { checkForUpdates } from "./update-check";
-import { connectNats, initSchedulerStream, type NatsCtx } from "./nats";
+import {
+  connectNats,
+  initSchedulerStream,
+  initRunEventsStream,
+  type NatsCtx,
+} from "./nats";
 import { createScheduler, missingRequiredParams, type Scheduler } from "./scheduler";
 import { createSchedulerConsumer, fireWorkflow } from "./scheduler-consumer";
 import { createScheduleStore, type ScheduleStore } from "../store/schedules";
@@ -87,6 +132,7 @@ import { createOAuth } from "./oauth";
 import { auth, getSessionUser, emailVerificationRequired } from "./auth";
 import { createMembership } from "./membership";
 import type { FuncDefinition, StepRecord } from "../atoms/index";
+import { funcToWire } from "./func-wire";
 
 const SYSTEM = [
   "You are a workflow builder assistant for an AI-native automation product.",
@@ -102,29 +148,6 @@ const SYSTEM = [
   "The user may have uploaded FILES to this space (CSV/JSON/text/etc.). Use list_files to see them and read_file to inspect content before building a workflow that processes a file. A workflow step can receive a file's content via a 'file' input the user picks.",
   "Keep replies short. After building, briefly summarize the steps and how they connect.",
 ].join("\n");
-
-function funcToWire(func: FuncDefinition, title: string, summary: string) {
-  return {
-    id: func.id,
-    title,
-    summary,
-    version: func.version,
-    kind: func.kind,
-    pure: func.pure,
-    inputs: func.inputs.map((p) => ({
-      name: p.name,
-      role: p.role,
-      type: p.schema.type,
-      required: p.required,
-    })),
-    outputSchema: func.outputSchema,
-    bodySource: func.body.source,
-    dependencies: func.body.dependencies ?? [],
-    requires: func.pure ? [] : func.requires,
-    dangerClass: func.pure ? null : func.effect.dangerClass,
-    idempotency: func.pure ? null : func.effect.idempotency,
-  };
-}
 
 function leanFunc(f: {
   id: string;
@@ -216,6 +239,16 @@ function withResultLimits(tools: ToolSet): ToolSet {
 
 const MANAGED =
   process.env.MANAGED === "1" || process.env.MANAGED === "true";
+// PII masking default for persisted run step IO. Deployment-aware, env-
+// overridable: managed = "shape" (multi-tenant privacy), self-host = "full"
+// (operator's own data, best diagnosis). Same env-?:-MANAGED pattern as MCP.
+const MASK_DEFAULT: MaskLevel = (["shape", "keys", "full"] as const).includes(
+  process.env.PII_MASK_DEFAULT as MaskLevel,
+)
+  ? (process.env.PII_MASK_DEFAULT as MaskLevel)
+  : MANAGED
+    ? "shape"
+    : "full";
 // MCP support is a SELF-HOST-only feature: never on a managed/prod instance, and
 // even self-host must opt in with ENABLE_MCP. Gates the /api/mcp/* endpoints.
 const MCP_ENABLED = !MANAGED && /^(1|true)$/i.test(process.env.ENABLE_MCP ?? "");
@@ -245,9 +278,71 @@ const registry = createRegistry(store);
 const oauth = createOAuth({ store, vault, registry });
 const connections = createConnections({ store, vault, oauth });
 const workflows = createWorkflowStore(store);
+// Captures the (secret-free) provider drafts a workflow's funcs require, so a
+// sealed version restores its own provider code — not whatever the registry was
+// last re-authored to. Shared by the version store (pinning) and the fix engine
+// (diffing a provider repair).
+const pinProviders = async (spaceId: string, funcs: unknown[]): Promise<Record<string, unknown>> => {
+  const ids = new Set<string>();
+  for (const f of funcs as Array<{ requires?: Array<{ provider?: string }> }>)
+    for (const r of f?.requires ?? []) if (r?.provider) ids.add(r.provider);
+  const out: Record<string, unknown> = {};
+  for (const id of ids) {
+    const draft = await registry.getProviderDraft(spaceId, id);
+    if (draft) out[id] = draft; // builtins (e.g. "http") return null → excluded
+  }
+  return out;
+};
+const versions = createVersionStore(store, { pinProviders });
 const mcpTokens = createMcpTokenStore(store);
 const mcpOauth = createMcpOAuth(store);
 const runs = createRunStore(store);
+// Same cipher as secret-at-rest (Vault Transit on managed, null on self-host).
+// Used to seal/unseal the raw resume-seed capsule so masked managed runs still
+// resume from step with real values (null → self-host stores raw already).
+const seedCipher = createCipher();
+// No-data-loss trigger buffer (events held while a flow is paused). Shares the
+// cipher so buffered event payloads are encrypted at rest on managed.
+const buffer = createBufferStore(store, seedCipher);
+// Wiring for the no-data-loss buffer drain — it orchestrates the existing
+// idempotency + resume primitives, writing no new dedup/resume logic.
+// runSavedWorkflow is hoisted.
+const replayDeps: ReplayDeps = {
+  buffer,
+  getWorkflow: (s, w) => workflows.getWorkflow(s, w),
+  runSavedWorkflow: (s, wf, input, trigger, runId, resumeFrom) =>
+    runSavedWorkflow(s, wf, input, trigger, runId, resumeFrom),
+  setPaused: (s, w, p) => workflows.setPaused(s, w, p),
+};
+// Governance + per-flow policy. Declared before canHeal so the gate can
+// read the global kill-switch.
+const flowSettings = createFlowSettingsStore(store);
+const governance = createGovernance(store);
+const audit = createAuditStore(store);
+// Run-safety: idempotency dedup for effectful steps + per-space concurrent
+// run ceiling. Both no-op on self-host (no declared mechanisms / uncapped).
+const idempotency = createIdempotencyStore(store);
+const concurrency = createConcurrencyGuard({
+  store,
+  countActive: async (spaceId) =>
+    (await runs.listRuns(spaceId)).filter((r) => r.status === "running").length,
+});
+// Per-flow health. onChange fires on status transitions: we log it and hand it
+// to the alert pipeline (late-bound below, after its deps exist).
+let onHealthTransition: (
+  spaceId: string,
+  state: HealthState,
+  prev: HealthStatus | undefined,
+) => void = () => {};
+const health = createHealthMonitor({
+  runs,
+  onChange: (spaceId, state, prev) => {
+    console.log(
+      `[health] ${spaceId}/${state.workflowId}: ${prev ?? "—"} → ${state.status}`,
+    );
+    onHealthTransition(spaceId, state, prev);
+  },
+});
 const settings = createSettingsStore(store);
 
 // load the saved LLM config (in-app settings) into the model factory at boot;
@@ -265,6 +360,32 @@ void settings
 const membership = createMembership(store);
 const chats = createChatStore(store);
 const userLogs = createLogStore(store);
+// Alerting: deliver health transitions to the activity log (always) + any
+// configured external channels (Telegram/Slack/Discord/email), engine-bypass.
+const alertChannels = createAlertChannelStore(store, vault);
+const alertHandlers = createAlertHandlerStore(store);
+const alerts = createAlertService({
+  channels: alertChannels,
+  logs: userLogs,
+  workflowName: async (spaceId, workflowId) =>
+    (await workflows.getWorkflow(spaceId, workflowId))?.name,
+  // a flow is a handler if it's an enabled entry in the registry (loop guard)
+  isHandler: (spaceId, workflowId) => alertHandlers.isEnabled(spaceId, workflowId),
+  // external alerts are opt-in per flow (default OFF) — no notification spam
+  alertsEnabled: async (spaceId, workflowId) =>
+    (await workflows.getWorkflow(spaceId, workflowId))?.alertsEnabled === true,
+  // the user's chosen handler flows (enabled entries fire on every alert)
+  listHandlers: async (spaceId) =>
+    (await alertHandlers.list(spaceId)).filter((h) => h.enabled).map((h) => ({ workflowId: h.workflowId })),
+  // run a registered handler flow with the alert payload as its input
+  dispatchWorkflow: async (spaceId, workflowId, payload) => {
+    const wf = await workflows.getWorkflow(spaceId, workflowId);
+    if (!wf) return;
+    await runSavedWorkflow(spaceId, wf, payload as unknown as Record<string, unknown>, "monitor");
+  },
+});
+onHealthTransition = (spaceId, state, prev) =>
+  void alerts.onHealthChange(spaceId, state, prev).catch(() => {});
 const fileService = createFileService(store, createBlobStore());
 const usage = createUsageStore(store);
 const billing: BillingService =
@@ -320,6 +441,78 @@ async function canUseRemoteMcp(spaceId: string): Promise<boolean> {
   return OWN_MODEL_PLANS.has(plan.slug);
 }
 
+// May this space PRODUCE an AI fix proposal? Diagnosis is NEVER gated; only the
+// LLM-fix proposal is. HEAL_DISABLED is a hard kill (kill-switch). Self-host →
+// always on; managed → paid plans only (Free gets notify-only diagnosis).
+const HEAL_DISABLED = /^(1|true|yes)$/i.test(process.env.HEAL_DISABLED ?? "");
+async function canHeal(spaceId: string): Promise<boolean> {
+  if (HEAL_DISABLED) return false;
+  if (await governance.killSwitch()) return false; // deployment-wide emergency stop
+  if (!MANAGED) return true; // self-host: open, uncapped
+  if (!billing.enabled()) return false;
+  const plan = await billing.planOf(spaceId);
+  return OWN_MODEL_PLANS.has(plan.slug);
+}
+const fixEngine = createFixEngine({
+  registry,
+  getWorkflow: (spaceId, id) => workflows.getWorkflow(spaceId, id),
+  saveWorkflow: (spaceId, wf) => workflows.saveWorkflow(spaceId, wf),
+  seal: (spaceId, head, meta) => versions.seal(spaceId, head, meta),
+  setCurrentVersion: (spaceId, id, versionId) => workflows.setCurrentVersion(spaceId, id, versionId),
+  pinProviders,
+  canProposeFix: canHeal,
+});
+
+// Self-healing orchestration. Per-flow heal is OPT-IN, default OFF — until the
+// per-flow settings store lands, the default mode/enable is env-driven
+// (self-host operator can flip HEAL_DEFAULT_ENABLED=1 + HEAL_DEFAULT_MODE=auto).
+const HEAL_DEFAULT_ENABLED = /^(1|true|yes)$/i.test(process.env.HEAL_DEFAULT_ENABLED ?? "");
+const HEAL_DEFAULT_MODE: FixMode = (["notify", "propose", "auto"] as const).includes(
+  process.env.HEAL_DEFAULT_MODE as FixMode,
+)
+  ? (process.env.HEAL_DEFAULT_MODE as FixMode)
+  : "propose";
+const HEAL_WINDOW_MS = Number(process.env.HEAL_WINDOW_MS) || 3_600_000; // loop-counter window (engineering constant)
+const healEvents = createHealEventStore(store);
+const healOrchestrator = createHealOrchestrator({
+  fixEngine,
+  buildContext: (spaceId, runId) =>
+    buildDiagnosisContext({ getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow }, spaceId, runId),
+  events: healEvents,
+  getFlowMode: async (spaceId, workflowId) => {
+    // untouched flows fall back to the deployment env defaults
+    const s = await flowSettings.get(spaceId, workflowId, {
+      enabled: HEAL_DEFAULT_ENABLED,
+      fixMode: HEAL_DEFAULT_MODE,
+      autoReplay: false,
+    });
+    return { enabled: s.enabled, fixMode: s.fixMode };
+  },
+  canHeal,
+  caps: () => ({ blastMax: LIMITS.healBlastRadiusMax, attemptMax: LIMITS.healAttemptMax, windowMs: HEAL_WINDOW_MS }),
+  log: (spaceId, e) => void userLogs.append(spaceId, { ...e, source: "healing" }).catch(() => {}),
+});
+const healDispatcher = createHealDispatcher({
+  orchestrate: async (t) => {
+    const ev = await healOrchestrator.orchestrate(t);
+    if (ev?.status === "applied") {
+      void audit.record(t.spaceId, { kind: "heal.applied", message: ev.diagnosis || "auto-heal applied", workflowId: t.workflowId, actor: "system" });
+      // auto-replay: opt-in per flow + still gated by canHeal (a kill-switch
+      // stops the automatic continuation; the manual Replay button is unaffected).
+      const s = await flowSettings.get(t.spaceId, t.workflowId);
+      if (s.autoReplay && (await canHeal(t.spaceId))) {
+        await replayBuffer(replayDeps, t.spaceId, t.workflowId).catch((e) => console.error("[heal] auto-replay failed", e));
+      }
+    }
+    return ev;
+  },
+  onError: (e) => console.error("[heal] orchestrate failed", e),
+});
+
+// MCP write-capability (pause/resume/buffer-replay + apply_fix). Self-host on;
+// managed opt-in. Read + diagnose stay on whenever remote MCP is enabled.
+const MCP_WRITE_ENABLED = !MANAGED || /^(1|true|yes)$/i.test(process.env.MCP_WRITE_ENABLED ?? "");
+
 const remoteMcpDeps: RemoteMcpDeps = {
   workflows,
   registry,
@@ -333,6 +526,97 @@ const remoteMcpDeps: RemoteMcpDeps = {
     const run = await runSavedWorkflow(spaceId, wf, input, "mcp");
     return { records: run.records };
   },
+  reconcileSchedule: async (spaceId, id) => {
+    const wf = await workflows.getWorkflow(spaceId, id);
+    if (wf) await scheduler.reconcile(spaceId, wf);
+  },
+  // ── Monitoring / diagnosis (read-only; on whenever remote MCP is enabled) ──
+  monitoring: {
+    listRuns: (s, wf, limit) => runs.listRuns(s, wf, limit),
+    getRun: (s, id) => runs.getRun(s, id),
+    getHealth: async (s, wf) => (wf ? await health.recompute(s, wf) : await health.summary(s)),
+    getAnalytics: async (s, wf) => computeAnalytics(await runs.listRuns(s, wf), Date.now()),
+    listVersions: (s, wf) => versions.list(s, wf),
+    listHealEvents: (s, wf, limit) => healEvents.listForWorkflow(s, wf, limit),
+    diagnose: async (s, runId, language) => {
+      const ctx = await buildDiagnosisContext(
+        { getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow },
+        s,
+        runId,
+      );
+      if (!ctx) return null;
+      return fixEngine.diagnose(s, ctx, { language: language ?? "English" });
+    },
+  },
+  // ── Fix (write-capability): propose (stage) + approve (apply via the in-app
+  // approve path; human-gated, never raw). Wired only when write-enabled. ──
+  heal: MCP_WRITE_ENABLED
+    ? {
+        proposeFix: async (s, runId) => {
+          const ctx = await buildDiagnosisContext(
+            { getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow },
+            s,
+            runId,
+          );
+          if (!ctx) return { fixable: false, error: "run not found or not a failure" };
+          const d = await fixEngine.diagnose(s, ctx, { language: "English" });
+          if (!d.proposedFix) return { fixable: false, plainLanguage: d.plainLanguage, errorType: d.errorType };
+          const ev = await healEvents.record(s, {
+            spaceId: s,
+            workflowId: d.workflowId,
+            runId,
+            mode: "propose",
+            errorType: d.errorType,
+            confidence: d.confidence,
+            diagnosis: d.plainLanguage,
+            proposal: d.proposedFix,
+            status: "proposed",
+          });
+          return {
+            fixable: true,
+            eventId: ev.id,
+            workflowId: d.workflowId,
+            kind: d.proposedFix.kind,
+            plainLanguage: d.plainLanguage,
+            confidence: d.confidence,
+            blastRadius: d.blastRadius,
+            needsConfirm: true,
+          };
+        },
+        approveFix: async (s, workflowId, eventId) => {
+          const ev = await healEvents.get(s, eventId);
+          if (!ev || ev.workflowId !== workflowId) return { ok: false, error: "fix event not found" };
+          if (ev.status !== "proposed") return { ok: false, error: `fix is '${ev.status}', not awaiting approval` };
+          if (!ev.proposal) return { ok: false, error: "fix event has no proposal to apply" };
+          const { versionId } = await fixEngine.applyFix(s, workflowId, ev.proposal, { runId: ev.runId, mode: "propose" });
+          await healEvents.update(s, ev.id, { status: "applied", versionId, approvedBy: "mcp" });
+          return { ok: true, versionId };
+        },
+      }
+    : undefined,
+  // ── Operational actions (write-capability): pause/resume/buffer ──
+  ops: MCP_WRITE_ENABLED
+    ? {
+        pause: async (s, wf) => {
+          await workflows.setPaused(s, wf, true, "manual");
+          if (scheduler) await scheduler.pause(s, wf);
+        },
+        resume: async (s, wf) => {
+          await workflows.setPaused(s, wf, false);
+          if (scheduler) await scheduler.resume(s, wf);
+        },
+        listBuffer: async (s, wf) =>
+          (await buffer.list(s, wf)).map((e) => ({
+            id: e.id,
+            seq: e.seq,
+            status: e.status,
+            receivedAt: e.receivedAt,
+            preview: maskValue(e.payload, MASK_DEFAULT),
+          })),
+        testBuffer: (s, wf) => testRunFirst(replayDeps, s, wf, new Date().toISOString()),
+        replayBuffer: (s, wf) => replayBuffer(replayDeps, s, wf),
+      }
+    : undefined,
 };
 
 setLlmBudgetHooks({
@@ -391,6 +675,84 @@ async function llmRateLimit(c: Context): Promise<Response | null> {
   return null;
 }
 
+// Outcome health: did a green (done) run actually do its job? Evaluates the
+// flow's opt-in outcome config against this run's RAW step outputs (no PII
+// leaves — the result is just kind/nodeId/detail). For drift-to-empty it reads
+// a bounded window of prior done runs' (masked) outputs; array/object emptiness
+// survives masking, so the "zero rows" case is caught.
+const OUTCOME_DRIFT_WINDOW = 5;
+async function evaluateRunOutcome(
+  spaceId: string,
+  wf: { id: string; funcs: unknown[]; outcome?: OutcomeConfig },
+  records: StepRecord[],
+  currentRunId: string,
+): Promise<OutcomeFail | null> {
+  const cfg = wf.outcome;
+  if (!cfg) return null;
+  const pureById = new Map(
+    (wf.funcs as Array<{ id: string; pure?: boolean }>).map((f) => [f.id, !!f.pure]),
+  );
+  const outputs = records
+    .filter((r) => r.nodeId !== "trigger" && r.status === "done")
+    .map((r) => ({
+      nodeId: r.nodeId,
+      output: r.output,
+      effectful: !pureById.get(r.nodeId),
+    }));
+
+  let driftBaseline: Record<string, number> | undefined;
+  let driftHistory = 0;
+  if (cfg.driftToEmpty) {
+    const prior = (await runs.listRuns(spaceId, wf.id))
+      .filter((m) => m.status === "done" && m.id !== currentRunId)
+      .slice(0, OUTCOME_DRIFT_WINDOW);
+    driftHistory = prior.length;
+    driftBaseline = {};
+    for (const m of prior) {
+      const run = await runs.getRun(spaceId, m.id);
+      for (const rec of run?.records ?? []) {
+        if (rec.nodeId === "trigger") continue;
+        if (!maskedIsEmpty(rec.output)) // masked history: «string:0» counts as empty
+          driftBaseline[rec.nodeId] = (driftBaseline[rec.nodeId] ?? 0) + 1;
+      }
+    }
+  }
+  return evaluateOutcome({ outputs, config: cfg, driftBaseline, driftHistory });
+}
+
+// Shared resume seed: a prior run's `done` steps + its input. Both the manual
+// /api/run path and runSavedWorkflow (all triggers + auto-heal) use this, so
+// the "what counts as already-done" rule lives in exactly one place.
+async function loadResumeSeed(
+  spaceId: string,
+  priorRunId: string,
+): Promise<{ seed: StepRecord[]; input: Record<string, unknown> } | null> {
+  // Prefer the encrypted raw capsule (sealed on failed+masked runs): getRun's
+  // step IO is PII-masked at persist, so under managed masking it can't seed a
+  // correct resume. Self-host (no cipher / mask "full") falls through to getRun,
+  // whose records are already raw.
+  if (seedCipher) {
+    const sealed = await runs.readResumeSeed(spaceId, priorRunId);
+    if (sealed) {
+      try {
+        const raw = JSON.parse(await seedCipher.decrypt(sealed)) as {
+          input: Record<string, unknown>;
+          seed: StepRecord[];
+        };
+        return { seed: raw.seed.filter((r) => r.status === "done"), input: raw.input };
+      } catch (e) {
+        console.error(`resume seed unseal failed [${priorRunId}] — falling back to masked`, e);
+      }
+    }
+  }
+  const prior = await runs.getRun(spaceId, priorRunId);
+  if (!prior) return null;
+  return {
+    seed: prior.records.filter((r) => r.status === "done"),
+    input: prior.input,
+  };
+}
+
 async function runSavedWorkflow(
   spaceId: string,
   wf: {
@@ -401,57 +763,238 @@ async function runSavedWorkflow(
     config?: Record<string, Record<string, string>>;
     nodeConnections?: Record<string, Record<string, string>>;
     variables?: Record<string, unknown>;
+    outcome?: OutcomeConfig;
+    maskLevel?: MaskLevel;
   },
   input: Record<string, unknown>,
   trigger: string,
   runId?: string,
+  // Resume from a prior run: its `done` steps seed this run (re-run continues
+  // from where it failed). Available to ALL triggers + auto-heal/replay, not
+  // just manual /api/run. NOTE: the seed comes from getRun, whose step IO is
+  // PII-masked at persist time — so seeded values are raw only when this
+  // deployment stores raw (self-host / mask "full"). Under managed masking the
+  // seed carries masked values (the same long-standing limit /api/run has);
+  // restoring raw-value resume is a separate, deliberate change.
+  resumeFrom?: { runId: string },
 ): Promise<RunDoc> {
+  // Unified recorder for saved-workflow triggers (webhook/schedule/poll).
+  // Seals the running version → writes a "running" header → persists each step
+  // append-only (PII-masked) → finalizes → emits + prunes. Returns the RunDoc
+  // with RAW (unmasked) records for the immediate caller.
+  const id = runId ?? randomUUID();
   const startedAt = new Date().toISOString();
-  const records: StepRecord[] = [];
-  const merged = { ...(wf.variables ?? {}), ...input };
-  await runWorkflow(
-    { spaceId, registry, connections, files: fileService },
-    wf.funcs as Parameters<typeof runWorkflow>[1],
-    wf.wires as Parameters<typeof runWorkflow>[2],
-    merged,
-    wf.config ?? {},
-    wf.nodeConnections ?? {},
-    (record) => {
-      records.push(record);
-    },
-  );
-  const run: RunDoc = {
-    id: runId ?? randomUUID(),
+  const maskLevel = resolveMaskLevel(wf.maskLevel, MASK_DEFAULT); // per-flow override
+  let merged = { ...(wf.variables ?? {}), ...input };
+
+  // Run-safety: refuse the run when the space is already at its concurrent-run
+  // ceiling (a schedule/poll storm must not drown a space). Recorded as a failed
+  // run so it's visible; "out of range" ⇒ errorType `logic` ⇒ not auto-retried.
+  // No-op on self-host (uncapped). A future buffering layer can hold these
+  // instead of failing.
+  if (!(await concurrency.tryAcquire(spaceId))) {
+    const at = new Date().toISOString();
+    const failMessage = "space concurrency cap reached: active run count out of range";
+    const errorType = classifyError(failMessage);
+    await runs.saveRun(spaceId, {
+      id,
+      workflowId: wf.id,
+      workflowName: wf.name,
+      trigger,
+      status: "failed",
+      errorType,
+      input: maskValue(merged, maskLevel) as Record<string, unknown>,
+      records: [],
+      startedAt: at,
+      finishedAt: at,
+      failReason: failMessage,
+      maskLevel,
+    });
+    void userLogs.append(spaceId, {
+      level: "error",
+      source: "run",
+      message: `Run rejected: ${wf.name} (${trigger})`,
+      detail: failMessage,
+      workflowId: wf.id,
+    });
+    emitRun(spaceId, { id, workflowId: wf.id, status: "failed", trigger, errorType });
+    return {
+      id,
+      workflowId: wf.id,
+      workflowName: wf.name,
+      trigger,
+      status: "failed",
+      errorType,
+      input: merged,
+      records: [],
+      startedAt: at,
+      finishedAt: at,
+      maskLevel,
+    };
+  }
+
+  // Resume seeding: replay this run's prior `done` steps so it continues from
+  // the failed step (input carries over). Idempotency keeps any already-fired
+  // effect from re-firing past the seed (when funcs declare a mechanism).
+  let seed: StepRecord[] | undefined;
+  if (resumeFrom) {
+    const loaded = await loadResumeSeed(spaceId, resumeFrom.runId);
+    if (loaded) {
+      seed = loaded.seed;
+      merged = loaded.input;
+    }
+  }
+
+  let workflowVersionId: string | undefined;
+  const head = await workflows.getWorkflow(spaceId, wf.id);
+  if (head) {
+    const { version } = await versions.seal(spaceId, head, {
+      source: "run-snapshot",
+    });
+    workflowVersionId = version.id;
+  }
+
+  const headerDoc: RunHeader = {
+    id,
     workflowId: wf.id,
     workflowName: wf.name,
     trigger,
-    status: records.some((r) => r.status === "failed") ? "failed" : "done",
-    input: merged,
-    records,
+    status: "running",
+    input: maskValue(merged, maskLevel) as Record<string, unknown>,
     startedAt,
-    finishedAt: new Date().toISOString(),
+    ...(workflowVersionId ? { workflowVersionId } : {}),
+    maskLevel,
   };
-  await runs.saveRun(spaceId, run);
-  if (run.status === "failed") {
+  await runs.startRun(spaceId, headerDoc);
+
+  const records: StepRecord[] = [];
+  let seq = 0;
+  let engineError: string | undefined;
+  try {
+    await runWorkflow(
+      { spaceId, registry, connections, files: fileService, idempotency },
+      wf.funcs as Parameters<typeof runWorkflow>[1],
+      wf.wires as Parameters<typeof runWorkflow>[2],
+      merged,
+      wf.config ?? {},
+      wf.nodeConnections ?? {},
+      async (record) => {
+        records.push(record);
+        await runs.appendStep(spaceId, {
+          ...record,
+          runId: id, // runWorkflow uses an internal "run" id — use the real one
+          resolvedInput: maskValue(record.resolvedInput, maskLevel),
+          output:
+            record.output === undefined
+              ? undefined
+              : maskValue(record.output, maskLevel),
+          error: maskErrorString(record.error, maskLevel),
+          spaceId,
+          workflowId: wf.id,
+          seq: seq++,
+          at: new Date().toISOString(),
+        });
+      },
+      seed, // generalized resume: prior done-steps (undefined for a fresh run)
+      id, // runKey: the real run id so idempotency dedup keys are run-stable
+    );
+  } catch (e) {
+    // Systemic engine error (not a per-step failure) — always finalize the run
+    // so the header never stays stuck "running".
+    engineError = e instanceof Error ? e.message : String(e);
+    console.error(`run engine error [${wf.id}]`, e);
+  }
+
+  const status =
+    engineError || records.some((r) => r.status === "failed")
+      ? "failed"
+      : "done";
+  const finishedAt = new Date().toISOString();
+  // Classify the failure (if any) BEFORE finalize so the run header stores its
+  // errorType — the monitoring breakdown reads it from listRuns.
+  let errorType: ErrorType | undefined;
+  let failMessage: string | undefined;
+  if (status === "failed") {
     const errs = records
       .filter((r) => r.status === "failed")
       .map((r) => `${r.nodeId}: ${r.error ?? "failed"}`)
       .join("; ");
+    failMessage = errs || engineError || "unknown error";
+    errorType = classifyError(failMessage); // transient|auth|logic|unknown
+  }
+  // Store failReason + errorType so a run that died at setup still shows WHY.
+  await runs.finalizeRun(spaceId, id, status, finishedAt, engineError, errorType);
+
+  if (status === "failed") {
+    // Seal the RAW done-step IO + input so a later resume-from-step (manual or
+    // buffer replay) restores real values even though persisted records are masked.
+    // Only when masking is lossy AND a cipher exists; best-effort (a seal failure
+    // must never fail the run — resume degrades to masked seed). Self-host
+    // ("full" / no cipher) needs no capsule: its records are already raw.
+    if (seedCipher && maskLevel !== "full") {
+      try {
+        const seed = records.filter((r) => r.status === "done");
+        const sealed = await seedCipher.encrypt(JSON.stringify({ input: merged, seed }));
+        await runs.sealResumeSeed(spaceId, id, sealed);
+      } catch (e) {
+        console.error(`resume seed seal failed [${wf.id}/${id}]`, e);
+      }
+    }
     void userLogs.append(spaceId, {
       level: "error",
       source: "run",
       message: `Run failed: ${wf.name} (${trigger})`,
-      detail: errs || "unknown error",
+      detail: failMessage,
       workflowId: wf.id,
     });
+    void health
+      .recompute(spaceId, wf.id, {
+        lastError: { type: errorType ?? "unknown", message: failMessage ?? "unknown error" },
+      })
+      .catch(() => {});
+    // Fire self-healing on a separate queue — NEVER inline (must not block or
+    // crash the run engine). No-op unless heal is enabled for this flow.
+    healDispatcher.enqueue({
+      spaceId,
+      workflowId: wf.id,
+      runId: id,
+      errorType: errorType ?? "unknown",
+      error: failMessage ?? "unknown error",
+    });
+  } else {
+    // done run — check it actually did its job (silent-success), then refresh.
+    const outcome = wf.outcome
+      ? await evaluateRunOutcome(spaceId, wf, records, id).catch(() => null)
+      : null;
+    void health
+      .recompute(spaceId, wf.id, { outcome: outcome ?? null })
+      .catch(() => {});
   }
   emitRun(spaceId, {
-    id: run.id,
-    workflowId: run.workflowId,
-    status: run.status,
-    trigger: run.trigger,
+    id,
+    workflowId: wf.id,
+    status,
+    trigger,
+    ...(errorType ? { errorType } : {}),
   });
-  return run;
+  void runs.pruneRuns(spaceId).catch(() => {});
+  // Release the concurrency slot. A throw before here leaks the counter by one,
+  // which tryAcquire's reconcile-against-running-runs self-corrects at the cap.
+  await concurrency.release(spaceId);
+
+  return {
+    id,
+    workflowId: wf.id,
+    workflowName: wf.name,
+    trigger,
+    status,
+    input: merged,
+    records,
+    startedAt,
+    finishedAt,
+    ...(workflowVersionId ? { workflowVersionId } : {}),
+    maskLevel,
+  };
 }
 
 async function recoverSchedules(
@@ -493,6 +1036,8 @@ const pollRunner = createPollRunner({ registry, connections });
 
 const SCHEDULER_STREAM = process.env.WF_SCHEDULER_STREAM ?? "WF_SCHEDULER";
 const SCHEDULER_SUBJECT_PREFIX = "wf.scheduled";
+const RUN_EVENTS_STREAM = process.env.WF_RUN_EVENTS_STREAM ?? "WF_RUN_EVENTS";
+const RUN_EVENTS_SUBJECT_PREFIX = "mergn.runs";
 
 let nats: NatsCtx | null = null;
 try {
@@ -526,6 +1071,17 @@ if (nats) {
     SCHEDULER_SUBJECT_PREFIX,
     Number(process.env.WF_SCHEDULER_REPLICAS) || 1,
   );
+  // Run-event bus over JetStream — crosses the API↔scheduler-consumer process
+  // boundary (a scheduled run's events now reach the UI's live stream) and works
+  // multi-instance. Replaces the in-memory bus (still the fallback if unwired).
+  await initRunEventsStream(
+    nats,
+    RUN_EVENTS_STREAM,
+    RUN_EVENTS_SUBJECT_PREFIX,
+    Number(process.env.WF_SCHEDULER_REPLICAS) || 1,
+  );
+  initRunEvents(jetStreamRunEvents(nats, RUN_EVENTS_STREAM, RUN_EVENTS_SUBJECT_PREFIX));
+  console.log("run-event bus: JetStream");
   schedulerConsumer = createSchedulerConsumer({
     nats,
     streamName: SCHEDULER_STREAM,
@@ -539,12 +1095,14 @@ if (nats) {
       const message = error instanceof Error ? error.message : String(error);
       const id = randomUUID();
       const now = new Date().toISOString();
+      const errorType = classifyError(message);
       const run: RunDoc = {
         id,
         workflowId: wf.id,
         workflowName: wf.name,
         trigger,
         status: "failed",
+        errorType,
         input: {},
         records: [
           {
@@ -562,7 +1120,10 @@ if (nats) {
         finishedAt: now,
       };
       await runs.saveRun(spaceId, run);
-      emitRun(spaceId, { id, workflowId: wf.id, status: "failed", trigger });
+      void health
+        .recompute(spaceId, wf.id, { lastError: { type: errorType, message } })
+        .catch(() => {});
+      emitRun(spaceId, { id, workflowId: wf.id, status: "failed", trigger, errorType });
     },
   });
   await schedulerConsumer.start();
@@ -571,7 +1132,33 @@ if (nats) {
   void recoverSchedules(scheduler, scheduleStore, workflows, store)
     .then((n) => console.log(`scheduler recovery: reconciled ${n} scheduling workflow(s)`))
     .catch((e) => console.error("scheduler recovery failed", e));
+
+  // Liveness: periodically check that active interval schedules are still
+  // firing on cadence; record a liveness fail on the flow's health if not.
+  const liveness = createLivenessEvaluator({
+    scheduleStore,
+    health,
+    store,
+    workflows,
+    runs,
+  });
+  liveness.start();
+  console.log("liveness evaluator started");
 }
+
+// A fresh process can have no live runs — any "running" header is an orphan
+// from a crash/restart. Mark them failed(orphaned) at startup so the UI/health
+// doesn't show a run stuck "running" forever.
+void (async () => {
+  try {
+    let n = 0;
+    for (const spaceId of await store.spaces())
+      n += await runs.markOrphaned(spaceId, 0);
+    if (n) console.log(`run recovery: marked ${n} orphaned run(s) failed`);
+  } catch (e) {
+    console.error("orphan run reconcile failed", e);
+  }
+})();
 
 function makeTools(
   spaceId: string,
@@ -959,6 +1546,259 @@ function makeTools(
   };
 }
 
+// ── MergN Doctor: a monitoring/self-healing chat scoped to ONE flow. Reads run
+// history/health/analytics/versions/heal-events/buffer; diagnoses + fixes; never
+// builds workflows (that's the editor). Fix + version suggestions stream a card
+// to the UI that opens the ChangeReview screen. ──
+const DOCTOR_SYSTEM = [
+  "You are Doctor, MergN's monitoring & self-healing assistant for ONE workflow (given below).",
+  "You READ this flow's run history, health, analytics, version history, self-heal events and buffered events; you explain failures in plain language; and you can FIX them.",
+  "You do NOT build or author workflows — never propose new steps, wires, or providers. If the user wants to build or edit the flow's logic, tell them to use the editor.",
+  "Workflow to diagnose: use the tools to ground EVERY claim in real data — never invent run counts, errors, or numbers.",
+  "When the user asks WHY runs are failing without giving a run id: be proactive — call get_analytics and list_runs to see the failure breakdown by errorType, summarize the categories (e.g. '3 logic, 2 transient'), then diagnose_failure on the most recent representative failed run YOURSELF. Never ask the user to hand you a run id, and don't rely on list_heal_events for the cause (that's only past fix attempts).",
+  "Failure classes are not the same: a `transient` error (network/timeout/rate-limit/blip) is auto-retried by the runtime and is NOT a code bug — say it self-heals, don't propose a fix; a failure caused by bad INCOMING data/input is the caller's problem, not this flow's bug; only a genuine logic/code/wiring bug in the flow gets a proposed fix. If runs fail for more than one reason, pick a representative one of EACH class — don't fixate on whichever run is newest.",
+  "When a run fails, work in this order: (1) check_connection — many failures are just an expired/missing credential; (2) compare_runs — diff the failed run against the last good one to see what changed (often a missing input); (3) for a transient error (timeout/rate-limit/blip) try retry_run, which resumes from the failed step with no double side-effects; (4) only then diagnose_failure + fix_failure for a real code/wiring bug.",
+  "Only call fix_failure for a genuine logic/code/wiring bug in the flow. NEVER call fix_failure — and never say you are 'trying to fix' or 'preparing a fix' — for a transient error (it auto-retries; nothing to change) or a bad-input failure (the caller must send valid data). For those, state plainly up front that there is nothing in the flow to fix; do not attempt a fix you already know will be declined. When fix_failure DOES run: if the flow's auto-fix is on it applies the fix (a new healing version is created); otherwise it stages a proposal the user reviews + approves in the diff screen.",
+  "If a recent change broke the flow, suggest switching to an earlier version with suggest_version. If a self-heal itself made things worse, use revert_heal to roll back to the pre-heal version. Both open a diff for the user to confirm.",
+  "Use incident_summary to write a short postmortem of what happened and what you did.",
+  "After a failure, events may buffer while the flow is paused. Use get_buffer to see how many, test_buffer to verify a fix on the first real event, and replay_buffer to process the backlog (idempotent; each resumes from where it left off). You can pause_flow / resume_flow.",
+  "Be concise and concrete. Answer in the user's language.",
+].join("\n");
+
+// Builds the per-request flow context appended to DOCTOR_SYSTEM (health snapshot
+// + last failed run) so the Doctor is grounded without the user pasting anything.
+async function buildDoctorContext(spaceId: string, workflowId: string): Promise<string> {
+  const wf = await workflows.getWorkflow(spaceId, workflowId);
+  const state = await health.recompute(spaceId, workflowId).catch(() => null);
+  const recent = await runs.listRuns(spaceId, workflowId, 1).catch(() => []);
+  const lastFailed = (await runs.listRuns(spaceId, workflowId, 20).catch(() => [])).find((r) => r.status === "failed");
+  const lines = [
+    `\n\n--- FLOW UNDER CARE ---`,
+    `name: ${wf?.name ?? workflowId}`,
+    `id: ${workflowId}`,
+    state ? `health: ${state.status}${state.lastError ? ` (last error: ${state.lastError.type})` : ""}` : "",
+    recent[0] ? `last run: ${recent[0].status} at ${recent[0].startedAt}` : "no runs yet",
+    lastFailed ? `most recent FAILED run id: ${lastFailed.id} (${lastFailed.errorType ?? "unknown"})` : "",
+    `--- end ---`,
+  ].filter(Boolean);
+  return lines.join("\n");
+}
+
+// The Doctor's tool set — bound to one workflowId. Read + diagnose + fix (auto or
+// propose by the flow's settings) + version-switch + buffer ops. Calls the same
+// stores the rest of the app uses; no new engine.
+function makeDoctorTools(spaceId: string, writer: UIMessageStreamWriter, workflowId: string) {
+  const diagCtx = (runId: string) =>
+    buildDiagnosisContext({ getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow }, spaceId, runId);
+  // this chat is bound to ONE flow — a runId only counts if it belongs to it
+  // (prevents acting on another flow's run that shares the same space)
+  const ownRun = async (runId: string) => {
+    const r = await runs.getRun(spaceId, runId);
+    return r && r.workflowId === workflowId ? r : null;
+  };
+
+  return {
+    list_runs: tool({
+      description: "List this flow's recent runs (newest first): id, status, errorType, timestamps. Use to see what's failing and pick a run to diagnose.",
+      inputSchema: z.object({ limit: z.number().int().positive().max(50).optional() }),
+      execute: async ({ limit }) => runs.listRuns(spaceId, workflowId, limit ?? 20),
+    }),
+    get_run: tool({
+      description: "Full detail of one run: per-step status, error, and resolved input/output (PII-masked on managed). Use after list_runs to understand WHY a run failed.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => (await ownRun(runId)) ?? { error: "run not found for this flow" },
+    }),
+    get_health: tool({
+      description: "This flow's current health: status, lastError, liveness/outcome fails.",
+      inputSchema: z.object({}),
+      execute: async () => (await health.recompute(spaceId, workflowId)) ?? { status: "nodata" },
+    }),
+    get_analytics: tool({
+      description: "This flow's run analytics: success rate, error breakdown by type, latency p50/p95, 24h/7d volume.",
+      inputSchema: z.object({}),
+      execute: async () => computeAnalytics(await runs.listRuns(spaceId, workflowId), Date.now()),
+    }),
+    list_versions: tool({
+      description: "This flow's version history (source: editor/chat/healing/restore, label, time). Use to spot when a change landed, then suggest_version to roll back.",
+      inputSchema: z.object({}),
+      execute: async () => versions.list(spaceId, workflowId),
+    }),
+    list_heal_events: tool({
+      description: "Past self-healing attempts for this flow (status, confidence, diagnosis).",
+      inputSchema: z.object({ limit: z.number().int().positive().max(50).optional() }),
+      execute: async ({ limit }) => healEvents.listForWorkflow(spaceId, workflowId, limit ?? 30),
+    }),
+    get_buffer: tool({
+      description: "Events buffered while this flow was paused (count + FIFO list with masked previews). Use to tell the user how many runs are waiting to be replayed.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const entries = await buffer.list(spaceId, workflowId);
+        return {
+          count: entries.length,
+          entries: entries.map((e) => ({ id: e.id, seq: e.seq, status: e.status, receivedAt: e.receivedAt, preview: maskValue(e.payload, MASK_DEFAULT) })),
+        };
+      },
+    }),
+    diagnose_failure: tool({
+      description: "Diagnose a failed run: plain-language cause + whether a fix is possible. Read-only.",
+      inputSchema: z.object({ runId: z.string(), language: z.string().optional() }),
+      execute: async ({ runId, language }) => {
+        if (!(await ownRun(runId))) return { error: "run not found for this flow" };
+        const ctx = await diagCtx(runId);
+        if (!ctx) return { error: "run not found or not a failure" };
+        return fixEngine.diagnose(spaceId, ctx, { language: language ?? "English" });
+      },
+    }),
+    fix_failure: tool({
+      description: "Fix a failed run. If this flow's auto-fix is ON it applies the fix directly (new healing version); otherwise it stages a proposal and opens the review screen for the user to approve. Never applies silently when auto-fix is off.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => {
+        if (!(await ownRun(runId))) return { error: "run not found for this flow" };
+        const ctx = await diagCtx(runId);
+        if (!ctx) return { error: "run not found or not a failure" };
+        const d = await fixEngine.diagnose(spaceId, ctx);
+        if (!d.proposedFix) return { fixable: false, plainLanguage: d.plainLanguage, errorType: d.errorType };
+        const settings = await flowSettings.get(spaceId, workflowId);
+        const allowed = await canHeal(spaceId);
+        if (settings.enabled && settings.fixMode === "auto" && allowed) {
+          const { versionId } = await fixEngine.applyFix(spaceId, workflowId, d.proposedFix, { runId, mode: "auto" });
+          await healEvents.record(spaceId, { spaceId, workflowId, runId, mode: "auto", errorType: d.errorType, confidence: d.confidence, diagnosis: d.plainLanguage, proposal: d.proposedFix, status: "applied", versionId });
+          void audit.record(spaceId, { kind: "heal.applied", message: `Doctor auto-applied a fix: ${d.plainLanguage}`, workflowId, actor: "doctor" });
+          return { applied: true, versionId, plainLanguage: d.plainLanguage, kind: d.proposedFix.kind };
+        }
+        const ev = await healEvents.record(spaceId, { spaceId, workflowId, runId, mode: "propose", errorType: d.errorType, confidence: d.confidence, diagnosis: d.plainLanguage, proposal: d.proposedFix, status: "proposed" });
+        writer.write({ type: "data-doctor-fix", id: `fix-${randomUUID()}`, data: { event: ev } });
+        return { proposed: true, eventId: ev.id, plainLanguage: d.plainLanguage, kind: d.proposedFix.kind, confidence: d.confidence };
+      },
+    }),
+    suggest_version: tool({
+      description: "Suggest rolling this flow back to an earlier version (from list_versions). Opens the version diff for the user to review + confirm the switch.",
+      inputSchema: z.object({ versionId: z.string() }),
+      execute: async ({ versionId }) => {
+        const version = (await versions.list(spaceId, workflowId)).find((v) => v.id === versionId);
+        if (!version) return { error: "version not found" };
+        writer.write({ type: "data-doctor-version", id: `ver-${randomUUID()}`, data: { version } });
+        return { suggested: true, versionId, seq: version.seq, source: version.source };
+      },
+    }),
+    pause_flow: tool({
+      description: "Pause this flow: webhook events buffer (not lost), schedule/poll ticks stop. Use to stop a misbehaving flow before fixing.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        await workflows.setPaused(spaceId, workflowId, true, "manual");
+        if (scheduler) await scheduler.pause(spaceId, workflowId);
+        return { ok: true, paused: true };
+      },
+    }),
+    resume_flow: tool({
+      description: "Resume this paused flow (re-enables triggers). Does NOT replay buffered events — use replay_buffer for that.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        await workflows.setPaused(spaceId, workflowId, false);
+        if (scheduler) await scheduler.resume(spaceId, workflowId);
+        return { ok: true, paused: false };
+      },
+    }),
+    test_buffer: tool({
+      description: "Test-run the first buffered event's REAL payload (does not consume it) to verify a fix before replaying everything.",
+      inputSchema: z.object({}),
+      execute: async () => testRunFirst(replayDeps, spaceId, workflowId, new Date().toISOString()),
+    }),
+    replay_buffer: tool({
+      description: "Replay all buffered events FIFO, then unpause. Idempotent; each resumes from where it left off. Use after a fix is verified.",
+      inputSchema: z.object({}),
+      execute: async () => replayBuffer(replayDeps, spaceId, workflowId),
+    }),
+    retry_run: tool({
+      description: "Re-run a failed run, RESUMING from the step that failed (completed steps are not redone — no double side-effects). First move for a transient error (timeout, rate-limit, brief outage) before attempting a code fix.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => {
+        if (!(await ownRun(runId))) return { error: "run not found for this flow" };
+        const wf = await workflows.getWorkflow(spaceId, workflowId);
+        if (!wf) return { error: "workflow not found" };
+        const run = await runSavedWorkflow(spaceId, wf, {}, "manual", undefined, { runId });
+        return { ok: true, newRunId: run.id, status: run.status };
+      },
+    }),
+    compare_runs: tool({
+      description: "Compare a failed run to this flow's most recent SUCCESSFUL run, step by step — surfaces what changed (e.g. an input field that's now empty/missing). Read-only; the strongest root-cause tool.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => {
+        const failed = await ownRun(runId);
+        if (!failed) return { error: "run not found for this flow" };
+        const goodMeta = (await runs.listRuns(spaceId, workflowId)).find((r) => r.status === "done");
+        const good = goodMeta ? await runs.getRun(spaceId, goodMeta.id) : null;
+        const byNode = (recs: { nodeId: string; status: string; resolvedInput?: unknown; output?: unknown; error?: string }[]) =>
+          Object.fromEntries(
+            recs.filter((x) => x.nodeId !== "trigger").map((x) => [x.nodeId, { status: x.status, resolvedInput: x.resolvedInput, output: x.output, error: x.error }]),
+          );
+        return {
+          failedRunId: runId,
+          lastGoodRunId: good?.id ?? null,
+          input: { failed: failed.input, lastGood: good?.input ?? null },
+          steps: { failed: byNode(failed.records ?? []), lastGood: good ? byNode(good.records ?? []) : null },
+          note: good ? "Compare each node's resolvedInput between failed and lastGood to spot what changed." : "No successful run to compare against — diagnose from the failed run alone.",
+        };
+      },
+    }),
+    check_connection: tool({
+      description: "Check whether a failure is caused by a missing or expired provider connection (credential). Looks at the failed step's required provider + the user's connections. Use when the error looks like auth/401/403/token/credential.",
+      inputSchema: z.object({ runId: z.string() }),
+      execute: async ({ runId }) => {
+        const run = await ownRun(runId);
+        if (!run) return { error: "run not found for this flow" };
+        const failedStep = (run.records ?? []).find((r) => r.status === "failed");
+        const wf = await workflows.getWorkflow(spaceId, workflowId);
+        const func = (wf?.funcs as Array<{ id: string; requires?: { provider?: string }[] }> | undefined)?.find((f) => f.id === failedStep?.nodeId);
+        const providers = (func?.requires ?? []).map((r) => r.provider).filter((p): p is string => !!p);
+        const conns = await connections.listConnections(spaceId);
+        const providerStatus = providers.map((p) => ({ provider: p, connected: conns.some((c) => c.provider === p) }));
+        const authish = run.errorType === "auth" || /401|403|unauthor|forbidden|token|credential|api[_ -]?key|expired/i.test(failedStep?.error ?? "");
+        return {
+          failedStep: failedStep?.nodeId,
+          error: failedStep?.error,
+          errorType: run.errorType,
+          providers: providerStatus,
+          looksLikeAuth: authish,
+          hint: providerStatus.some((s) => !s.connected)
+            ? "A required provider has NO connection — ask the user to connect it (it can't authenticate)."
+            : authish
+              ? "Auth-style error but a connection exists — the credential is likely expired/invalid; ask the user to reconnect it."
+              : "Doesn't look connection-related.",
+        };
+      },
+    }),
+    revert_heal: tool({
+      description: "Roll back a self-heal that made things worse: targets the version BEFORE the most recent healing change and opens the diff for the user to confirm the rollback.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const vers = await versions.list(spaceId, workflowId); // newest-first
+        const lastHeal = vers.find((v) => v.source === "healing");
+        if (!lastHeal) return { error: "no healing version to revert" };
+        const parent = lastHeal.parentVersionId ? vers.find((v) => v.id === lastHeal.parentVersionId) : null;
+        if (!parent) return { error: "the healing version has no pre-heal parent to revert to" };
+        writer.write({ type: "data-doctor-version", id: `ver-${randomUUID()}`, data: { version: parent } });
+        return { reverting: true, toVersionId: parent.id, toSeq: parent.seq, fromHealVersion: lastHeal.id };
+      },
+    }),
+    incident_summary: tool({
+      description: "Produce a postmortem of this flow's recent incident: failures, what was diagnosed, which fixes were applied/proposed/rejected, and kill-switch/settings events. Use to summarize 'what happened'.",
+      inputSchema: z.object({}),
+      execute: async () => {
+        const heals = await healEvents.listForWorkflow(spaceId, workflowId, 20);
+        const auditEvts = await audit.list(spaceId, { workflowId, limit: 20 });
+        const failedRuns = (await runs.listRuns(spaceId, workflowId, 40)).filter((r) => r.status === "failed").slice(0, 10);
+        return {
+          failedRuns: failedRuns.map((r) => ({ id: r.id, errorType: r.errorType, at: r.startedAt })),
+          healEvents: heals.map((e) => ({ status: e.status, confidence: e.confidence, diagnosis: e.diagnosis, mode: e.mode, at: e.at })),
+          audit: auditEvts.map((a) => ({ kind: a.kind, message: a.message, at: a.ts, actor: a.actor })),
+          note: "Write a short postmortem: what failed, the likely cause, what was done, and the current state.",
+        };
+      },
+    }),
+  };
+}
+
 function oauthResultPage(ok: boolean, detail: string): string {
   const payload = JSON.stringify({ type: "oauth-result", ok, detail });
   const title = ok ? "Connected" : "Connection failed";
@@ -1103,9 +1943,10 @@ app.use("/api/*", async (c, next) => {
 });
 
 app.get("/api/chat/conversations", async (c) => {
-  return c.json(
-    await chats.listConversations(c.get("spaceId"), c.get("userId")),
-  );
+  // builder list — exclude Doctor (monitoring) chats, which live per-flow under
+  // a `doctor_<workflowId>_` conversation id.
+  const all = await chats.listConversations(c.get("spaceId"), c.get("userId"));
+  return c.json(all.filter((d) => !d.id.startsWith("doctor_")));
 });
 
 app.get("/api/chat/conversations/:id", async (c) => {
@@ -1321,6 +2162,94 @@ app.post("/api/chat", async (c) => {
   return createUIMessageStreamResponse({ stream });
 });
 
+// MergN Doctor — a monitoring/self-healing chat scoped to one flow. Same agentic
+// stream + budget/plan guards as /api/chat, but a diagnostic persona + a
+// read/diagnose/fix/version/buffer tool set (no workflow authoring).
+app.post("/api/doctor/chat", async (c) => {
+  const spaceId = c.get("spaceId");
+  const userId = c.get("userId");
+  const { message: rawMessage, conversationId, workflowId } = await c.req.json<{
+    message: UIMessage;
+    conversationId: string;
+    workflowId?: string;
+  }>();
+  if (!/^[A-Za-z0-9_-]+$/.test(conversationId ?? "")) return c.json({ error: "bad conversation id" }, 400);
+  if (!workflowId) return c.json({ error: "workflowId required" }, 400);
+
+  await ensureSpaceLlm(spaceId);
+  const ownKey = spaceUsesOwnKey(spaceId);
+  if (!ownKey) {
+    const userLimit = await rateLimiter.take(`chat:user:${userId}`, CHAT_USER_LIMIT);
+    const limit: RateLimitResult = userLimit.ok ? await rateLimiter.take("chat:global", CHAT_GLOBAL_LIMIT) : userLimit;
+    if (!limit.ok)
+      return c.json({ error: "rate_limited", message: "You're sending messages a bit too fast. Please wait a moment and try again.", retryAfterMs: limit.retryAfterMs }, 429, { "Retry-After": String(Math.ceil(limit.retryAfterMs / 1000)) });
+    if (await usageCapExceeded())
+      return c.json({ error: "usage_cap", message: "The AI usage limit for this deployment has been reached. Please try again later." }, 402);
+  }
+
+  const message = clampUserMessage(rawMessage);
+  const previous = (await chats.getConversation(spaceId, userId, conversationId))?.messages ?? [];
+  const plan = await billing.planOf(spaceId);
+  const spaceUsage = await usage.get(spaceId);
+  const isNewChat = previous.length === 0;
+  if (MANAGED && billing.enabled() && plan.limits.chats >= 0 && isNewChat && spaceUsage.chats >= plan.limits.chats)
+    return c.json({ error: "plan_limit", limit: "chats", plan: plan.slug, message: `You've used all ${plan.limits.chats} chats on the Free plan this month. Upgrade to Pro to keep building.` }, 402);
+  if (!ownKey && MANAGED && billing.enabled() && plan.limits.aiTokens >= 0 && spaceUsage.aiTokens >= plan.limits.aiTokens)
+    return c.json({ error: "plan_limit", limit: "tokens", plan: plan.slug, message: "You've used all your AI tokens for this month. They reset at the start of next month, or contact us for a higher limit." }, 402);
+
+  const messages = [...(previous as UIMessage[]), message];
+  const modelMessages = await convertToModelMessages(messages);
+  const system = DOCTOR_SYSTEM + (await buildDoctorContext(spaceId, workflowId));
+  const sessionId = `doctor-${randomUUID()}`;
+
+  const stream = createUIMessageStream({
+    originalMessages: messages,
+    generateId: createIdGenerator({ prefix: "msg", size: 16 }),
+    execute: ({ writer }) => {
+      const result = streamText({
+        model: getModel(spaceId),
+        system,
+        messages: modelMessages,
+        stopWhen: [
+          stepCountIs(20),
+          ({ steps }) => !ownKey && steps.reduce((sum, s) => sum + (s.usage?.totalTokens ?? 0), 0) >= LIMITS.promptTokenCap,
+        ],
+        maxOutputTokens: LIMITS.maxOutputTokens,
+        tools: withResultLimits(makeDoctorTools(spaceId, writer, workflowId)),
+        providerOptions: { google: { thinkingConfig: { includeThoughts: true } } },
+        experimental_telemetry: trace("doctor-chat", { spaceId, sessionId }),
+        onFinish: (event) => {
+          const t = event.totalUsage?.totalTokens ?? 0;
+          if (!ownKey) {
+            void recordTokens(t);
+            void usage.addTokens(spaceId, t);
+          }
+          void flushTraces();
+        },
+      });
+      void result.consumeStream();
+      writer.merge(
+        result.toUIMessageStream({
+          sendReasoning: true,
+          messageMetadata: ({ part }) => (part.type === "finish" ? { totalUsage: part.totalUsage } : undefined),
+        }),
+      );
+    },
+    onFinish: async ({ messages }) => {
+      await chats.saveConversation(spaceId, userId, conversationId, messages);
+      if (isNewChat) await usage.recordChat(spaceId);
+    },
+    onError: (error) => {
+      console.error("DOCTOR STREAM ERROR:", error);
+      const msg = error instanceof Error ? error.message : String(error);
+      void userLogs.append(spaceId, { level: "error", source: "chat", message: "Doctor stream error", detail: msg });
+      return msg;
+    },
+  });
+
+  return createUIMessageStreamResponse({ stream });
+});
+
 app.get("/api/workflows", async (c) => {
   return c.json(await workflows.listWorkflows(c.get("spaceId")));
 });
@@ -1328,6 +2257,154 @@ app.get("/api/workflows", async (c) => {
 app.get("/api/workflows/:id", async (c) => {
   const wf = await workflows.getWorkflow(c.get("spaceId"), c.req.param("id"));
   return wf ? c.json(wf) : c.json({ error: "not found" }, 404);
+});
+
+// Per-flow health for a workflow. Recompute from run history, preserving any
+// liveness fail the evaluator has flagged.
+app.get("/api/workflows/:id/health", async (c) => {
+  const state = await health.recompute(c.get("spaceId"), c.req.param("id"));
+  return c.json(state);
+});
+
+// Toggle external alerts for one flow (default OFF). Reads current + merges so
+// the gear can flip it without re-sending the whole workflow.
+app.patch("/api/workflows/:id/alerts", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const { enabled } = await c.req.json<{ enabled?: boolean }>();
+  if (typeof enabled !== "boolean") return c.json({ error: "enabled (boolean) required" }, 400);
+  const wf = await workflows.getWorkflow(spaceId, id);
+  if (!wf) return c.json({ error: "not found" }, 404);
+  await workflows.saveWorkflow(spaceId, { ...wf, alertsEnabled: enabled });
+  return c.json({ ok: true, alertsEnabled: enabled });
+});
+
+// Space-wide health summary.
+app.get("/api/health", async (c) => {
+  return c.json(await health.summary(c.get("spaceId")));
+});
+
+// ── Alert channels (Telegram / Slack / Discord / email / webhook / workflow) ─
+const ALERT_KINDS: ChannelKind[] = [
+  "telegram", "slack", "discord", "email", "webhook",
+];
+const ALERT_SEVERITIES: Severity[] = ["info", "warn", "critical"];
+const ALERT_CATEGORIES: AlertCategory[] = [
+  "error", "silent_failure", "silent_success", "recovered", "healed",
+];
+
+app.get("/api/alert-channels", async (c) => {
+  return c.json(await alertChannels.list(c.get("spaceId"))); // meta only, no secrets
+});
+
+// Flows eligible to handle alerts = those with the "monitor" trigger. The UI
+// lists these so the user can pick one for a "workflow" channel.
+app.get("/api/monitor-handlers", async (c) => {
+  const spaceId = c.get("spaceId");
+  const metas = await workflows.listWorkflows(spaceId);
+  const out: { id: string; name: string }[] = [];
+  for (const m of metas) {
+    const wf = await workflows.getWorkflow(spaceId, m.id);
+    if (wf?.trigger?.kind === "monitor") out.push({ id: wf.id, name: wf.name });
+  }
+  return c.json(out);
+});
+
+app.post("/api/alert-channels", async (c) => {
+  const body = await c.req.json<{
+    kind?: string;
+    label?: string;
+    minSeverity?: string;
+    categories?: string[];
+    secret?: ChannelSecret;
+  }>();
+  if (!body.kind || !ALERT_KINDS.includes(body.kind as ChannelKind))
+    return c.json({ error: "invalid channel kind" }, 400);
+  if (!body.secret || typeof body.secret !== "object")
+    return c.json({ error: "secret required" }, 400);
+  // kind-specific config validation
+  if (body.kind === "webhook" && !(body.secret as { url?: string }).url)
+    return c.json({ error: "webhook channel needs secret.url" }, 400);
+  const minSeverity =
+    body.minSeverity && ALERT_SEVERITIES.includes(body.minSeverity as Severity)
+      ? (body.minSeverity as Severity)
+      : undefined;
+  const categories = Array.isArray(body.categories)
+    ? body.categories.filter((x): x is AlertCategory => ALERT_CATEGORIES.includes(x as AlertCategory))
+    : undefined;
+  const meta = await alertChannels.add(c.get("spaceId"), {
+    kind: body.kind as ChannelKind,
+    label: body.label,
+    minSeverity,
+    categories: categories?.length ? categories : undefined,
+    secret: body.secret,
+  });
+  return c.json(meta);
+});
+
+app.patch("/api/alert-channels/:id", async (c) => {
+  const body = await c.req.json<{ enabled?: boolean }>();
+  if (typeof body.enabled !== "boolean")
+    return c.json({ error: "enabled (boolean) required" }, 400);
+  await alertChannels.setEnabled(c.get("spaceId"), c.req.param("id"), body.enabled);
+  return c.json({ ok: true });
+});
+
+app.delete("/api/alert-channels/:id", async (c) => {
+  await alertChannels.remove(c.get("spaceId"), c.req.param("id"));
+  return c.json({ ok: true });
+});
+
+// Send a test alert through all configured channels (verifies setup).
+app.post("/api/alert-channels/test", async (c) => {
+  await alerts.deliver(
+    c.get("spaceId"),
+    {
+      workflowId: "test",
+      status: "degraded",
+      severity: "warn",
+      reason: "error",
+      category: "error",
+      title: "Test alert",
+      detail: "If you can read this, your alert channel works.",
+    },
+    true, // force — a test always sends, bypassing the per-flow opt-in
+  );
+  return c.json({ ok: true });
+});
+
+// ── Alert handler flows (the user's chosen flows that run on an alert) ──
+app.get("/api/alert-handlers", async (c) => {
+  const spaceId = c.get("spaceId");
+  const entries = await alertHandlers.list(spaceId);
+  const rows = await Promise.all(
+    entries.map(async (h) => ({
+      workflowId: h.workflowId,
+      enabled: h.enabled,
+      name: (await workflows.getWorkflow(spaceId, h.workflowId))?.name ?? h.workflowId,
+    })),
+  );
+  return c.json(rows);
+});
+
+app.post("/api/alert-handlers", async (c) => {
+  const spaceId = c.get("spaceId");
+  const { workflowId } = await c.req.json<{ workflowId?: string }>().catch(() => ({ workflowId: undefined }));
+  if (!workflowId) return c.json({ error: "workflowId required" }, 400);
+  if (!(await workflows.getWorkflow(spaceId, workflowId))) return c.json({ error: "workflow not found" }, 404);
+  return c.json(await alertHandlers.add(spaceId, workflowId));
+});
+
+app.patch("/api/alert-handlers/:workflowId", async (c) => {
+  const { enabled } = await c.req.json<{ enabled?: boolean }>().catch(() => ({ enabled: undefined }));
+  if (typeof enabled !== "boolean") return c.json({ error: "enabled (boolean) required" }, 400);
+  await alertHandlers.setEnabled(c.get("spaceId"), c.req.param("workflowId"), enabled);
+  return c.json({ ok: true });
+});
+
+app.delete("/api/alert-handlers/:workflowId", async (c) => {
+  await alertHandlers.remove(c.get("spaceId"), c.req.param("workflowId"));
+  return c.json({ ok: true });
 });
 
 app.put("/api/workflows/:id", async (c) => {
@@ -1344,6 +2421,10 @@ app.put("/api/workflows/:id", async (c) => {
     inputForm?: unknown;
     variables?: Record<string, unknown>;
     conversationId?: string;
+    outcome?: OutcomeConfig;
+    maskLevel?: MaskLevel;
+    liveness?: LivenessConfig;
+    alertsEnabled?: boolean;
   }>();
   const wf = await workflows.saveWorkflow(c.get("spaceId"), {
     id,
@@ -1357,6 +2438,10 @@ app.put("/api/workflows/:id", async (c) => {
     inputForm: body.inputForm,
     variables: body.variables,
     conversationId: body.conversationId,
+    ...(body.outcome ? { outcome: body.outcome } : {}),
+    ...(body.maskLevel ? { maskLevel: body.maskLevel } : {}),
+    ...(body.liveness ? { liveness: body.liveness } : {}),
+    ...(typeof body.alertsEnabled === "boolean" ? { alertsEnabled: body.alertsEnabled } : {}),
   });
   if (body.conversationId) {
     await chats.linkWorkflow(
@@ -1390,27 +2475,155 @@ app.delete("/api/workflows/:id", async (c) => {
   return c.json({ ok: true });
 });
 
+// ── workflow versioning ───────────────────────────────────────────────────
+// HEAD (the "workflows" doc) is unchanged; these add an append-only version
+// log. Sealing is content-hash deduped (bursty autosave/MCP builds coalesce).
+app.get("/api/workflows/:id/versions", async (c) =>
+  c.json(await versions.list(c.get("spaceId"), c.req.param("id"))),
+);
+
+app.get("/api/workflows/:id/versions/:versionId", async (c) => {
+  const v = await versions.get(c.get("spaceId"), c.req.param("versionId"));
+  if (!v || v.workflowId !== c.req.param("id"))
+    return c.json({ error: "version not found" }, 404);
+  return c.json(v);
+});
+
+// Explicit checkpoint: seal the current HEAD as a version (optional label).
+app.post("/api/workflows/:id/versions", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const head = await workflows.getWorkflow(spaceId, id);
+  if (!head) return c.json({ error: "workflow not found" }, 404);
+  const body = (await c.req.json().catch(() => ({}))) as {
+    label?: string;
+    message?: string;
+  };
+  const { version, deduped } = await versions.seal(spaceId, head, {
+    source: "editor",
+    label: body.label,
+    message: body.message,
+    createdBy: c.get("userId"),
+  });
+  if (!deduped) await workflows.setCurrentVersion(spaceId, id, version.id);
+  return c.json({ id: version.id, deduped });
+});
+
+// Structured diff between two versions (powers node badges).
+app.get("/api/workflows/:id/diff", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const from = c.req.query("from");
+  const to = c.req.query("to");
+  if (!from || !to) return c.json({ error: "from and to required" }, 400);
+  const a = await versions.get(spaceId, from);
+  const b = await versions.get(spaceId, to);
+  if (!a || !b || a.workflowId !== id || b.workflowId !== id)
+    return c.json({ error: "version not found" }, 404);
+  return c.json(diffWorkflows(a.snapshot, b.snapshot));
+});
+
+// Everything the change-review screen needs for ONE version: the before
+// (parent) + after (this version) snapshots + their diff. before is empty when
+// the version has no parent (initial version → everything is "added").
+app.get("/api/workflows/:id/versions/:vid/review", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const v = await versions.get(spaceId, c.req.param("vid"));
+  if (!v || v.workflowId !== id) return c.json({ error: "version not found" }, 404);
+  const parent = v.parentVersionId ? await versions.get(spaceId, v.parentVersionId) : null;
+  const before = parent?.snapshot ?? { funcs: [], wires: [], trigger: null };
+  return c.json({ before, after: v.snapshot, diff: diffWorkflows(before, v.snapshot) });
+});
+
+// Restore: write a past version's snapshot to HEAD, then seal a NEW version
+// marking the restore. History is never mutated (re-restorable).
+app.post("/api/workflows/:id/versions/:versionId/restore", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const target = await versions.get(spaceId, c.req.param("versionId"));
+  if (!target || target.workflowId !== id)
+    return c.json({ error: "version not found" }, 404);
+  const head = await workflows.getWorkflow(spaceId, id);
+  if (!head) return c.json({ error: "workflow not found" }, 404);
+  const s = target.snapshot;
+  await workflows.saveWorkflow(spaceId, {
+    id,
+    name: s.name ?? head.name,
+    funcs: s.funcs ?? [],
+    wires: s.wires ?? [],
+    positions: s.positions ?? {},
+    config: s.config ?? {},
+    nodeConnections: s.nodeConnections ?? {},
+    trigger: (s.trigger as TriggerConfig) ?? head.trigger ?? { kind: "manual" },
+    inputForm: s.inputForm,
+    variables: s.variables,
+    conversationId: head.conversationId, // keep chat continuity
+  });
+  // Restore the version's pinned provider code so HEAD runs exactly what this
+  // version ran (not a later re-author). Drafts are secret-free; credentials
+  // stay live on the connection. This overwrites the provider id space-wide —
+  // intended: "restore = go back to this version's behaviour".
+  for (const [pid, draft] of Object.entries(
+    (s.providers ?? {}) as Record<string, ProviderDraft>,
+  )) {
+    try {
+      await registry.persistProvider(spaceId, draft);
+      registry.registerProviderFromDraft(spaceId, draft);
+    } catch (e) {
+      console.error(`restore: re-register provider ${pid} failed`, e);
+    }
+  }
+  const restored = await workflows.getWorkflow(spaceId, id);
+  const { version } = await versions.seal(spaceId, restored!, {
+    source: "restore",
+    restoredFrom: target.id,
+    createdBy: c.get("userId"),
+    message: `Restored from ${target.id.slice(0, 8)}`,
+  });
+  await workflows.setCurrentVersion(spaceId, id, version.id);
+  // Flag any node whose pinned connection is now stale (deleted / different
+  // provider) so the UI can prompt a reconnect instead of a silent run failure.
+  const conns = await connections.listConnections(spaceId);
+  const reconnect = checkConnectionBindings(
+    bindingsOf(restored?.funcs ?? [], restored?.nodeConnections),
+    conns.map((cn) => ({ id: cn.id, provider: cn.provider })),
+  );
+  return c.json({
+    ok: true,
+    newVersionId: version.id,
+    ...(reconnect.length ? { reconnect } : {}),
+  });
+});
+
 app.get("/api/workflows/:id/status", async (c) => {
   if (!scheduler) return c.json({ state: "none" });
   return c.json(await scheduler.status(c.get("spaceId"), c.req.param("id")));
 });
 
 app.post("/api/workflows/:id/pause", async (c) => {
-  if (!scheduler) return c.json({ error: "scheduler disabled" }, 503);
-  await scheduler.pause(c.get("spaceId"), c.req.param("id"));
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const reason =
+    ((await c.req.json().catch(() => ({}))) as { reason?: string }).reason === "heal" ? "heal" : "manual";
+  // Flow-level pause (durable): webhook events buffer, schedule/poll ticks stop.
+  // Works for a webhook-only flow that has no scheduler job.
+  await workflows.setPaused(spaceId, id, true, reason);
+  if (scheduler) await scheduler.pause(spaceId, id);
   return c.json({ ok: true, state: "paused" });
 });
 
 app.post("/api/workflows/:id/resume", async (c) => {
-  if (!scheduler) return c.json({ error: "scheduler disabled" }, 503);
   const spaceId = c.get("spaceId");
   const id = c.req.param("id");
   const wf = await workflows.getWorkflow(spaceId, id);
   if (wf?.trigger?.kind === "poll" && missingRequiredParams(wf.trigger.poll)) {
     return c.json({ error: "missing required parameters", state: "paused" }, 400);
   }
-  await scheduler.resume(spaceId, id);
-  if (wf && wf.trigger?.kind === "poll") {
+  // resume ≠ replay: clear the flag; buffered events drain via /buffer/replay (D3).
+  await workflows.setPaused(spaceId, id, false);
+  if (scheduler) await scheduler.resume(spaceId, id);
+  if (scheduler && wf && wf.trigger?.kind === "poll") {
     const job = (await scheduleStore.findByWorkflow(spaceId, id))[0];
     if (job) {
       try {
@@ -1430,6 +2643,47 @@ app.post("/api/workflows/:id/resume", async (c) => {
   return c.json({ ok: true, state: "active" });
 });
 
+// ── No-data-loss buffer: list / test / replay / drop held trigger events ──
+app.get("/api/workflows/:id/buffer", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const wf = await workflows.getWorkflow(spaceId, id);
+  const entries = await buffer.list(spaceId, id);
+  // Mask each payload for the UI list — the raw event stays sealed in storage.
+  const rows = entries.map((e) => ({
+    id: e.id,
+    seq: e.seq,
+    status: e.status,
+    receivedAt: e.receivedAt,
+    preview: maskValue(e.payload, MASK_DEFAULT),
+  }));
+  return c.json({
+    entries: rows,
+    paused: !!wf?.paused,
+    pausedAt: wf?.pausedAt,
+    pausedReason: wf?.pausedReason,
+  });
+});
+
+app.post("/api/workflows/:id/buffer/test", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const res = await testRunFirst(replayDeps, spaceId, id, new Date().toISOString());
+  return c.json(res);
+});
+
+app.post("/api/workflows/:id/buffer/replay", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const res = await replayBuffer(replayDeps, spaceId, id);
+  return c.json({ ok: true, ...res });
+});
+
+app.delete("/api/workflows/:id/buffer/:entryId", async (c) => {
+  await buffer.remove(c.get("spaceId"), c.req.param("entryId"));
+  return c.json({ ok: true });
+});
+
 app.post("/api/run", async (c) => {
   const spaceId = c.get("spaceId");
   const body = await c.req.json<{
@@ -1446,10 +2700,10 @@ app.post("/api/run", async (c) => {
   let input = body.input ?? {};
   let seed: StepRecord[] | undefined;
   if (body.resumeRunId) {
-    const prior = await runs.getRun(spaceId, body.resumeRunId);
-    if (prior) {
-      seed = prior.records.filter((r) => r.status === "done");
-      input = prior.input;
+    const loaded = await loadResumeSeed(spaceId, body.resumeRunId);
+    if (loaded) {
+      seed = loaded.seed;
+      input = loaded.input;
     }
   }
   const runDocId = body.runId ?? randomUUID();
@@ -1474,16 +2728,20 @@ app.post("/api/run", async (c) => {
       const status = records.some((r) => r.status === "failed")
         ? "failed"
         : "done";
+      let errorType: ErrorType | undefined;
+      let failMessage: string | undefined;
       if (status === "failed") {
         const errs = records
           .filter((r) => r.status === "failed")
           .map((r) => `${r.nodeId}: ${r.error ?? "failed"}`)
           .join("; ");
+        failMessage = errs || "unknown error";
+        errorType = classifyError(failMessage);
         void userLogs.append(spaceId, {
           level: "error",
           source: "run",
           message: `Run failed: ${body.workflowName ?? "untitled"} (manual)`,
-          detail: errs || "unknown error",
+          detail: failMessage,
           workflowId: body.workflowId,
         });
       }
@@ -1493,16 +2751,28 @@ app.post("/api/run", async (c) => {
         workflowName: body.workflowName ?? "untitled",
         trigger: body.resumeRunId ? "resume" : "manual",
         status,
+        ...(errorType ? { errorType } : {}),
         input,
         records,
         startedAt,
         finishedAt: new Date().toISOString(),
       });
+      // manual runs feed health too (errorType + status), same as the recorder
+      void health
+        .recompute(
+          spaceId,
+          body.workflowId,
+          errorType && failMessage
+            ? { lastError: { type: errorType, message: failMessage } }
+            : {},
+        )
+        .catch(() => {});
       emitRun(spaceId, {
         id: runDocId,
         workflowId: body.workflowId,
         status,
         trigger: body.resumeRunId ? "resume" : "manual",
+        ...(errorType ? { errorType } : {}),
       });
     }
   });
@@ -1549,6 +2819,29 @@ app.post("/api/hooks/:spaceId/:workflowId", async (c) => {
   } catch {
     body = {};
   }
+  // No-data-loss: a paused flow buffers the event (ack 200) instead of running
+  // it inline — the sender doesn't retry, the event isn't lost. The non-paused
+  // path below is byte-for-byte unchanged.
+  if (wf.paused) {
+    const r = await buffer.enqueue(spaceId, workflowId, body, { headers });
+    if (r.overflow) {
+      // Cap reached — hard-stop (never drop the oldest = data loss). Transition-
+      // only critical signal; 503 + Retry-After so the sender retries/backs off.
+      if (wf.pausedReason !== "buffer-full") {
+        await workflows.setPaused(spaceId, workflowId, true, "buffer-full");
+        void userLogs.append(spaceId, {
+          level: "error",
+          source: "run",
+          message: `Trigger buffer full: ${wf.name}`,
+          detail: "buffer at capacity — flow hard-stopped, new events rejected until drained",
+          workflowId,
+        });
+      }
+      return c.json({ error: "buffer_full" }, 503, { "Retry-After": "60" });
+    }
+    return c.json({ ok: true, buffered: true, entryId: r.entry!.id });
+  }
+
   const run = await runSavedWorkflow(spaceId, wf, body, "webhook");
   return c.json({ ok: true, runId: run.id, status: run.status });
 });
@@ -1854,7 +3147,11 @@ app.delete("/api/files/:id", async (c) => {
 
 app.get("/api/runs", async (c) => {
   const workflowId = c.req.query("workflow") || undefined;
-  return c.json(await runs.listRuns(c.get("spaceId"), workflowId));
+  // bound the payload (newest-first); default 200 covers the graph window (60)
+  // + the run list (100) with headroom. `?limit=0` opts out (full history).
+  const raw = c.req.query("limit");
+  const limit = raw === undefined ? 200 : Math.max(0, Number(raw) || 0);
+  return c.json(await runs.listRuns(c.get("spaceId"), workflowId, limit));
 });
 
 app.get("/api/runs/stream", async (c) => {
@@ -1862,7 +3159,7 @@ app.get("/api/runs/stream", async (c) => {
   const workflowId = c.req.query("workflow");
   if (!workflowId) return c.json({ error: "workflow required" }, 400);
   return streamSSE(c, async (stream) => {
-    const off = onRun(spaceId, workflowId, (event) => {
+    const off = await onRun(spaceId, workflowId, (event) => {
       void stream.writeSSE({ data: JSON.stringify(event) });
     });
     const ping = setInterval(() => {
@@ -1881,6 +3178,105 @@ app.get("/api/runs/stream", async (c) => {
 app.get("/api/runs/:id", async (c) => {
   const run = await runs.getRun(c.get("spaceId"), c.req.param("id"));
   return run ? c.json(run) : c.json({ error: "not found" }, 404);
+});
+
+// Diagnose a failed run: plain-language cause + a structured fix proposal (diff).
+// READ-ONLY — never applies a fix (auto-apply gating is a later milestone). The
+// fix proposal is only produced when the space may heal; otherwise notify-only.
+app.post("/api/runs/:id/diagnose", async (c) => {
+  const spaceId = c.get("spaceId");
+  const ctx = await buildDiagnosisContext(
+    { getRun: runs.getRun, listRuns: runs.listRuns, getWorkflow: workflows.getWorkflow },
+    spaceId,
+    c.req.param("id"),
+  );
+  if (!ctx) return c.json({ error: "run not found or not a failure" }, 404);
+  // Diagnosis language (default English — global app). Accepts a locale code or
+  // a language name; the UI passes the user's locale.
+  const LANGS: Record<string, string> = { en: "English", tr: "Turkish", de: "German", es: "Spanish", fr: "French" };
+  const lang = c.req.query("lang");
+  const language = lang ? (LANGS[lang.toLowerCase()] ?? lang) : "English";
+  const diagnosis = await fixEngine.diagnose(spaceId, ctx, { language });
+  return c.json(diagnosis);
+});
+
+// ── self-healing fix events (audit + propose/approve flow) ────────────────────
+app.get("/api/workflows/:id/heal-events", async (c) => {
+  const limit = Math.max(0, Number(c.req.query("limit")) || 50);
+  return c.json(await healEvents.listForWorkflow(c.get("spaceId"), c.req.param("id"), limit));
+});
+
+// Approve a proposed fix → apply it as a healing version. The proposal is carried
+// on the event, so apply is deterministic (no re-diagnosis / second LLM call).
+app.post("/api/workflows/:id/fix/:eventId/approve", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const ev = await healEvents.get(spaceId, c.req.param("eventId"));
+  if (!ev || ev.workflowId !== id) return c.json({ error: "fix event not found" }, 404);
+  if (ev.status !== "proposed") return c.json({ error: `fix is '${ev.status}', not awaiting approval` }, 409);
+  if (!ev.proposal) return c.json({ error: "fix event has no proposal to apply" }, 422);
+  const { versionId } = await fixEngine.applyFix(spaceId, id, ev.proposal, { runId: ev.runId, mode: "propose" });
+  const updated = await healEvents.update(spaceId, ev.id, {
+    status: "applied",
+    versionId,
+    approvedBy: c.get("userId"),
+  });
+  void userLogs.append(spaceId, { level: "info", source: "healing", message: `Fix approved & applied: ${ev.diagnosis}`, workflowId: id }).catch(() => {});
+  void audit.record(spaceId, { kind: "heal.applied", message: `Fix approved & applied: ${ev.diagnosis}`, workflowId: id, actor: c.get("userId") ?? "user" });
+  return c.json(updated);
+});
+
+app.post("/api/workflows/:id/fix/:eventId/reject", async (c) => {
+  const spaceId = c.get("spaceId");
+  const ev = await healEvents.get(spaceId, c.req.param("eventId"));
+  if (!ev || ev.workflowId !== c.req.param("id")) return c.json({ error: "fix event not found" }, 404);
+  if (ev.status !== "proposed") return c.json({ error: `fix is '${ev.status}', not awaiting approval` }, 409);
+  void audit.record(spaceId, { kind: "heal.rejected", message: `Fix rejected: ${ev.diagnosis}`, workflowId: c.req.param("id"), actor: c.get("userId") ?? "user" });
+  return c.json(await healEvents.update(spaceId, ev.id, { status: "rejected" }));
+});
+
+// ── Per-flow settings, eligibility, governance (kill-switch + audit) ──
+app.get("/api/workflows/:id/settings", async (c) => {
+  return c.json(await flowSettings.get(c.get("spaceId"), c.req.param("id")));
+});
+
+app.put("/api/workflows/:id/settings", async (c) => {
+  const spaceId = c.get("spaceId");
+  const id = c.req.param("id");
+  const body = await c.req.json<Partial<FlowSettings>>().catch(() => ({}) as Partial<FlowSettings>);
+  const patch: Partial<FlowSettings> = {};
+  if (typeof body.enabled === "boolean") patch.enabled = body.enabled;
+  if (body.fixMode === "notify" || body.fixMode === "propose" || body.fixMode === "auto") patch.fixMode = body.fixMode;
+  if (typeof body.autoReplay === "boolean") patch.autoReplay = body.autoReplay;
+  const next = await flowSettings.set(spaceId, id, patch);
+  void audit.record(spaceId, { kind: "settings.changed", message: `Healing settings changed (enabled=${next.enabled}, mode=${next.fixMode}, autoReplay=${next.autoReplay})`, workflowId: id, actor: c.get("userId") ?? "user" });
+  return c.json(next);
+});
+
+// Why is auto-heal allowed/blocked for this flow? (drives the "why disabled" badge)
+app.get("/api/workflows/:id/eligibility", async (c) => {
+  const spaceId = c.get("spaceId");
+  const allowed = await canHeal(spaceId);
+  const killed = await governance.killSwitch();
+  const reason = allowed ? undefined : killed ? "kill-switch" : HEAL_DISABLED ? "disabled" : "plan";
+  return c.json({ canHeal: allowed, reason });
+});
+
+app.get("/api/governance/kill-switch", async (c) =>
+  c.json({ on: await governance.killSwitch() }),
+);
+
+app.put("/api/governance/kill-switch", async (c) => {
+  const { on } = await c.req.json<{ on?: boolean }>().catch(() => ({ on: undefined }));
+  if (typeof on !== "boolean") return c.json({ error: "on (boolean) required" }, 400);
+  await governance.setKillSwitch(on);
+  void audit.record(c.get("spaceId"), { kind: "killswitch.toggled", message: `Global auto-fix kill-switch turned ${on ? "ON" : "OFF"}`, actor: c.get("userId") ?? "user" });
+  return c.json({ ok: true, on });
+});
+
+app.get("/api/audit", async (c) => {
+  const limit = Math.max(0, Number(c.req.query("limit")) || 100);
+  return c.json(await audit.list(c.get("spaceId"), { workflowId: c.req.query("workflowId") || undefined, limit }));
 });
 
 app.get("/api/spaces", async (c) => {

@@ -2,6 +2,7 @@
   "common": {
     "save": "Enregistrer",
     "saving": "enregistrement…",
+    "saved": "Enregistré",
     "delete": "Supprimer",
     "loading": "chargement…",
     "loadingPage": "Chargement…",
@@ -79,8 +80,8 @@
     "chat": "Chat",
     "history": "Historique",
     "node": "Nœud",
-    "logs": "Journaux",
-    "files": "Fichiers"
+    "files": "Fichiers",
+    "versions": "Versions"
   },
   "logsPanel": {
     "refresh": "Actualiser",
@@ -315,5 +316,176 @@
     "created": "Créé le {{date}}",
     "planLocked": "Le MCP distant est disponible sur les forfaits payants. Mettez à niveau pour vous connecter.",
     "error": "Impossible de créer le token. Veuillez réessayer."
+  },
+  "health": {
+    "healthy": "Sain",
+    "degraded": "Dégradé",
+    "failing": "En échec",
+    "nodata": "Aucune donnée",
+    "cause": {
+      "scheduleStopped": "la planification ne se déclenche plus",
+      "webhookSilent": "les événements webhook attendus n'arrivent plus"
+    }
+  },
+  "monitoring": {
+    "open": "Ouvrir le monitoring",
+    "monitor": "Moniteur",
+    "back": "Retour à l'éditeur",
+    "flows": "Flux",
+    "noFlows": "Aucun flux",
+    "activity": "Activité",
+    "runs": "Exécutions",
+    "noRuns": "Aucune exécution",
+    "logs": "Journaux",
+    "noLogs": "Aucun journal pour ce flux",
+    "versions": "Historique des versions",
+    "settings": "Paramètres",
+    "assistant": "Assistant",
+    "assistantSoon": "Assistant de monitoring — bientôt",
+    "graphHint": "latence par exécution, récente à droite",
+    "runDetail": "Détail d'exécution",
+    "noSteps": "Aucun enregistrement d'étape",
+    "settingsIntro": "Paramètres de monitoring par flux :",
+    "settingsHeal": "Auto-réparation activée/désactivée + mode",
+    "settingsAlerts": "Quels événements vous alertent + canaux",
+    "settingsLiveness": "Contrôles liveness & outcome",
+    "settingsSoon": "L'édition arrive avec le jalon des paramètres.",
+    "latency": "Latence",
+    "successRate": "Taux de réussite",
+    "lastN": "{{n}} derniers",
+    "errorTypes": "Types d'erreur",
+    "noErrors": "Aucune erreur",
+    "volume": "Volume d'exécutions (24h)",
+    "volumeHint": "exécutions par heure",
+    "alertsToggle": "Envoyer des alertes externes",
+    "alertsToggleHint": "Désactivé par défaut. Activé, les erreurs/rétablissements de ce flux notifient vos canaux et lancent les flux gestionnaires d'alertes. (Le journal d'activité les enregistre dans tous les cas.)",
+    "alerts": "Alertes",
+    "alertsOn": "Alertes activées",
+    "alertsOff": "Alertes désactivées",
+    "alertChannels": "Canaux et règles",
+    "alertChannelsSoon": "Le choix des destinations (Discord, Slack, e-mail) et des règles par gravité arrive bientôt. Pour l'instant, l'interrupteur contrôle tous les canaux configurés."
+  },
+  "heal": {
+    "fixes": "Corrections",
+    "fixTitle": "Correction proposée",
+    "noFixes": "Aucune correction pour ce flux pour l'instant.",
+    "changes": "Modifications",
+    "noChanges": "Aucune modification structurelle.",
+    "triggerChanged": "Déclencheur modifié",
+    "approve": "Approuver",
+    "reject": "Rejeter",
+    "undo": "Annuler",
+    "status": {
+      "proposed": "Proposée",
+      "applied": "Appliquée",
+      "rejected": "Rejetée",
+      "reverted": "Annulée",
+      "failed": "Échouée"
+    },
+    "mode": {
+      "notify": "Notifier",
+      "propose": "Proposer",
+      "auto": "Automatique"
+    },
+    "confidence": {
+      "high": "Confiance élevée",
+      "medium": "Confiance moyenne",
+      "low": "Confiance faible"
+    },
+    "badge": {
+      "code": "Code de l'étape modifié",
+      "input": "Entrées modifiées",
+      "wire": "Câblage modifié",
+      "gate": "Condition modifiée",
+      "provider": "Fournisseur modifié"
+    },
+    "reason": {
+      "cap-exceeded": "Limite d'exécution",
+      "not-logic": "Non auto-corrigible",
+      "low-confidence": "Confiance faible",
+      "danger-downstream": "Aval risqué",
+      "blast-too-wide": "Trop large",
+      "loop-cap": "Limite de boucle",
+      "fix-ineffective": "Correction inefficace",
+      "kill-switch": "Auto-réparation désactivée"
+    }
+  },
+  "versions": {
+    "title": "Historique des versions",
+    "save": "Enregistrer la version",
+    "label": "Libellé (optionnel)",
+    "noChange": "Aucun changement depuis la dernière version.",
+    "empty": "Aucune version pour l'instant — enregistrez-en une ci-dessus.",
+    "restore": "Restaurer cette version",
+    "confirm": "Confirmer",
+    "source": {
+      "editor": "Édition",
+      "chat": "Chat IA",
+      "mcp": "MCP",
+      "run-snapshot": "Exécution",
+      "healing": "Auto-réparation",
+      "restore": "Restauration"
+    }
+  },
+  "review": {
+    "title": "Revue des changements",
+    "switchTo": "Passer à cette version",
+    "added": "Ajouté",
+    "modified": "Modifié",
+    "removed": "Supprimé",
+    "oldNew": "ancien → nouveau",
+    "outputs": "Sorties",
+    "present": "défini",
+    "cat": {
+      "code": "Code",
+      "input": "Entrées",
+      "provider": "Fournisseur",
+      "gate": "Condition",
+      "wire": "Câblage"
+    },
+    "history": "Historique",
+    "noHistory": "Aucun historique pour l'instant.",
+    "pickNode": "Choisir un nœud",
+    "pickNodeHint": "Cliquez sur un nœud surligné pour voir son changement."
+  },
+  "settings": {
+    "title": "Paramètres du flux",
+    "close": "Fermer",
+    "heal": "Auto-réparation",
+    "healHint": "Auto-diagnostic + correction quand ce flux échoue",
+    "mode": "Mode de correction",
+    "modeHint": "Ce qui se passe quand une correction est trouvée",
+    "modeNotify": "Notifier",
+    "modePropose": "Proposer",
+    "modeAuto": "Auto",
+    "autoReplay": "Relecture auto",
+    "autoReplayHint": "Rejouer les événements en mémoire tampon après une correction réussie",
+    "alerts": "Alertes",
+    "alertsHint": "Envoyer des alertes externes pour ce flux",
+    "gatedPlan": "Nécessite un plan Pro",
+    "gatedKill": "Le coupe-circuit global est activé",
+    "gatedDisabled": "Désactivé pour ce déploiement"
+  },
+  "governance": {
+    "title": "Gouvernance",
+    "kill": "Coupe-circuit global",
+    "killHint": "Arrêter instantanément toutes les corrections automatiques sur tous les flux",
+    "audit": "Journal d'audit",
+    "auditEmpty": "Aucun événement pour l'instant"
+  },
+  "alert": {
+    "title": "Canaux d'alerte",
+    "channels": "Canaux",
+    "noChannels": "Aucun canal pour l'instant",
+    "addChannel": "Ajouter un canal",
+    "add": "Ajouter",
+    "test": "Envoyer un test",
+    "tested": "Envoyé ✓",
+    "label": "Libellé (optionnel)",
+    "handlers": "Flux exécutés lors des alertes",
+    "noHandlers": "Aucun — donnez à un flux un déclencheur 'monitor' pour gérer les alertes",
+    "handlersHint": "Un flux avec déclencheur 'monitor' s'exécute automatiquement à chaque alerte, recevant l'événement en entrée — pour une logique personnalisée au lieu d'(ou avec) un canal.",
+    "addHandler": "Ajouter un flux gestionnaire",
+    "pickFlow": "Sélectionner un flux…"
   }
 }
