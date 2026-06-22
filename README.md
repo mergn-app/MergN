@@ -215,3 +215,17 @@ lock, credentials passed via stdin). No separate VM / Firecracker needed.
 from `docker-compose.yml` and point `MONGO_URL` to Atlas. For secrets on object
 storage instead of Mongo, set `VAULT_DRIVER=s3` + `S3_*`/AWS creds (R2/S3, or add
 back a MinIO service). The app image stays the same.
+
+## License
+
+MergN is licensed under `BUSL-1.1` (Business Source License 1.1).
+
+- Allowed: self-hosting, internal/commercial usage, code modifications, and forks.
+- Restricted: offering MergN (or a derivative) as a hosted/managed/white-label
+  automation platform, or operating a competing automation SaaS from this
+  codebase, without a commercial license.
+
+Each version converts to Apache-2.0 three years after its first public
+distribution (see `LICENSE`).
+For practical examples, see `LICENSE-FAQ.md`.
+For brand/name usage, see `TRADEMARKS.md`.
