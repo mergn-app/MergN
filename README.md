@@ -227,5 +227,5 @@ MergN is licensed under `BUSL-1.1` (Business Source License 1.1).
 
 Each version converts to Apache-2.0 three years after its first public
 distribution (see `LICENSE`).
-For practical examples, see `LICENSE-FAQ.md`.
+For practical examples, see `LICENSING-FAQ.md`.
 For brand/name usage, see `TRADEMARKS.md`.

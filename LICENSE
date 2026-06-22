@@ -8,28 +8,21 @@ Licensor: Quoll LLC. and contributors
 Licensed Work: MergN, including all source code, build scripts, and assets in
 this repository, except where another license file explicitly applies.
 
-Additional Use Grant:
-You may use, modify, create derivative works of, and redistribute the Licensed
-Work for self-hosted deployments, including internal commercial use and paid
-services that are not a hosted automation platform.
-
+Additional Use Grant: You may use, modify, create derivative works of, and
+redistribute the Licensed Work for self-hosted deployments, including internal
+commercial use and paid services that are not a hosted automation platform.
 You may not use the Licensed Work, or a derivative of it, to provide a hosted,
 managed, embedded, or white-label automation/workflow platform to third
 parties (including SaaS, PaaS, DBaaS, API service, or similar offering) where
 the Licensed Work or its substantial functionality is made available as a
-service.
-
-You may not use the Licensed Work, or a derivative of it, to build, market, or
-operate a product or service that competes with the Licensed Work as a
-general-purpose workflow or automation platform.
+service. You may not use the Licensed Work, or a derivative of it, to build,
+market, or operate a product or service that competes with the Licensed Work
+as a general-purpose workflow or automation platform.
 
 Change Date: The third anniversary of the first publicly available
 distribution of each specific version of the Licensed Work.
 
 Change License: Apache License, Version 2.0
-
-For information about commercial licensing for restricted uses, contact:
-mergn@quollhq.com
 
 Terms
 
