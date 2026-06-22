@@ -1,4 +1,6 @@
-# MergN 
+# MergN
+
+[![License: BUSL-1.1](https://img.shields.io/badge/License-BUSL--1.1-0b5fff.svg)](LICENSE)
 
 > The observability of n8n. The flexibility of AI agents.
 
