@@ -227,7 +227,6 @@ MergN is licensed under `BUSL-1.1` (Business Source License 1.1).
   automation platform, or operating a competing automation SaaS from this
   codebase, without a commercial license.
 
-Each version converts to Apache-2.0 three years after its first public
-distribution (see `LICENSE`).
+This version converts to Apache-2.0 on 2030-05-22 (see `LICENSE`).
 For practical examples, see `LICENSING-FAQ.md`.
 For brand/name usage, see `TRADEMARKS.md`.

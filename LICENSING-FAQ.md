@@ -24,16 +24,8 @@ See `LICENSE` for the full legal text.
 ## Does this remain open source?
 
 `BUSL-1.1` is source-available, not OSI open source.
-The source code remains public, and each version converts to Apache-2.0 three
-years after its first public distribution (see `LICENSE`).
-
-## How do we handle Change Date per version?
-
-For this repository, "version" means an official release published by the
-Licensor (for example, a release tag), not every commit.
-
-On every new official release, we manually update `Change Date` in `LICENSE`
-to the date that is three years after that release's first public distribution.
+The source code remains public, and this version converts to Apache-2.0 on
+2030-05-22 (see `LICENSE`).
 
 ## I need one of the restricted uses
 
