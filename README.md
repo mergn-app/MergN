@@ -221,6 +221,7 @@ back a MinIO service). The app image stays the same.
 ## License
 
 MergN is licensed under `BUSL-1.1` (Business Source License 1.1).
+Copyright (c) 2026 Quoll LLC.
 
 - Allowed: self-hosting, internal/commercial usage, code modifications, and forks.
 - Restricted: offering MergN (or a derivative) as a hosted/managed/white-label

@@ -3,10 +3,11 @@ Business Source License 1.1
 License text copyright (c) 2017 MariaDB Corporation Ab, All Rights Reserved.
 "Business Source License" is a trademark of MariaDB Corporation Ab.
 
-Licensor: Quoll LLC. and contributors
+Licensor: Quoll LLC, a Delaware limited liability company and contributors
 
 Licensed Work: MergN, including all source code, build scripts, and assets in
-this repository, except where another license file explicitly applies.
+this repository, except where another license file explicitly applies. The
+Licensed Work is Copyright (c) 2026 Quoll LLC and contributors.
 
 Additional Use Grant: You may use, modify, create derivative works of, and
 redistribute the Licensed Work for self-hosted deployments, including internal
