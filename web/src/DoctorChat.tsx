@@ -26,6 +26,7 @@ import {
 import type { ChangeSource } from "./ChangeReview";
 import { ChatComposer } from "./ChatComposer";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useStickToBottom } from "@/hooks/useStickToBottom";
 
 interface ToolPart {
   type: string;
@@ -265,6 +266,7 @@ function DoctorThreadInner({
     experimental_throttle: 50,
   });
   const chatError = error ? errorMessage(error) : null;
+  const scrollRef = useStickToBottom(messages);
 
   const busy = status === "streaming" || status === "submitted";
 
@@ -303,7 +305,7 @@ function DoctorThreadInner({
         </button>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea viewportRef={scrollRef} className="min-h-0 flex-1">
         <div className="flex flex-col gap-3 p-3">
           {messages.length === 0 && (
             <div className="flex flex-col items-center px-4 pb-2 pt-8 text-center">
