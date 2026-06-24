@@ -1,8 +1,9 @@
-import { mkdir, writeFile, rm, access } from "node:fs/promises";
+import { mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { randomUUID, createHash } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import { createInterface } from "node:readline";
 import { pathToFileURL } from "node:url";
 import dns from "node:dns/promises";
 import net from "node:net";
@@ -89,66 +90,191 @@ function guardedFetch(domain?: string) {
   };
 }
 
-function exists(p: string): Promise<boolean> {
-  return access(p).then(
-    () => true,
-    () => false,
-  );
-}
+const PYTHON = process.env.PYTHON_BIN ?? "python3";
+const TIMEOUT_SEC = Number(process.env.CODE_TIMEOUT_SEC ?? 30);
+const PY_RUNNER = `
+import asyncio
+import json
+import sys
+import traceback
 
-function run(cmd: string, args: string[], cwd: string): Promise<{ code: number; out: string }> {
-  return new Promise((resolve) => {
-    const p = spawn(cmd, args, { cwd, env: process.env });
-    let out = "";
-    p.stdout.on("data", (d) => (out += d));
-    p.stderr.on("data", (d) => (out += d));
-    p.on("close", (code) => resolve({ code: code ?? 0, out }));
-    p.on("error", (e) => resolve({ code: 1, out: String(e) }));
+class AttrDict(dict):
+    def __getattr__(self, key):
+        try:
+            return self[key]
+        except KeyError as exc:
+            raise AttributeError(key) from exc
+    def __setattr__(self, key, value):
+        self[key] = value
+
+def to_attr(value):
+    if isinstance(value, dict):
+        out = AttrDict()
+        for k, v in value.items():
+            out[k] = to_attr(v)
+        return out
+    if isinstance(value, list):
+        return [to_attr(v) for v in value]
+    return value
+
+def to_plain(value):
+    if isinstance(value, AttrDict):
+        return {k: to_plain(v) for k, v in value.items()}
+    if isinstance(value, dict):
+        return {k: to_plain(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [to_plain(v) for v in value]
+    return value
+
+def send(message):
+    sys.stdout.write(json.dumps(message, ensure_ascii=False) + "\\n")
+    sys.stdout.flush()
+
+def recv():
+    line = sys.stdin.readline()
+    if not line:
+        raise RuntimeError("runtime disconnected")
+    return json.loads(line)
+
+class ProviderProxy:
+    def __init__(self, provider):
+        self._provider = provider
+    def __getattr__(self, method):
+        def call(*args, **kwargs):
+            rid = f"{self._provider}:{method}"
+            send({
+                "type": "call",
+                "id": rid,
+                "provider": self._provider,
+                "method": method,
+                "args": to_plain(list(args)),
+                "kwargs": to_plain(kwargs),
+            })
+            response = recv()
+            if response.get("type") != "call_result":
+                raise RuntimeError("invalid runtime response")
+            if not response.get("ok", False):
+                raise RuntimeError(str(response.get("error", "provider call failed")))
+            return to_attr(response.get("value"))
+        return call
+
+class ConnectionsProxy:
+    def __getattr__(self, provider):
+        return ProviderProxy(provider)
+
+class Ctx:
+    def __init__(self, idempotency_key):
+        self.idempotencyKey = idempotency_key
+        self.connections = ConnectionsProxy()
+
+def main():
+    boot = recv()
+    source = str(boot.get("source", ""))
+    input_data = to_attr(boot.get("input") or {})
+    ctx = Ctx(str(boot.get("idempotencyKey", "")))
+    env = {}
+    try:
+        exec(source, env, env)
+        fn = env.get("run")
+        if not callable(fn):
+            raise RuntimeError("func must define run(ctx, input)")
+        out = fn(ctx, input_data)
+        if asyncio.iscoroutine(out):
+            out = asyncio.run(out)
+        send({"type": "result", "value": to_plain(out)})
+    except Exception as exc:
+        send({"type": "error", "error": f"{exc}\\n{traceback.format_exc()}"})
+
+if __name__ == "__main__":
+    main()
+`;
+
+async function invokePython(
+  source: string,
+  idempotencyKey: string,
+  input: Record<string, unknown>,
+  clients: Record<string, unknown>,
+): Promise<unknown> {
+  const runDir = join(tmpdir(), "fb-local", randomUUID());
+  await mkdir(runDir, { recursive: true });
+  const runner = join(runDir, "runner.py");
+  await writeFile(runner, PY_RUNNER);
+  return new Promise<unknown>((resolve, reject) => {
+    const proc = spawn(PYTHON, ["-u", runner], { cwd: runDir, env: process.env });
+    const rl = createInterface({ input: proc.stdout });
+    let stderr = "";
+    let done = false;
+    const timeout = setTimeout(() => {
+      if (done) return;
+      done = true;
+      proc.kill("SIGKILL");
+      reject(new Error(`code execution timed out after ${TIMEOUT_SEC}s`));
+    }, TIMEOUT_SEC * 1000);
+    const finish = (fn: () => void) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      rl.close();
+      fn();
+    };
+    proc.stderr.on("data", (d) => (stderr += String(d)));
+    rl.on("line", async (line) => {
+      let msg: any;
+      try {
+        msg = JSON.parse(line);
+      } catch {
+        return;
+      }
+      if (msg?.type === "call") {
+        const provider = String(msg.provider ?? "");
+        const method = String(msg.method ?? "");
+        const id = String(msg.id ?? "");
+        try {
+          const target = (clients[provider] as Record<string, unknown> | undefined)?.[method];
+          if (typeof target !== "function") {
+            throw new Error(`provider method not found: ${provider}.${method}`);
+          }
+          const args = Array.isArray(msg.args) ? msg.args : [];
+          const kwargs = msg.kwargs && typeof msg.kwargs === "object" ? msg.kwargs : {};
+          const hasKwargs = Object.keys(kwargs).length > 0;
+          const value = await (target as (...a: unknown[]) => Promise<unknown> | unknown)(
+            ...(hasKwargs ? [...args, kwargs] : args),
+          );
+          proc.stdin.write(
+            JSON.stringify({ type: "call_result", id, ok: true, value }) + "\n",
+          );
+        } catch (err) {
+          proc.stdin.write(
+            JSON.stringify({
+              type: "call_result",
+              id,
+              ok: false,
+              error: err instanceof Error ? err.message : String(err),
+            }) + "\n",
+          );
+        }
+        return;
+      }
+      if (msg?.type === "result") {
+        finish(() => resolve(msg.value));
+        proc.kill();
+        return;
+      }
+      if (msg?.type === "error") {
+        finish(() => reject(new Error(String(msg.error ?? "python execution failed"))));
+        proc.kill();
+      }
+    });
+    proc.on("error", (err) => finish(() => reject(err)));
+    proc.on("close", (code) => {
+      if (done) return;
+      const extra = stderr.trim() ? `: ${stderr.trim().slice(-600)}` : "";
+      finish(() => reject(new Error(`python runtime exited with code ${code ?? 1}${extra}`)));
+    });
+    proc.stdin.write(JSON.stringify({ source, idempotencyKey, input }) + "\n");
+  }).finally(async () => {
+    await rm(runDir, { recursive: true, force: true }).catch(() => {});
   });
-}
-
-function depsKey(deps: string[]): string {
-  if (deps.length === 0) return "none";
-  return createHash("sha256").update([...deps].sort().join("\n")).digest("hex").slice(0, 16);
-}
-
-function toDependencyObject(deps: string[]): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const raw of deps) {
-    const d = raw.trim();
-    if (!d) continue;
-    const at = d.lastIndexOf("@");
-    if (at > 0) out[d.slice(0, at)] = d.slice(at + 1);
-    else out[d] = "latest";
-  }
-  return out;
-}
-
-const installLocks = new Map<string, Promise<void>>();
-
-async function ensureDeps(cacheDir: string, deps: string[]): Promise<void> {
-  if (deps.length === 0) return;
-  const nodeModules = join(cacheDir, "node_modules");
-  if (await exists(nodeModules)) return;
-  const key = cacheDir;
-  let lock = installLocks.get(key);
-  if (!lock) {
-    lock = (async () => {
-      await mkdir(cacheDir, { recursive: true });
-      await writeFile(
-        join(cacheDir, "package.json"),
-        JSON.stringify({ name: "fb-local", private: true, type: "module", dependencies: toDependencyObject(deps) }),
-      );
-      const r = await run("npm", ["install", "--no-audit", "--no-fund", "--loglevel=error"], cacheDir);
-      if (r.code !== 0) throw new Error(`local dependency install failed: ${r.out.slice(-400)}`);
-    })();
-    installLocks.set(key, lock);
-  }
-  try {
-    await lock;
-  } finally {
-    installLocks.delete(key);
-  }
 }
 
 export class LocalRuntime implements Runtime {
@@ -164,18 +290,7 @@ export class LocalRuntime implements Runtime {
       providers.push({ name, clientSource: c.clientSource, cred: c.cred ?? {}, egressDomain: c.egressDomain });
     }
 
-    const deps = [
-      ...(def.body.dependencies ?? []),
-      ...providers.flatMap((p) => {
-        const c = ctx.connections[p.name] as Carrier;
-        return c?.dependencies ?? [];
-      }),
-    ].filter((v, i, a) => a.indexOf(v) === i);
-
-    const cacheDir = join(tmpdir(), "fb-local", depsKey(deps));
-    await ensureDeps(cacheDir, deps);
-
-    const runDir = join(cacheDir, "runs", randomUUID());
+    const runDir = join(tmpdir(), "fb-local-providers", randomUUID());
     await mkdir(join(runDir, "providers"), { recursive: true });
 
     try {
@@ -191,14 +306,7 @@ export class LocalRuntime implements Runtime {
         connections[p.name] = await mod.default(p.cred, guardedFetch(p.egressDomain));
       }
 
-      const funcFile = join(runDir, "fb_func.mjs");
-      await writeFile(funcFile, def.body.source);
-      const fnMod = await import(pathToFileURL(funcFile).href);
-      if (typeof fnMod.default !== "function") {
-        throw new Error("func must export default an async (ctx, input) function");
-      }
-      const localCtx: FuncContext = { idempotencyKey: ctx.idempotencyKey, connections };
-      return await fnMod.default(localCtx, input);
+      return await invokePython(def.body.source, ctx.idempotencyKey, input, connections);
     } finally {
       await rm(runDir, { recursive: true, force: true }).catch(() => {});
     }

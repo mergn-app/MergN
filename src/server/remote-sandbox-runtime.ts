@@ -77,6 +77,7 @@ export class RemoteSandboxRuntime implements Runtime {
         authorization: "Bearer " + this.token,
       },
       body: JSON.stringify({
+        language: def.body.language,
         source: def.body.source,
         input,
         idempotencyKey: ctx.idempotencyKey,

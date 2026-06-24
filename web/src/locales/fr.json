@@ -263,6 +263,7 @@
     "applyHint": "Enregistrez le workflow pour appliquer ce déclencheur.",
     "kind": {
       "manual": "Manuel",
+      "http": "HTTP Endpoint",
       "webhook": "Webhook",
       "schedule": "Planification",
       "poll": "Sondage",
@@ -270,6 +271,7 @@
     },
     "desc": {
       "manual": "Exécuter manuellement depuis le panneau d'exécution.",
+      "http": "Exécuter sur correspondance méthode + chemin HTTP.",
       "webhook": "Exécuter lorsqu'un POST HTTP atteint une URL.",
       "schedule": "Exécuter selon une planification cron.",
       "poll": "Vérifier régulièrement un service pour de nouvelles données.",

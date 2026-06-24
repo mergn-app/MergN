@@ -1,8 +1,17 @@
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useWorkflows, useDeleteWorkflow } from "./queries";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Workflow, Trash2, Plus, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Trash2,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Workflow,
+} from "lucide-react";
 
 export function WorkflowsPanel({
   currentId,
@@ -26,6 +35,36 @@ export function WorkflowsPanel({
   const { t, i18n } = useTranslation();
   const { data: items = [], isLoading } = useWorkflows();
   const del = useDeleteWorkflow();
+  const [collapsed, setCollapsed] = useState<
+    Record<"http" | "webhook" | "cron" | "other", boolean>
+  >({
+    http: false,
+    webhook: false,
+    cron: false,
+    other: false,
+  });
+  const groups = useMemo(() => {
+    const out: Record<"http" | "webhook" | "cron" | "other", typeof items> = {
+      http: [],
+      webhook: [],
+      cron: [],
+      other: [],
+    };
+    for (const it of items) {
+      if (it.triggerKind === "http") out.http.push(it);
+      else if (it.triggerKind === "webhook") out.webhook.push(it);
+      else if (it.triggerKind === "schedule" && it.scheduleMode === "cron")
+        out.cron.push(it);
+      else out.other.push(it);
+    }
+    return out;
+  }, [items]);
+  const labels: Record<keyof typeof groups, string> = {
+    http: "HTTP Endpoints",
+    webhook: "Webhooks",
+    cron: "Cron Jobs",
+    other: "Other",
+  };
 
   return (
     <div className="flex h-full w-full shrink-0 flex-col overflow-hidden rounded-2xl border border-border/40 bg-muted/40">
@@ -116,64 +155,89 @@ export function WorkflowsPanel({
             {t("workflows.empty")}
           </div>
         )}
-        {items.map((it) => {
-          const active = it.id === currentId;
-          return (
-            <div
-              key={it.id}
-              onClick={() => onLoad(it.id)}
-              title={it.name}
-              className={cn(
-                "group flex cursor-pointer items-center gap-2.5 rounded-xl border border-transparent px-2 py-2 transition-colors hover:bg-background-subtle",
-                active && "border-border/60 bg-background-subtle",
-                minimized && "justify-center",
-              )}
-            >
-              <div
-                className={cn(
-                  "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
-                  active
-                    ? "bg-primary/15 text-foreground"
-                    : "bg-muted/60 text-muted-foreground",
-                )}
+        {(Object.keys(groups) as Array<keyof typeof groups>).map((key) => (
+          <div key={key} className="space-y-1">
+            {!minimized && groups[key].length > 0 && (
+              <button
+                className="flex w-full items-center gap-1 px-2 text-[11px] uppercase tracking-wide text-muted-foreground"
+                onClick={() =>
+                  setCollapsed((prev) => ({ ...prev, [key]: !prev[key] }))
+                }
               >
-                <Workflow className="size-4" />
-              </div>
-
-              {!minimized && (
-                <>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium leading-tight">
-                      {it.name}
-                    </div>
-                    <div className="truncate text-[11px] text-muted-foreground">
-                      {t("workflows.meta", {
-                        n: it.funcCount,
-                        date: new Date(it.updatedAt).toLocaleDateString(
-                          i18n.language,
-                        ),
-                      })}
-                    </div>
-                  </div>
-
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      del.mutate(it.id);
-                      // deleting the flow that's open → clear the canvas/chat so
-                      // we don't keep showing a workflow that no longer exists.
-                      if (it.id === currentId) onNew();
-                    }}
-                    className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
-                    title={t("common.delete")}
+                {collapsed[key] ? (
+                  <ChevronRight className="size-3.5" />
+                ) : (
+                  <ChevronDown className="size-3.5" />
+                )}
+                <span>{labels[key]}</span>
+                <span className="ml-auto">{groups[key].length}</span>
+              </button>
+            )}
+            {(!collapsed[key] || minimized) &&
+              groups[key].map((it) => {
+                const active = it.id === currentId;
+                return (
+                  <div
+                    key={it.id}
+                    onClick={() => onLoad(it.id)}
+                    title={it.name}
+                    className={cn(
+                      "group flex cursor-pointer items-center gap-2.5 rounded-xl border border-transparent px-2 py-2 transition-colors hover:bg-background-subtle",
+                      active && "border-border/60 bg-background-subtle",
+                      minimized && "justify-center",
+                    )}
                   >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </>
-              )}
-            </div>
-          );
-        })}
+                    <div
+                      className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-lg transition-colors",
+                        active
+                          ? "bg-primary/15 text-foreground"
+                          : "bg-muted/60 text-muted-foreground",
+                      )}
+                    >
+                      <Workflow className="size-4" />
+                    </div>
+
+                    {!minimized && (
+                      <>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-sm font-medium leading-tight">
+                            {it.name}
+                          </div>
+                          <div className="truncate text-[11px] text-muted-foreground">
+                            {t("workflows.meta", {
+                              n: it.funcCount,
+                              date: new Date(it.updatedAt).toLocaleDateString(
+                                i18n.language,
+                              ),
+                            })}
+                            {it.triggerKind === "http" && it.httpMethod && it.httpPath
+                              ? ` · ${it.httpMethod} ${it.httpPath}`
+                              : ""}
+                            {it.triggerKind === "schedule" && it.scheduleLabel
+                              ? ` · ${it.scheduleLabel}`
+                              : ""}
+                          </div>
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            del.mutate(it.id);
+                            if (it.id === currentId) onNew();
+                          }}
+                          className="flex size-6 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-destructive/15 hover:text-destructive group-hover:opacity-100"
+                          title={t("common.delete")}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </button>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+          </div>
+        ))}
       </div>
     </div>
   );

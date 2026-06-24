@@ -41,10 +41,9 @@ const formatSignupFunc: PureFunc = {
     required: ["message"],
   },
   body: {
-    language: "javascript",
+    language: "python",
     source:
-      "const full = (input.firstName + ' ' + input.lastName).trim(); " +
-      "return { message: '🎉 Yeni kayıt: ' + full + ' (' + input.email + ') — ' + String(input.plan).toUpperCase() + ' plan' };",
+      "def run(ctx, input):\n  full = f\"{input.firstName} {input.lastName}\".strip()\n  return {'message': f'Yeni kayit: {full} ({input.email}) - {str(input.plan).upper()} plan'}",
     generatedBy: {
       agent: "func-writer",
       prompt: "kayıt verisinden okunabilir bir slack mesajı oluştur",

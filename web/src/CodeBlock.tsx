@@ -28,6 +28,7 @@ function extractFunctionBody(text: string): string | null {
 export function CodeBlock({
   source,
   name,
+  language = "javascript",
   theme = "dark",
   wrap = true,
   fill = false,
@@ -39,6 +40,7 @@ export function CodeBlock({
 }: {
   source: string;
   name: string;
+  language?: "javascript" | "python";
   theme?: "dark" | "light";
   wrap?: boolean;
   fill?: boolean;
@@ -53,6 +55,10 @@ export function CodeBlock({
 
   useEffect(() => {
     if (value !== undefined) return;
+    if (language === "python") {
+      setCode(source.trim());
+      return;
+    }
     let cancelled = false;
     const wrapped = `async function ${name}(ctx, input) {\n${source}\n}`;
     format(wrapped, {
@@ -70,7 +76,7 @@ export function CodeBlock({
     return () => {
       cancelled = true;
     };
-  }, [source, name, value]);
+  }, [source, name, value, language]);
 
   const guardedExtensions = useMemo(() => {
     if (!editable) return [];

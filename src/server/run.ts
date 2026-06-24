@@ -36,7 +36,6 @@ const STEP_THROTTLE_MS = ((): number => {
 })();
 import { RemoteSandboxRuntime } from "./remote-sandbox-runtime";
 import { LocalRuntime } from "./local-runtime";
-import { DockerRuntime } from "./docker-runtime";
 import { FileInjectingRuntime } from "./file-runtime";
 import type { FileService } from "./files";
 import { resolveEgressHost } from "./egress";
@@ -123,7 +122,7 @@ function toDef(f: RunFunc): FuncDefinition {
     required: p.required,
   }));
   const body = {
-    language: "javascript" as const,
+    language: "python" as const,
     source: f.bodySource,
     dependencies: f.dependencies ?? [],
     generatedBy: { agent: "builder", prompt: f.id },
@@ -226,43 +225,11 @@ export interface RemoteProviderCarrier {
   dependencies?: string[];
 }
 
-function isDockerInfraError(err: unknown): boolean {
-  const msg = String(err ?? "").toLowerCase();
-  return [
-    "cannot connect to the docker daemon",
-    "is the docker daemon running",
-    "permission denied while trying to connect to the docker daemon socket",
-    "spawn docker enoent",
-    "docker: not found",
-    "docker command not found",
-    "the working directory",
-    "invalid mount config",
-  ].some((s) => msg.includes(s));
-}
-
-class DockerWithLocalFallbackRuntime implements Runtime {
-  private docker = new DockerRuntime();
-  private local = new LocalRuntime();
-
-  async run(
-    def: FuncDefinition,
-    ctx: FuncContext,
-    input: Record<string, unknown>,
-  ): Promise<unknown> {
-    try {
-      return await this.docker.run(def, ctx, input);
-    } catch (err) {
-      if (!isDockerInfraError(err)) throw err;
-      return this.local.run(def, ctx, input);
-    }
-  }
-}
-
 export function createRuntime(): Runtime {
   const kind = (process.env.CODE_RUNTIME ?? "local").toLowerCase();
   if (kind === "remote") return new RemoteSandboxRuntime();
-  if (kind === "local") return new DockerWithLocalFallbackRuntime();
-  throw new Error("invalid CODE_RUNTIME: use 'local' (docker->native fallback) or 'remote'");
+  if (kind === "local") return new LocalRuntime();
+  throw new Error("invalid CODE_RUNTIME: use 'local' or 'remote'");
 }
 
 export async function buildProviderCarrier(

@@ -3,7 +3,7 @@ import type { PortDef, Binding } from "./binding";
 import type { ConnectionRequirement } from "./connection";
 
 export interface FuncBody {
-  language: "javascript";
+  language: "python";
   source: string;
   dependencies?: string[];
   generatedBy: { agent: string; prompt: string };

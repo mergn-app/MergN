@@ -55,7 +55,7 @@ const EVENT_FIELDS: Record<string, string[]> = {
 };
 
 const CONVENTIONS = `FLOWBAKER STEP CONVENTIONS (write step code to match these)
-- A step body is an ES module: \`export default async (ctx, input) => { ... return {...}; }\`.
+- A step body is Python code with \`def run(ctx, input):\` that returns a dict.
 - Read every value from \`input.<field>\` (this is how the server derives the step's input ports — declare nothing else).
 - Effectful steps call services via \`ctx.connections.<providerId>.<method>(...)\` — never touch raw tokens. Pass the provider id to add_step.
 - Return an object with ONLY the fields a later step or the final action consumes. Do NOT echo an input back as an output. For a list/batch step, return the list as one output, not per-item scalar fields.
@@ -144,7 +144,7 @@ async function main() {
     {
       workflowId: z.string(),
       id: z.string().describe("snake_case step id"),
-      code: z.string().describe("ES module: export default async (ctx, input) => { ... return {...} }"),
+      code: z.string().describe("Python source: def run(ctx, input): ... return {...}"),
       provider: z.string().optional().describe("provider id for an effectful step"),
       configInputs: z.array(z.string()).optional().describe("input names that are fixed per-step settings"),
       arrayInputs: z.array(z.string()).optional().describe("input names read as a list/array"),

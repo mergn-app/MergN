@@ -36,13 +36,13 @@ export const funcDraftZ = z.object({
   bodySource: z
     .string()
     .describe(
-      "An ES module that `export default`s `async (ctx, input) => result`. Read from `input`, use ctx.connections.<name> when effectful, and return the output object. Use top-level `import` for any npm package you list in `dependencies`. Example: \"export default async (ctx, input) => { const r = await ctx.connections.slack.postMessage(input.channel, input.text); return { ts: r }; };\"",
+      "Python source that includes `class StepInput(TypedDict)`, `class StepOutput(TypedDict)`, and `def run(ctx: Any, input: StepInput) -> StepOutput`. Read from `input`, use ctx.connections.<name> when effectful, and return a StepOutput-shaped dict. Use `import` for any package you list in `dependencies`.",
     ),
   dependencies: z
     .array(z.string())
     .default([])
     .describe(
-      "npm packages this func imports directly (e.g. ['dayjs']). Empty array if none. Provider packages do not go here.",
+      "PyPI packages this func imports directly (e.g. ['requests']). Empty array if none.",
     ),
   requires: z
     .array(

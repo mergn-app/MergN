@@ -21,8 +21,8 @@ export const fullNameAdapter: PureFunc = {
     required: ['fullName'],
   },
   body: {
-    language: 'javascript',
-    source: "return { fullName: input.firstName + ' ' + input.lastName }",
+    language: 'python',
+    source: "def run(ctx, input):\n  return {'fullName': f\"{input.firstName} {input.lastName}\"}",
     generatedBy: { agent: 'func-writer', prompt: 'tam ismi birleştir' },
   },
 }
@@ -61,9 +61,9 @@ export const sendEmailFunc: EffectfulFunc = {
     idempotency: { key: 'runId+funcId', mechanism: 'provider-key' },
   },
   body: {
-    language: 'javascript',
+    language: 'python',
     source:
-      'return { messageId: await ctx.connections.smtp.send(input.to, input.subject, input.body) }',
+      "def run(ctx, input):\n  return {'messageId': ctx.connections.smtp.send(input.to, input.subject, input.body)}",
     generatedBy: { agent: 'func-writer', prompt: 'kullanıcıya hoş geldin maili at' },
   },
 }
@@ -95,9 +95,9 @@ export const slackPostFunc: EffectfulFunc = {
     idempotency: { key: 'runId+funcId', mechanism: 'provider-key' },
   },
   body: {
-    language: 'javascript',
+    language: 'python',
     source:
-      'return { ts: await ctx.connections.slack.postMessage(input.channel, input.text) }',
+      "def run(ctx, input):\n  return {'ts': ctx.connections.slack.postMessage(input.channel, input.text)}",
     generatedBy: { agent: 'func-writer', prompt: 'yeni kayıt olunca slack kanalına haber ver' },
   },
 }

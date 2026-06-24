@@ -5,6 +5,7 @@ import { authorProvider } from "./provider-author";
 import { authorInputForm } from "./form-author";
 import { authorPollSource } from "./poll-author";
 import { reconcileWiring } from "./wiring-repair";
+import { ensureTypedPythonSource } from "./python-types";
 import { trace, type AgentMeta } from "../observability";
 import { LIMITS } from "../limits";
 import { extractInputs, extractOutputs, extractFileInputs } from "./extract";
@@ -164,11 +165,11 @@ const stepBodyZ = z.object({
   bodySource: z
     .string()
     .describe(
-      "An ES module that `export default`s `async (ctx, input) => result`. Reads from input.<field>, returns an object with exactly the required output fields. May use top-level `import` for npm packages listed in `dependencies`.",
+      "Python source that defines `class StepInput(TypedDict)`, `class StepOutput(TypedDict)`, and `def run(ctx: Any, input: StepInput) -> StepOutput`, returning exactly the required output fields. Reads from input.<field>. May use `import` for packages listed in `dependencies`.",
     ),
   dependencies: z
     .array(z.string())
-    .describe("npm packages this step imports directly; empty array if none.")
+    .describe("PyPI packages this step imports directly; empty array if none.")
     .optional(),
   arrayInputs: z
     .array(z.string())
@@ -185,7 +186,7 @@ const stepBodyZ = z.object({
   fileInputs: z
     .array(z.string())
     .describe(
-      "input field names that are an UPLOADED FILE the user picks (e.g. a CSV/JSON/image to process). Such an input arrives as { name, mime, size, base64 }; read input.x.base64 (decode with Buffer.from(input.x.base64,'base64')) for bytes or .toString('utf8') for text. Empty if none.",
+      "input field names that are an UPLOADED FILE the user picks (e.g. a CSV/JSON/image to process). Such an input arrives as { name, mime, size, base64 }; decode bytes with `base64.b64decode(input.x.base64)` and text with `.decode('utf-8')`. Empty if none.",
     )
     .optional(),
   dangerClass: z.enum(["benign", "costly", "catastrophic"]).optional(),
@@ -195,7 +196,8 @@ const stepBodyZ = z.object({
 });
 
 const BODY_SYSTEM = [
-  "You write a single workflow step as an ES module that `export default`s `async (ctx, input) => result`.",
+  "You write a single workflow step as Python source.",
+  "ALWAYS include `class StepInput(TypedDict)` and `class StepOutput(TypedDict)` and annotate `def run(ctx: Any, input: StepInput) -> StepOutput:`.",
   "In scope: `input` (an object) and, for effectful steps, `ctx.connections.<provider>` (a client with the given API).",
   "Read EVERY value you need from input.<field>. For values that come from the user, use natural field names (amount, email, channel, text). For values that come from an upstream step, use the input names listed as upstream-provided.",
   "WEBHOOK triggers: the ENTIRE raw request body the external service POSTs is available as `input.payload` (already-parsed JSON). Do NOT invent flat trigger field names — they won't exist. To format/forward/store the webhook data, work with `input.payload` directly (e.g. `JSON.stringify(input.payload, null, 2)`, or iterate Object.entries(input.payload)). To pull a SPECIFIC value, extract it RIGHT HERE in code from input.payload. IMPORTANT: webhook events commonly WRAP the real entity in an envelope instead of placing fields at the top level. Before reading, unwrap the common envelope shapes once and read from the result: `const obj = input.payload?.data?.object ?? input.payload?.data ?? input.payload?.object ?? input.payload;` then read your fields off `obj` with a couple of sensible fallbacks. If a field looks missing at the top level, it is almost always nested one level under such an envelope — unwrap rather than assume it is absent. NEVER add a config input that makes the user supply a PATH/field-location (no `*_path`/`*_field`/`*_key` input passed to lodash get) — the user must never type a path into the event. Do the navigation in CODE, not via a user input.",
@@ -203,11 +205,11 @@ const BODY_SYSTEM = [
   "SETTINGS vs DATA: a fixed per-step SETTING the user configures once — a destination or location, not flowing data (a spreadsheet id, sheet name, column name, a Slack/Discord channel id, a Trello board/list id, an Asana project id, a Mailchimp audience id, an Airtable table name, an API/webhook URL, a numeric threshold) — MUST be listed in `configInputs`. Do NOT list there anything that flows from input.payload or from an upstream step (an email, amount, name, score, the parsed item). When several steps each need their own location (e.g. two steps writing to different sheets), give each its OWN config input — they are kept per-step and will not collide.",
   "Return an object with ONLY the outputs a later step or the final action actually consumes, plus the step's primary result. Do NOT echo an input straight back as an output (never return input.sheetName as an output). If the step processes a LIST/batch, return the list (or the enriched list) as ONE output — do NOT emit per-item scalar fields (category, sentiment, sla) as step outputs; those live inside the items.",
   "When a step's job is to RECORD/LOG/store many values somewhere (append a row, create an Airtable/Notion record), prefer reading from the few upstream result OBJECTS it needs rather than declaring dozens of separate scalar inputs.",
-  "You may use top-level `import` for npm packages; list each in `dependencies`.",
+  "You may use Python `import` for PyPI packages; list each in `dependencies`.",
   "If you read any input as a LIST (input.x.map/forEach/for-of or input.x[i]), list those field names in `arrayInputs` so the UI offers a list editor.",
   "A user-provided list ARRIVES AS A REAL ARRAY — iterate input.x directly with for...of/forEach. Do NOT String.split() it and do NOT expect a comma-separated string.",
-  "If the step processes an UPLOADED FILE (a CSV/JSON/image/etc. the user picks), declare that input in `fileInputs`. It arrives as { name, mime, size, base64 }: for text use Buffer.from(input.x.base64,'base64').toString('utf8'), for bytes use Buffer.from(input.x.base64,'base64'). Do NOT expect a path or a URL.",
-  "If the step SENDS an uploaded file to an external service (e.g. post a file to Discord/Slack/Telegram, attach to an email), the provider exposes a dedicated file-upload method that handles the multipart upload — call it and pass the WHOLE file object straight through: `await ctx.connections.discord.sendFile(input.channel_id, input.file, optionalCaption)`. The file object is { name, mime, size, base64 }. Do NOT decode it to a Buffer yourself, do NOT JSON-stringify it, and do NOT pass it as the text/content argument of a plain message method — those send JSON only and silently drop the file. Use the file method named in the provider's apiDoc.",
+  "If the step processes an UPLOADED FILE (a CSV/JSON/image/etc. the user picks), declare that input in `fileInputs`. It arrives as { name, mime, size, base64 }: for text use `base64.b64decode(input.x.base64).decode('utf-8')`, for bytes use `base64.b64decode(input.x.base64)`. Do NOT expect a path or a URL.",
+  "If the step SENDS an uploaded file to an external service (e.g. post a file to Discord/Slack/Telegram, attach to an email), call the provider's dedicated file-upload method and pass the WHOLE file object through: `ctx.connections.discord.sendFile(input.channel_id, input.file, optional_caption)`. The file object is { name, mime, size, base64 }. Do NOT decode it first and do NOT pass it as plain message text.",
 ].join("\n");
 
 async function authorStepBody(
@@ -408,7 +410,19 @@ export async function designWorkflow(
         ),
         required: stepOutputs,
       },
-      bodySource: body.bodySource,
+      bodySource: ensureTypedPythonSource(
+        body.bodySource,
+        usedInputs.map((name) => ({
+          name,
+          type: fileInputs.has(name)
+            ? ("file" as const)
+            : arrayInputs.has(name)
+              ? ("array" as const)
+              : ("string" as const),
+          required: true,
+        })),
+        stepOutputs.map((name) => ({ name, type: "string" as const, required: true })),
+      ),
       dependencies: body.dependencies ?? [],
       requires:
         step.effectful && step.provider

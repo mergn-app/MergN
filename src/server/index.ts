@@ -30,7 +30,13 @@ import { z } from "zod";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { authorFunc } from "../agent/func-author";
-import { createWorkflowStore, type TriggerConfig, type WorkflowStore } from "./store";
+import {
+  createWorkflowStore,
+  type EndpointMetadata,
+  type EndpointMiddlewareConfig,
+  type TriggerConfig,
+  type WorkflowStore,
+} from "./store";
 import { createVersionStore } from "./workflow-versions";
 import { diffWorkflows } from "./workflow-diff";
 import { createRunStore, type RunDoc, type RunHeader } from "./runs";
@@ -126,6 +132,16 @@ import {
 import { createScheduler, missingRequiredParams, type Scheduler } from "./scheduler";
 import { createSchedulerConsumer, fireWorkflow } from "./scheduler-consumer";
 import { createScheduleStore, type ScheduleStore } from "../store/schedules";
+import { createWorkspaceMiddlewareStore } from "./workspace-middlewares";
+import { resolveHttpEndpoint } from "./endpoint-router";
+import {
+  compileEndpointPlan,
+  executeCompiledPlan,
+  mergeInput,
+  type RequestContext,
+} from "./middleware-compiler";
+import { errorResponse, successResponse } from "./endpoint-response";
+import { listEndpointMetrics, recordEndpointMetric } from "./endpoint-metrics";
 import { createPollRunner } from "./poll-runner";
 import { resolveEgressHost } from "./egress";
 import { createOAuth } from "./oauth";
@@ -278,6 +294,7 @@ const registry = createRegistry(store);
 const oauth = createOAuth({ store, vault, registry });
 const connections = createConnections({ store, vault, oauth });
 const workflows = createWorkflowStore(store);
+const workspaceMiddlewares = createWorkspaceMiddlewareStore(store);
 // Captures the (secret-free) provider drafts a workflow's funcs require, so a
 // sealed version restores its own provider code — not whatever the registry was
 // last re-authored to. Shared by the version store (pinning) and the fix engine
@@ -994,6 +1011,59 @@ async function runSavedWorkflow(
     finishedAt,
     ...(workflowVersionId ? { workflowVersionId } : {}),
     maskLevel,
+  };
+}
+
+function extractQueryObject(url: URL): Record<string, string> {
+  const out: Record<string, string> = {};
+  url.searchParams.forEach((value, key) => {
+    out[key] = value;
+  });
+  return out;
+}
+
+async function dispatchViaCompiledMiddleware(
+  spaceId: string,
+  wf: Parameters<typeof runSavedWorkflow>[1] & {
+    trigger?: TriggerConfig;
+    endpoint?: EndpointMetadata;
+    middleware?: EndpointMiddlewareConfig;
+  },
+  requestCtx: Omit<RequestContext, "vars">,
+  baseInput: Record<string, unknown>,
+): Promise<
+  | { ok: false; status: number; body: unknown; headers?: Record<string, string> }
+  | { ok: true; run: RunDoc; responseMode: "sync" | "async" | undefined }
+> {
+  const compiled = compileEndpointPlan(wf as never);
+  const ctx: RequestContext = {
+    ...requestCtx,
+    vars: { spaceId, workflowId: wf.id },
+  };
+  const middlewareResult = await executeCompiledPlan(compiled, ctx, {
+    rateLimiter,
+    middlewareStore: workspaceMiddlewares,
+    spaceId,
+    workflowId: wf.id,
+  });
+  if (!middlewareResult.continue) {
+    return {
+      ok: false,
+      status: middlewareResult.response?.status ?? 400,
+      body: middlewareResult.response?.body ?? { error: "middleware_aborted" },
+      headers: middlewareResult.response?.headers,
+    };
+  }
+  const run = await runSavedWorkflow(
+    spaceId,
+    wf,
+    mergeInput(baseInput, middlewareResult.rewrittenInput),
+    wf.trigger?.kind ?? "manual",
+  );
+  return {
+    ok: true,
+    run,
+    responseMode: wf.endpoint?.responseMode ?? wf.trigger?.http?.responseMode,
   };
 }
 
@@ -2254,6 +2324,39 @@ app.get("/api/workflows", async (c) => {
   return c.json(await workflows.listWorkflows(c.get("spaceId")));
 });
 
+app.get("/api/workspace-middlewares", async (c) => {
+  return c.json(await workspaceMiddlewares.list(c.get("spaceId")));
+});
+
+app.get("/api/workspace-middlewares/:id", async (c) => {
+  const row = await workspaceMiddlewares.get(c.get("spaceId"), c.req.param("id"));
+  return row ? c.json(row) : c.json({ error: "not found" }, 404);
+});
+
+app.post("/api/workspace-middlewares", async (c) => {
+  const body = await c.req.json<{
+    id?: string;
+    name?: string;
+    source?: string;
+    entrypoint?: string;
+  }>();
+  if (!body.name || !body.source) {
+    return c.json({ error: "name and source required" }, 400);
+  }
+  const row = await workspaceMiddlewares.upsert(c.get("spaceId"), {
+    id: body.id ?? randomUUID(),
+    name: body.name,
+    source: body.source,
+    entrypoint: body.entrypoint ?? "handle",
+  });
+  return c.json(row);
+});
+
+app.delete("/api/workspace-middlewares/:id", async (c) => {
+  await workspaceMiddlewares.remove(c.get("spaceId"), c.req.param("id"));
+  return c.json({ ok: true });
+});
+
 app.get("/api/workflows/:id", async (c) => {
   const wf = await workflows.getWorkflow(c.get("spaceId"), c.req.param("id"));
   return wf ? c.json(wf) : c.json({ error: "not found" }, 404);
@@ -2282,6 +2385,10 @@ app.patch("/api/workflows/:id/alerts", async (c) => {
 // Space-wide health summary.
 app.get("/api/health", async (c) => {
   return c.json(await health.summary(c.get("spaceId")));
+});
+
+app.get("/api/endpoint-metrics", async (c) => {
+  return c.json(listEndpointMetrics());
 });
 
 // ── Alert channels (Telegram / Slack / Discord / email / webhook / workflow) ─
@@ -2418,6 +2525,8 @@ app.put("/api/workflows/:id", async (c) => {
     config?: Record<string, Record<string, string>>;
     nodeConnections?: Record<string, Record<string, string>>;
     trigger?: TriggerConfig;
+    endpoint?: EndpointMetadata;
+    middleware?: EndpointMiddlewareConfig;
     inputForm?: unknown;
     variables?: Record<string, unknown>;
     conversationId?: string;
@@ -2426,6 +2535,41 @@ app.put("/api/workflows/:id", async (c) => {
     liveness?: LivenessConfig;
     alertsEnabled?: boolean;
   }>();
+  const trigger = body.trigger ?? { kind: "manual" };
+  const endpoint =
+    body.endpoint ??
+    (trigger.kind === "http" && trigger.http
+      ? {
+          method: trigger.http.method,
+          path: trigger.http.path,
+          responseMode: trigger.http.responseMode,
+        }
+      : undefined);
+  const middleware = body.middleware ?? { custom: [] };
+  if (trigger.kind === "http") {
+    const method = (endpoint?.method ?? trigger.http?.method)?.toUpperCase();
+    const path = endpoint?.path ?? trigger.http?.path;
+    if (!method || !path) {
+      return c.json({ error: "http trigger requires method and path" }, 400);
+    }
+    const metas = await workflows.listWorkflows(c.get("spaceId"));
+    for (const meta of metas) {
+      if (meta.id === id) continue;
+      const existing = await workflows.getWorkflow(c.get("spaceId"), meta.id);
+      if (!existing || existing.trigger?.kind !== "http") continue;
+      const em = (existing.endpoint?.method ?? existing.trigger.http?.method)?.toUpperCase();
+      const ep = existing.endpoint?.path ?? existing.trigger.http?.path;
+      if (em === method && ep === path) {
+        return c.json(
+          {
+            error: "route_conflict",
+            message: `HTTP route already exists on workflow ${existing.id}`,
+          },
+          409,
+        );
+      }
+    }
+  }
   const wf = await workflows.saveWorkflow(c.get("spaceId"), {
     id,
     name: body.name ?? "untitled",
@@ -2434,7 +2578,9 @@ app.put("/api/workflows/:id", async (c) => {
     positions: body.positions ?? {},
     config: body.config ?? {},
     nodeConnections: body.nodeConnections ?? {},
-    trigger: body.trigger ?? { kind: "manual" },
+    trigger,
+    endpoint,
+    middleware,
     inputForm: body.inputForm,
     variables: body.variables,
     conversationId: body.conversationId,
@@ -2778,7 +2924,101 @@ app.post("/api/run", async (c) => {
   });
 });
 
+// Living Server ingress for HTTP-triggered workflows.
+app.all("/api/live/:spaceId/*", async (c) => {
+  const started = Date.now();
+  let spaceId: string;
+  try {
+    spaceId = assertSpace(c.req.param("spaceId"));
+  } catch {
+    return c.json({ error: "invalid space id" }, 400);
+  }
+  const tail = c.req.path.replace(`/api/live/${spaceId}`, "") || "/";
+  const resolved = await resolveHttpEndpoint(
+    workflows,
+    spaceId,
+    c.req.method,
+    tail,
+  );
+  if (!resolved) return c.json({ error: "endpoint_not_found" }, 404);
+  const wf = resolved.workflow;
+  if (wf.trigger?.kind !== "http") return c.json({ error: "not_http_workflow" }, 400);
+
+  await registry.ensureSpace(spaceId);
+  const url = new URL(c.req.url);
+  const headers = Object.fromEntries(c.req.raw.headers.entries());
+  let body: Record<string, unknown> = {};
+  try {
+    body = (await c.req.json()) as Record<string, unknown>;
+  } catch {
+    body = {};
+  }
+  const requestCtx: Omit<RequestContext, "vars"> = {
+    trigger: "http",
+    request: {
+      method: c.req.method,
+      path: tail,
+      ip:
+        c.req.header("x-forwarded-for") ??
+        c.req.header("cf-connecting-ip") ??
+        undefined,
+    },
+    headers,
+    pathParams: resolved.pathParams,
+    query: extractQueryObject(url),
+    body,
+    auth: {},
+    traceId: randomUUID(),
+  };
+  const baseInput: Record<string, unknown> = {
+    body,
+    query: requestCtx.query,
+    params: requestCtx.pathParams,
+    headers,
+  };
+  const dispatched = await dispatchViaCompiledMiddleware(
+    spaceId,
+    wf,
+    requestCtx,
+    baseInput,
+  );
+  if (!dispatched.ok) {
+    recordEndpointMetric({
+      workflowId: wf.id,
+      method: c.req.method,
+      path: tail,
+      latencyMs: Date.now() - started,
+      failed: true,
+      middlewareAbort: true,
+    });
+    const res = errorResponse(
+      dispatched.status,
+      "middleware_aborted",
+      dispatched.body,
+    );
+    return c.json(
+      res.body,
+      res.status as unknown as 200,
+      dispatched.headers ?? res.headers,
+    );
+  }
+  const out = successResponse(dispatched.responseMode, dispatched.run);
+  recordEndpointMetric({
+    workflowId: wf.id,
+    method: c.req.method,
+    path: tail,
+    latencyMs: Date.now() - started,
+    failed: dispatched.run.status === "failed",
+  });
+  return c.json(
+    out.body,
+    out.status as unknown as 200,
+    out.headers,
+  );
+});
+
 app.post("/api/hooks/:spaceId/:workflowId", async (c) => {
+  const started = Date.now();
   let spaceId: string;
   try {
     spaceId = assertSpace(c.req.param("spaceId"));
@@ -2842,8 +3082,51 @@ app.post("/api/hooks/:spaceId/:workflowId", async (c) => {
     return c.json({ ok: true, buffered: true, entryId: r.entry!.id });
   }
 
-  const run = await runSavedWorkflow(spaceId, wf, body, "webhook");
-  return c.json({ ok: true, runId: run.id, status: run.status });
+  const url = new URL(c.req.url);
+  const requestCtx: Omit<RequestContext, "vars"> = {
+    trigger: "webhook",
+    request: {
+      method: c.req.method,
+      path: c.req.path,
+      ip:
+        c.req.header("x-forwarded-for") ??
+        c.req.header("cf-connecting-ip") ??
+        undefined,
+    },
+    headers,
+    pathParams: {},
+    query: extractQueryObject(url),
+    body,
+    auth: { webhook: true },
+    traceId: randomUUID(),
+  };
+  const dispatched = await dispatchViaCompiledMiddleware(spaceId, wf, requestCtx, {
+    ...body,
+    headers,
+  });
+  if (!dispatched.ok) {
+    recordEndpointMetric({
+      workflowId,
+      method: "POST",
+      path: `/hooks/${workflowId}`,
+      latencyMs: Date.now() - started,
+      failed: true,
+      middlewareAbort: true,
+    });
+    return c.json(
+      { error: "middleware_aborted", detail: dispatched.body },
+      dispatched.status as unknown as 200,
+      dispatched.headers,
+    );
+  }
+  recordEndpointMetric({
+    workflowId,
+    method: "POST",
+    path: `/hooks/${workflowId}`,
+    latencyMs: Date.now() - started,
+    failed: dispatched.run.status === "failed",
+  });
+  return c.json({ ok: true, runId: dispatched.run.id, status: dispatched.run.status });
 });
 
 // --- Webhook auth config (per workflow) ---

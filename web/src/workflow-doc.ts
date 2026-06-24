@@ -1,4 +1,11 @@
-import type { AuthoredFunc, InputForm, TriggerConfig, Wire } from "./types";
+import type {
+  AuthoredFunc,
+  EndpointMetadata,
+  EndpointMiddlewareConfig,
+  InputForm,
+  TriggerConfig,
+  Wire,
+} from "./types";
 
 // The single source of truth for "what gets persisted" in a workflow. Any new
 // persisted field is added here once — the editor's autosave funnel (derive the
@@ -12,6 +19,8 @@ export interface WorkflowDocParts {
   config: Record<string, Record<string, string>>;
   nodeConnections: Record<string, Record<string, string>>;
   trigger: TriggerConfig;
+  endpoint?: EndpointMetadata;
+  middleware?: EndpointMiddlewareConfig;
   inputForm: InputForm | null;
   variables: Record<string, unknown>;
 }
@@ -26,6 +35,8 @@ export function buildWorkflowDoc(p: WorkflowDocParts): WorkflowDocParts {
     config: p.config,
     nodeConnections: p.nodeConnections,
     trigger: p.trigger,
+    endpoint: p.endpoint,
+    middleware: p.middleware,
     inputForm: p.inputForm,
     variables: p.variables,
   };

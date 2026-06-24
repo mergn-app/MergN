@@ -1,17 +1,20 @@
 import { genObject } from "./generate";
 import { funcDraftZ, type FuncDraft } from "./schemas";
+import { ensureTypedPythonSource } from "./python-types";
 import { trace, type AgentMeta } from "../observability";
 import type { Registry } from "../providers/registry";
 import type { FuncDefinition, PortDef, Schema } from "../atoms/index";
 
 const SYSTEM = [
   "You are an agent that authors a single 'func' for a workflow automation system.",
-  "A func takes typed input and returns typed output. bodySource is an ES module:",
-  "- it `export default`s `async (ctx, input) => result`",
-  "- it reads from the `input` object (input.fieldName)",
+  "A func takes typed input and returns typed output. bodySource is Python source:",
+  "- it defines `def run(ctx, input):` and returns a dict result",
+  "- ALWAYS declare `class StepInput(TypedDict)` and `class StepOutput(TypedDict)` above run",
+  "- ALWAYS annotate signature as `def run(ctx: Any, input: StepInput) -> StepOutput:`",
+  "- it reads from the `input` object via dot access (input.fieldName)",
   "- when effectful, it calls external services via ctx.connections.<name> (never touch the raw token)",
-  "- it always returns an object",
-  "- it MAY use top-level `import` for npm packages; list every imported package in `dependencies`",
+  "- it always returns a dict",
+  "- it MAY import PyPI packages; list every imported package in `dependencies`",
   "Rules:",
   "- If there is no side effect, set pure=true, requires=[], and kind is usually 'adapter'.",
   "- If it calls an external service, set pure=false, fill requires, and pick a suitable dangerClass and idempotencyMechanism.",
@@ -97,8 +100,12 @@ function toFuncDefinition(d: FuncDraft): FuncDefinition {
   };
 
   const body = {
-    language: "javascript" as const,
-    source: d.bodySource,
+    language: "python" as const,
+    source: ensureTypedPythonSource(
+      d.bodySource,
+      d.inputs.map((p) => ({ name: p.name, type: p.type, required: p.required })),
+      d.outputFields.map((f) => ({ name: f.name, type: f.type, required: true })),
+    ),
     dependencies: d.dependencies ?? [],
     generatedBy: { agent: "func-author", prompt: d.id },
   };

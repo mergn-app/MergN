@@ -66,6 +66,8 @@ import {
 import { WorkflowStatusIcon } from "./WorkflowStatusIcon";
 import type {
   AuthoredFunc,
+  EndpointMetadata,
+  EndpointMiddlewareConfig,
   InputForm,
   RunStepData,
   TriggerConfig,
@@ -75,6 +77,7 @@ import type {
 import { buildWorkflowDoc, stableStringify } from "./workflow-doc";
 import { useNavigate } from "@tanstack/react-router";
 import { summarizeWorkflow, outputsOf } from "./lineage";
+import { deriveFuncFromPythonSource } from "./python-ports";
 import { useAuth } from "./authContext";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -212,6 +215,10 @@ export function App({
   const [workflowId, setWorkflowId] = useState<string | null>(null);
   const [name, setName] = useState("untitled");
   const [trigger, setTrigger] = useState<TriggerConfig>({ kind: "manual" });
+  const [endpoint, setEndpoint] = useState<EndpointMetadata | undefined>(undefined);
+  const [middleware, setMiddleware] = useState<
+    EndpointMiddlewareConfig | undefined
+  >(undefined);
   const [savedTrigger, setSavedTrigger] = useState<TriggerConfig>({
     kind: "manual",
   });
@@ -920,6 +927,8 @@ export function App({
     setWorkflowId(null);
     setName("untitled");
     setTrigger({ kind: "manual" });
+    setEndpoint(undefined);
+    setMiddleware(undefined);
     setSavedTrigger({ kind: "manual" });
     setInputForm(null);
     setVariables({});
@@ -950,6 +959,8 @@ export function App({
         config: configValues,
         nodeConnections,
         trigger,
+        endpoint,
+        middleware,
         inputForm,
         variables,
       }),
@@ -961,6 +972,8 @@ export function App({
       configValues,
       nodeConnections,
       trigger,
+      endpoint,
+      middleware,
       inputForm,
       variables,
     ],
@@ -1046,6 +1059,8 @@ export function App({
     setWorkflowId(wf.id);
     setName(wf.name ?? "untitled");
     setTrigger(wf.trigger ?? { kind: "manual" });
+    setEndpoint(wf.endpoint);
+    setMiddleware(wf.middleware);
     setSavedTrigger(wf.trigger ?? { kind: "manual" });
     setInputForm(wf.inputForm ?? null);
     setVariables(wf.variables ?? {});
@@ -1063,6 +1078,8 @@ export function App({
         config: wf.config ?? {},
         nodeConnections: wf.nodeConnections ?? {},
         trigger: wf.trigger ?? { kind: "manual" },
+        endpoint: wf.endpoint,
+        middleware: wf.middleware,
         inputForm: wf.inputForm ?? null,
         variables: wf.variables ?? {},
       }),
@@ -1350,16 +1367,33 @@ export function App({
                   onStatus={setRunStatus}
                   onData={setRunData}
                   onRepair={onRepair}
-                  onUpdateFuncCode={(funcId, bodySource) =>
-                    {
-                      setFuncs((prev) =>
-                      prev.map((f) =>
-                        f.id === funcId ? { ...f, bodySource } : f,
-                      ),
-                      );
-                      setAutoSave(true);
-                    }
-                  }
+                  onUpdateFuncCode={(funcId, bodySource) => {
+                    let changed = false;
+                    let nextInputNames = new Set<string>();
+                    let nextOutputNames = new Set<string>();
+                    setFuncs((prev) =>
+                      prev.map((f) => {
+                        if (f.id !== funcId) return f;
+                        changed = true;
+                        const next = deriveFuncFromPythonSource(f, bodySource);
+                        nextInputNames = new Set(next.inputs.map((p) => p.name));
+                        nextOutputNames = new Set(
+                          Object.keys((next.outputSchema?.properties ?? {}) as Record<string, unknown>),
+                        );
+                        return next;
+                      }),
+                    );
+                    // Keep graph healthy when a manual code edit removes/renames ports.
+                    setWires((prev) =>
+                      !changed
+                        ? prev
+                        : prev.filter((w) => {
+                        if (w.to === funcId && !nextInputNames.has(w.toInput)) return false;
+                        if (w.from === funcId && w.fromOutput && !nextOutputNames.has(w.fromOutput)) return false;
+                        return true;
+                      }),
+                    );
+                  }}
                 />
               </div>
             </>

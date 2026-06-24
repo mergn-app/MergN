@@ -1,7 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 import type { UIMessage } from "ai";
-import type { AuthoredFunc, InputForm, TriggerConfig, Wire } from "./types";
+import type {
+  AuthoredFunc,
+  EndpointMetadata,
+  EndpointMiddlewareConfig,
+  InputForm,
+  TriggerConfig,
+  Wire,
+} from "./types";
 import { getSpace, spaceHeaders } from "./space";
 import { useAuth } from "./authContext";
 
@@ -10,6 +17,12 @@ export interface WorkflowMeta {
   name: string;
   funcCount: number;
   updatedAt: string;
+  triggerKind?: TriggerConfig["kind"];
+  httpMethod?: string;
+  httpPath?: string;
+  webhookSource?: string;
+  scheduleMode?: "cron" | "interval";
+  scheduleLabel?: string;
 }
 
 export interface SavedWorkflow {
@@ -21,6 +34,8 @@ export interface SavedWorkflow {
   config: Record<string, Record<string, string>>;
   nodeConnections?: Record<string, Record<string, string>>;
   trigger?: TriggerConfig;
+  endpoint?: EndpointMetadata;
+  middleware?: EndpointMiddlewareConfig;
   inputForm?: InputForm;
   variables?: Record<string, unknown>;
   conversationId?: string;
@@ -38,6 +53,8 @@ export interface SaveInput {
   config: Record<string, Record<string, string>>;
   nodeConnections: Record<string, Record<string, string>>;
   trigger: TriggerConfig;
+  endpoint?: EndpointMetadata;
+  middleware?: EndpointMiddlewareConfig;
   inputForm: InputForm | null;
   variables?: Record<string, unknown>;
   conversationId?: string;

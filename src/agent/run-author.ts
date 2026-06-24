@@ -15,17 +15,9 @@ async function main(): Promise<void> {
   console.log("=== GENERATED FUNC ===");
   console.log(JSON.stringify(def, null, 2));
 
-  console.log("\n=== RUNNING BODY (sample input) ===");
-  const fn = new Function(
-    "ctx",
-    "input",
-    `return (async () => { ${def.body.source} })()`,
+  console.log(
+    "\nBody is now Python. Use /api/run or the engine runtime to execute it.",
   );
-  const output = await fn(
-    { connections: {} },
-    { firstName: "Ada", lastName: "Lovelace", email: "ada@example.com", plan: "pro" },
-  );
-  console.log(output);
 }
 
 main().catch((error) => {
