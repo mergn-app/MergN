@@ -53,7 +53,9 @@ services:
       - 8.8.8.8
     depends_on: *langfuse-depends-on
     ports:
-      - "100.78.242.10:3200:3000"
+      # Bind host is configurable; defaults to loopback so the dashboard is not
+      # exposed publicly. Set LANGFUSE_WEB_BIND to a private/VPN address to expose it.
+      - "${LANGFUSE_WEB_BIND:-127.0.0.1}:3200:3000"
     environment:
       <<: *langfuse-worker-env
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
