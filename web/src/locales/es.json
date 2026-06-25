@@ -263,7 +263,6 @@
     "applyHint": "Guarda el flujo de trabajo para aplicar este disparador.",
     "kind": {
       "manual": "Manual",
-      "http": "HTTP Endpoint",
       "webhook": "Webhook",
       "schedule": "Programación",
       "poll": "Sondeo",
@@ -271,7 +270,6 @@
     },
     "desc": {
       "manual": "Ejecutar manualmente desde el panel de ejecución.",
-      "http": "Ejecutar en coincidencia de método + ruta HTTP.",
       "webhook": "Ejecutar cuando un POST HTTP llega a una URL.",
       "schedule": "Ejecutar según una programación cron.",
       "poll": "Comprobar un servicio periódicamente en busca de nuevos datos.",

@@ -2,6 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, Loader2, Check, Pencil } from "lucide-react";
+import { format } from "prettier/standalone";
+import babel from "prettier/plugins/babel";
+import estree from "prettier/plugins/estree";
 import { ArrayEditorDialog } from "./ArrayEditorDialog";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -55,6 +58,17 @@ function SaveDot({ cur, saved }: { cur: string; saved: boolean }) {
   if (!saved) return <Loader2 className="h-3.5 w-3.5 animate-spin text-amber-500" />;
   if (cur !== "") return <Check className="h-3.5 w-3.5 text-green-500" />;
   return null;
+}
+
+function wrapFuncSource(name: string, source: string): string {
+  return `async function ${name}(ctx, input) {\n${source}\n}`;
+}
+
+function unwrapFuncBody(code: string): string {
+  const start = code.indexOf("{");
+  const end = code.lastIndexOf("}");
+  if (start === -1 || end === -1 || end <= start) return code.trim();
+  return code.slice(start + 1, end).replace(/^\n/, "").replace(/\n$/, "");
 }
 
 export function RunPanel({
@@ -185,8 +199,31 @@ export function RunPanel({
     }
   }, [selected, editingCodeId]);
 
-  const lockedPrefix = "";
-  const lockedSuffix = "";
+  useEffect(() => {
+    if (!selected || editingCodeId !== selected.id) return;
+    let cancelled = false;
+    const wrapped = wrapFuncSource(selected.id, selected.bodySource);
+    format(wrapped, {
+      parser: "babel",
+      plugins: [babel, estree],
+      semi: true,
+      singleQuote: false,
+    })
+      .then((out) => {
+        if (!cancelled && !codeDirtyRef.current) setDraftCode(out.trim());
+      })
+      .catch(() => {
+        if (!cancelled && !codeDirtyRef.current) setDraftCode(wrapped);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selected, editingCodeId]);
+
+  const lockedPrefix = selected
+    ? `async function ${selected.id}(ctx, input) {\n  export default async (ctx, input) => {\n`
+    : "";
+  const lockedSuffix = "\n  };\n}";
 
   const persistInput = (fv: Record<string, unknown>) => {
     const next = { ...variables };
@@ -966,7 +1003,7 @@ export function RunPanel({
                     <>
                       <button
                         onClick={() => {
-                          onUpdateFuncCode(selected.id, draftCode.trim());
+                          onUpdateFuncCode(selected.id, unwrapFuncBody(draftCode));
                           setEditingCodeId(null);
                           codeDirtyRef.current = false;
                         }}
@@ -1013,7 +1050,6 @@ export function RunPanel({
                 <CodeBlock
                   source={selected.bodySource}
                   name={selected.id}
-                  language="python"
                   theme={theme}
                   wrap={false}
                   fill
@@ -1031,6 +1067,11 @@ export function RunPanel({
                   }
                 />
               </div>
+            {isEditingCode && (
+                <div className="mt-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-[11px] font-medium text-amber-300">
+                  ⚠ Function signatures are locked; edit only the body.
+                </div>
+              )}
             </>
           )}
         </div>

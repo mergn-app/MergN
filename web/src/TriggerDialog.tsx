@@ -7,7 +7,6 @@ import {
   Check,
   Clock,
   Copy,
-  Globe,
   Play,
   RefreshCw,
   Webhook,
@@ -29,7 +28,6 @@ const KINDS: {
   soon?: boolean;
 }[] = [
   { kind: "manual", icon: Play },
-  { kind: "http", icon: Globe },
   { kind: "webhook", icon: Webhook },
   { kind: "schedule", icon: Clock },
   { kind: "poll", icon: RefreshCw },
@@ -42,13 +40,6 @@ const inputClass =
   "w-full rounded-lg border border-border/60 bg-background-subtle px-2.5 py-1.5 text-[12px] text-foreground/90 outline-none focus:border-border";
 
 function withDefaults(kind: TriggerKind, current: TriggerConfig): TriggerConfig {
-  if (kind === "http") {
-    return {
-      kind,
-      enabled: current.enabled ?? true,
-      http: current.http ?? { method: "POST", path: "/endpoint", responseMode: "sync" },
-    };
-  }
   if (kind === "schedule") {
     return {
       kind,
@@ -286,13 +277,6 @@ export function TriggerDialog({
     trigger.schedule ?? { mode: "interval", intervalValue: 5, intervalUnit: "minute" };
   const poll =
     trigger.poll ?? { provider: "http", intervalValue: 5, intervalUnit: "minute", params: {} };
-  const http = trigger.http ?? {
-    method: "POST",
-    path: "/endpoint",
-    responseMode: "sync" as const,
-  };
-  const normalizedHttpPath = http.path.startsWith("/") ? http.path : `/${http.path}`;
-  const httpUrl = `${window.location.origin}/api/live/${getSpace()}${normalizedHttpPath}`;
 
   return createPortal(
     <div
@@ -381,61 +365,6 @@ export function TriggerDialog({
                 {t("trigger.saveFirst")}
               </p>
             )}
-          </div>
-        )}
-
-        {trigger.kind === "http" && (
-          <div className="mt-4 space-y-2 border-t border-border/50 pt-4">
-            <div className="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">
-              HTTP
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              <select
-                value={http.method}
-                onChange={(e) =>
-                  onChange({
-                    ...trigger,
-                    http: { ...http, method: e.target.value as typeof http.method },
-                  })
-                }
-                className={cn(inputClass, "col-span-1")}
-              >
-                {["GET", "POST", "PUT", "PATCH", "DELETE"].map((m) => (
-                  <option key={m} value={m}>
-                    {m}
-                  </option>
-                ))}
-              </select>
-              <input
-                value={http.path}
-                placeholder="/users/:id"
-                onChange={(e) =>
-                  onChange({
-                    ...trigger,
-                    http: { ...http, path: e.target.value || "/endpoint" },
-                  })
-                }
-                className={cn(inputClass, "col-span-2 font-mono")}
-              />
-            </div>
-            <select
-              value={http.responseMode ?? "sync"}
-              onChange={(e) =>
-                onChange({
-                  ...trigger,
-                  http: {
-                    ...http,
-                    responseMode: e.target.value as "sync" | "async",
-                  },
-                })
-              }
-              className={inputClass}
-            >
-              <option value="sync">Sync response</option>
-              <option value="async">Async accepted (202)</option>
-            </select>
-            <CopyChip value={httpUrl} />
-            <CopyChip value={`curl -X ${http.method} ${httpUrl}`} />
           </div>
         )}
 

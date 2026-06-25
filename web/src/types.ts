@@ -5,21 +5,7 @@ export interface Wire {
   toInput: string;
 }
 
-export type TriggerKind =
-  | "manual"
-  | "http"
-  | "webhook"
-  | "schedule"
-  | "poll"
-  | "event";
-export type HttpMethod =
-  | "GET"
-  | "POST"
-  | "PUT"
-  | "PATCH"
-  | "DELETE"
-  | "OPTIONS"
-  | "HEAD";
+export type TriggerKind = "manual" | "webhook" | "schedule" | "poll" | "event";
 
 export type IntervalUnit = "second" | "minute" | "hour" | "day";
 
@@ -45,40 +31,9 @@ export interface PollTriggerConfig {
 export interface TriggerConfig {
   kind: TriggerKind;
   enabled?: boolean;
-  http?: { method: HttpMethod; path: string; responseMode?: "sync" | "async" };
   schedule?: ScheduleTriggerConfig;
   poll?: PollTriggerConfig;
   eventFields?: string[];
-}
-
-export interface EndpointMetadata {
-  method: HttpMethod;
-  path: string;
-  groupKey?: string;
-  summary?: string;
-  public?: boolean;
-  responseMode?: "sync" | "async";
-}
-
-export interface EndpointMiddlewareConfig {
-  builtins?: {
-    validation?: {
-      schemaType: "json-schema" | "zod-json";
-      schema: Record<string, unknown>;
-      failStatus?: number;
-    };
-    rateLimit?: {
-      key: "ip" | "workspace" | "endpoint";
-      windowMs: number;
-      max: number;
-    };
-  };
-  custom: Array<{
-    middlewareId: string;
-    version: number;
-    order: number;
-    enabled: boolean;
-  }>;
 }
 
 export type FormControl =

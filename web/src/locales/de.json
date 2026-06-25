@@ -263,7 +263,6 @@
     "applyHint": "Speichere den Workflow, um diesen Trigger anzuwenden.",
     "kind": {
       "manual": "Manuell",
-      "http": "HTTP Endpoint",
       "webhook": "Webhook",
       "schedule": "Zeitplan",
       "poll": "Abfrage",
@@ -271,7 +270,6 @@
     },
     "desc": {
       "manual": "Manuell über das Run-Panel ausführen.",
-      "http": "Ausführen bei HTTP-Methode + Pfad-Treffer.",
       "webhook": "Ausführen, wenn ein HTTP-POST eine URL erreicht.",
       "schedule": "Nach einem Cron-Zeitplan ausführen.",
       "poll": "Einen Dienst regelmäßig auf neue Daten prüfen.",

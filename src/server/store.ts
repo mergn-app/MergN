@@ -7,14 +7,6 @@ import type { LivenessConfig } from "./webhook-liveness";
 const COLLECTION = "workflows";
 
 export type IntervalUnit = "second" | "minute" | "hour" | "day";
-export type HttpMethod =
-  | "GET"
-  | "POST"
-  | "PUT"
-  | "PATCH"
-  | "DELETE"
-  | "OPTIONS"
-  | "HEAD";
 
 export interface ScheduleTriggerConfig {
   mode: "cron" | "interval";
@@ -35,64 +27,12 @@ export interface PollTriggerConfig {
   params?: Record<string, unknown>;
 }
 
-export interface HttpTriggerConfig {
-  method: HttpMethod;
-  path: string;
-  responseMode?: "sync" | "async";
-}
-
-export interface EndpointMetadata {
-  method: HttpMethod;
-  path: string;
-  groupKey?: string;
-  summary?: string;
-  public?: boolean;
-  responseMode?: "sync" | "async";
-}
-
-export interface EndpointValidationConfig {
-  schemaType: "json-schema" | "zod-json";
-  schema: Record<string, unknown>;
-  failStatus?: number;
-}
-
-export interface EndpointRateLimitConfig {
-  key: "ip" | "workspace" | "endpoint";
-  windowMs: number;
-  max: number;
-}
-
-export interface EndpointBuiltinMiddlewares {
-  validation?: EndpointValidationConfig;
-  rateLimit?: EndpointRateLimitConfig;
-}
-
-export interface EndpointCustomMiddlewareRef {
-  middlewareId: string;
-  version: number;
-  order: number;
-  enabled: boolean;
-}
-
-export interface EndpointMiddlewareConfig {
-  builtins?: EndpointBuiltinMiddlewares;
-  custom: EndpointCustomMiddlewareRef[];
-}
-
 export interface TriggerConfig {
   // "monitor" = an alert-handler flow: runs automatically when a monitoring
   // event fires on any flow (error / silent-failure / silent-success / heal).
   // Behaves like "manual" for scheduling/webhook paths (no job/endpoint).
-  kind:
-    | "manual"
-    | "http"
-    | "webhook"
-    | "schedule"
-    | "poll"
-    | "event"
-    | "monitor";
+  kind: "manual" | "webhook" | "schedule" | "poll" | "event" | "monitor";
   enabled?: boolean;
-  http?: HttpTriggerConfig;
   schedule?: ScheduleTriggerConfig;
   poll?: PollTriggerConfig;
   eventFields?: string[];
@@ -109,8 +49,6 @@ export interface SavedWorkflow {
   config: Record<string, Record<string, string>>;
   nodeConnections?: Record<string, Record<string, string>>;
   trigger?: TriggerConfig;
-  endpoint?: EndpointMetadata;
-  middleware?: EndpointMiddlewareConfig;
   inputForm?: unknown;
   variables?: Record<string, unknown>;
   conversationId?: string;
@@ -134,12 +72,6 @@ export interface WorkflowMeta {
   name: string;
   funcCount: number;
   updatedAt: string;
-  triggerKind?: TriggerConfig["kind"];
-  httpMethod?: HttpMethod;
-  httpPath?: string;
-  webhookSource?: string;
-  scheduleMode?: "cron" | "interval";
-  scheduleLabel?: string;
 }
 
 export interface WorkflowStore {
@@ -187,20 +119,6 @@ export function createWorkflowStore(store: DocStore): WorkflowStore {
           name: wf.name,
           funcCount: Array.isArray(wf.funcs) ? wf.funcs.length : 0,
           updatedAt: wf.updatedAt,
-          triggerKind: wf.trigger?.kind,
-          httpMethod: wf.endpoint?.method ?? wf.trigger?.http?.method,
-          httpPath: wf.endpoint?.path ?? wf.trigger?.http?.path,
-          webhookSource: wf.trigger?.kind === "webhook" ? "incoming" : undefined,
-          scheduleMode:
-            wf.trigger?.kind === "schedule" ? wf.trigger.schedule?.mode : undefined,
-          scheduleLabel:
-            wf.trigger?.kind === "schedule"
-              ? wf.trigger.schedule?.mode === "cron"
-                ? wf.trigger.schedule?.cron
-                : wf.trigger.schedule?.intervalValue !== undefined
-                  ? `${wf.trigger.schedule.intervalValue} ${wf.trigger.schedule.intervalUnit ?? "second"}`
-                  : undefined
-              : undefined,
         }))
         .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1));
     },

@@ -263,7 +263,6 @@
     "applyHint": "Bu tetikleyiciyi uygulamak için akışı kaydet.",
     "kind": {
       "manual": "Manuel",
-      "http": "HTTP Endpoint",
       "webhook": "Webhook",
       "schedule": "Zamanlama",
       "poll": "Yoklama",
@@ -271,7 +270,6 @@
     },
     "desc": {
       "manual": "Run panelinden elle çalıştır.",
-      "http": "HTTP method + path eslesince calis.",
       "webhook": "Bir HTTP POST bir URL'ye geldiğinde çalış.",
       "schedule": "Cron zamanlamasıyla çalış.",
       "poll": "Bir servisi yeni veri için periyodik kontrol et.",

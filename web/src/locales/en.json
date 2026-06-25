@@ -263,7 +263,6 @@
     "applyHint": "Save the workflow to apply this trigger.",
     "kind": {
       "manual": "Manual",
-      "http": "HTTP Endpoint",
       "webhook": "Webhook",
       "schedule": "Schedule",
       "poll": "Poll",
@@ -271,7 +270,6 @@
     },
     "desc": {
       "manual": "Run by hand from the Run panel.",
-      "http": "Run on HTTP method + path match.",
       "webhook": "Run when an HTTP POST hits a URL.",
       "schedule": "Run on a cron schedule.",
       "poll": "Check a service periodically for new data.",
