@@ -89,8 +89,8 @@ export function LandingUseCases({
   const LOOP = [...USE_CASES, ...USE_CASES];
 
   return (
-    <section className="w-full max-w-6xl">
-      <div className="text-center">
+    <section className="w-full ">
+      <div className="text-center ">
         <h2 className="text-xl font-semibold tracking-tight">
           {t("landing.useCases.title")}
         </h2>
@@ -99,10 +99,8 @@ export function LandingUseCases({
         </p>
       </div>
 
-      <div className="relative mt-6">
-        <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-20 bg-linear-to-r from-background via-background/80 to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-20 bg-linear-to-l from-background via-background/80 to-transparent" />
-
+      <div className="relative mt-6 flex justify-center ">
+        <div className="max-w-6xl ">
         <div className="overflow-hidden py-1">
           <div className="landing-use-cases-track flex w-max gap-4">
             {LOOP.map((uc, idx) => {
@@ -143,6 +141,7 @@ export function LandingUseCases({
               );
             })}
           </div>
+        </div>
         </div>
       </div>
     </section>

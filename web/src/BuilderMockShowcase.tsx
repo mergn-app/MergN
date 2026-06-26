@@ -715,7 +715,7 @@ export function BuilderMockShowcase() {
   }, [autoRotate]);
 
   return (
-    <div className="grid h-[68vh] min-h-[520px] w-full max-w-6xl grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm lg:grid-cols-[2fr_1fr]">
+    <div className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm lg:grid-cols-[2fr_1fr]">
       <div className="flex min-h-[320px] flex-col border-b border-border/40 lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-2 border-b border-border/40 bg-muted/30 p-3">
           <span className="mr-1 text-[11px] font-medium text-muted-foreground">
