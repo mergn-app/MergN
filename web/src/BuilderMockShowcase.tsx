@@ -11,7 +11,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, Network } from "lucide-react";
+import { ArrowUp, Network, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuncNode } from "./FuncNode";
 import { TriggerNode } from "./TriggerNode";
@@ -35,6 +35,7 @@ interface MockScenario {
   id: string;
   title: string;
   subtitle: string;
+  mockElapsedMs: number;
   trigger: TriggerConfig;
   funcs: AuthoredFunc[];
   wires: Wire[];
@@ -92,6 +93,7 @@ const SCENARIOS: MockScenario[] = [
     id: "payment-alerts",
     title: "Payment Alerts",
     subtitle: "Turn successful Stripe payments into rich Discord alerts.",
+    mockElapsedMs: 32000,
     trigger: { kind: "webhook", eventFields: ["payload"] },
     funcs: [
       mkFunc({
@@ -151,6 +153,7 @@ const SCENARIOS: MockScenario[] = [
     id: "invoice-reminders",
     title: "Invoice Reminders",
     subtitle: "Chase overdue Stripe invoices and report it in Slack daily.",
+    mockElapsedMs: 56000,
     trigger: { kind: "schedule", eventFields: ["timestamp"] },
     funcs: [
       mkFunc({
@@ -208,6 +211,7 @@ const SCENARIOS: MockScenario[] = [
     id: "order-notifications",
     title: "Order Notifications",
     subtitle: "Route new Stripe orders to Slack and Discord at once.",
+    mockElapsedMs: 47000,
     trigger: { kind: "webhook", eventFields: ["payload"] },
     funcs: [
       mkFunc({
@@ -267,6 +271,7 @@ const SCENARIOS: MockScenario[] = [
     id: "incident-escalation",
     title: "Incident Escalation",
     subtitle: "Triage monitoring alerts across Slack and Discord.",
+    mockElapsedMs: 60000,
     trigger: { kind: "webhook", eventFields: ["payload"] },
     funcs: [
       mkFunc({
@@ -326,6 +331,7 @@ const SCENARIOS: MockScenario[] = [
     id: "refund-handler",
     title: "Refund Handler",
     subtitle: "Track Stripe refunds across Slack and Discord.",
+    mockElapsedMs: 42000,
     trigger: { kind: "webhook", eventFields: ["payload"] },
     funcs: [
       mkFunc({
@@ -385,6 +391,19 @@ const SCENARIOS: MockScenario[] = [
 
 const NO_RUN_STATUS: Record<string, string> = {};
 const NO_CONFIG: Record<string, Record<string, string>> = {};
+const AUTO_ROTATE_MS = 4200;
+const AUTO_RING_R = 11;
+const AUTO_RING_C = 2 * Math.PI * AUTO_RING_R;
+const SHOWCASE_SCENARIO_ORDER = [
+  "payment-alerts",
+  "refund-handler",
+  "order-notifications",
+  "incident-escalation",
+  "invoice-reminders",
+] as const;
+const SHOWCASE_SCENARIOS: MockScenario[] = SHOWCASE_SCENARIO_ORDER.map((id) =>
+  SCENARIOS.find((s) => s.id === id),
+).filter((s): s is MockScenario => Boolean(s));
 
 // Replica of App.buildNode — keeps graph nodes visually identical to the real
 // builder (FuncNode/TriggerNode shapes, port binding tones).
@@ -528,7 +547,18 @@ function GraphView(props: GraphViewProps) {
 }
 
 // Faithful, static replica of Chat.DesignProgress in its "all done" state.
-function MockBuildCard({ funcs }: { funcs: AuthoredFunc[] }) {
+function fmtElapsed(ms: number): string {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function MockBuildCard({
+  funcs,
+  mockElapsedMs,
+}: {
+  funcs: AuthoredFunc[];
+  mockElapsedMs: number;
+}) {
   const { t } = useTranslation();
   return (
     <div className="my-1.5 w-full overflow-hidden rounded-3xl border border-dashed border-border/40 bg-background p-4">
@@ -545,7 +575,7 @@ function MockBuildCard({ funcs }: { funcs: AuthoredFunc[] }) {
           </div>
         </div>
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">
-          0:09
+          {fmtElapsed(mockElapsedMs)}
         </span>
       </div>
       <div className="mt-2.5 h-1 w-full overflow-hidden rounded-full bg-muted/60">
@@ -638,9 +668,10 @@ export function BuilderMockShowcase() {
   const { t } = useTranslation();
   const [view, setView] = useState<"story" | "pipeline" | "graph">("graph");
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [selected, setSelected] = useState(SCENARIOS[0].id);
+  const [selected, setSelected] = useState(SHOWCASE_SCENARIOS[0].id);
+  const [autoRotate, setAutoRotate] = useState(true);
   const scenario = useMemo(
-    () => SCENARIOS.find((s) => s.id === selected) ?? SCENARIOS[0],
+    () => SHOWCASE_SCENARIOS.find((s) => s.id === selected) ?? SHOWCASE_SCENARIOS[0],
     [selected],
   );
   const theme =
@@ -662,33 +693,102 @@ export function BuilderMockShowcase() {
   );
   const tokenCount = (scenario.funcs.length * 3.7 + 4).toFixed(1) + "k";
 
-  const onSelectScenario = (id: string) => {
+  const onSelectScenario = (id: string, manual = true) => {
+    if (manual) setAutoRotate(false);
     setSelected(id);
     setSelectedId(null);
   };
 
+  // Advance the showcase once per cycle only — one cheap re-render every
+  // AUTO_ROTATE_MS. The ring fill is pure CSS (see index.css), so progress
+  // never re-renders React (which would also re-render the ReactFlow graph).
+  useEffect(() => {
+    if (!autoRotate) return;
+    const timer = setInterval(() => {
+      setSelected((current) => {
+        const idx = SHOWCASE_SCENARIOS.findIndex((s) => s.id === current);
+        return SHOWCASE_SCENARIOS[(idx + 1) % SHOWCASE_SCENARIOS.length].id;
+      });
+      setSelectedId(null);
+    }, AUTO_ROTATE_MS);
+    return () => clearInterval(timer);
+  }, [autoRotate]);
+
   return (
     <div className="grid h-[68vh] min-h-[520px] w-full max-w-6xl grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm lg:grid-cols-[2fr_1fr]">
       <div className="flex min-h-[320px] flex-col border-b border-border/40 lg:border-b-0 lg:border-r">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-muted/30 p-3">
+        <div className="flex items-center gap-2 border-b border-border/40 bg-muted/30 p-3">
           <span className="mr-1 text-[11px] font-medium text-muted-foreground">
             {t("landing.tryIdea")}
           </span>
-          {SCENARIOS.map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => onSelectScenario(item.id)}
-              className={cn(
-                "rounded-lg border px-2.5 py-1 text-[11px] transition-colors",
-                selected === item.id
-                  ? "border-tone-amber/50 bg-tone-amber-surface text-tone-amber-fg"
-                  : "border-border/60 bg-background text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {t(`landing.ideas.${item.id}`, { defaultValue: item.title })}
-            </button>
-          ))}
+          <div className="scrollbar-none flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+            {SHOWCASE_SCENARIOS.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => onSelectScenario(item.id, true)}
+                className={cn(
+                  "shrink-0 rounded-lg border px-2.5 py-1 text-[11px] transition-colors",
+                  selected === item.id
+                    ? "border-tone-amber/50 bg-tone-amber-surface text-tone-amber-fg"
+                    : "border-border/60 bg-background text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t(`landing.ideas.${item.id}`, { defaultValue: item.title })}
+              </button>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setAutoRotate((v) => !v)}
+            className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition-colors hover:text-foreground"
+            title={
+              autoRotate
+                ? t("landing.autoRotate.pause", { defaultValue: "Pause rotation" })
+                : t("landing.autoRotate.resume", { defaultValue: "Resume rotation" })
+            }
+          >
+            {autoRotate && (
+              <svg
+                viewBox="0 0 28 28"
+                className="pointer-events-none absolute inset-0 h-full w-full -rotate-90"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="14"
+                  cy="14"
+                  r={AUTO_RING_R}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="text-border/60"
+                />
+                <circle
+                  key={selected}
+                  cx="14"
+                  cy="14"
+                  r={AUTO_RING_R}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeDasharray={AUTO_RING_C}
+                  className="landing-rotate-ring text-primary"
+                  style={
+                    {
+                      "--ring-c": AUTO_RING_C,
+                      "--ring-duration": `${AUTO_ROTATE_MS}ms`,
+                    } as React.CSSProperties
+                  }
+                />
+              </svg>
+            )}
+            {autoRotate ? (
+              <Pause className="h-3.5 w-3.5" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+          </button>
         </div>
 
         <div className="relative min-h-0 flex-1">
@@ -743,7 +843,10 @@ export function BuilderMockShowcase() {
       </div>
 
       <div className="flex min-h-[300px] flex-col">
-        <div className="flex items-center gap-2 border-b border-border/40 px-3 py-1.5">
+        <div className="flex items-center gap-2 border-b border-border/40 px-3 py-4">
+          <span className="min-w-0 truncate text-sm font-medium text-foreground">
+            {t(`landing.ideas.${scenario.id}`, { defaultValue: scenario.title })}
+          </span>
           <span className="ml-auto rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
             {t("chat.tokens", { n: tokenCount })}
           </span>
@@ -754,7 +857,10 @@ export function BuilderMockShowcase() {
             {scenario.chat.map((message, idx) => (
               <div key={`${scenario.id}-${idx}`} className="flex flex-col gap-3">
                 {idx === firstAssistantIdx && (
-                  <MockBuildCard funcs={scenario.funcs} />
+                  <MockBuildCard
+                    funcs={scenario.funcs}
+                    mockElapsedMs={scenario.mockElapsedMs}
+                  />
                 )}
                 <MockMessage
                   role={message.role}

@@ -251,6 +251,29 @@
   }
 }
 
+/* Auto-rotate progress ring: fills from empty to full over one cycle, then the
+   React `key` swap (on scenario change) restarts it from zero. Pure CSS so the
+   per-frame progress never triggers a React re-render. */
+@keyframes landing-rotate-ring {
+  from {
+    stroke-dashoffset: var(--ring-c);
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.landing-rotate-ring {
+  stroke-dashoffset: var(--ring-c);
+  animation: landing-rotate-ring var(--ring-duration, 4200ms) linear forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-rotate-ring {
+    animation: none;
+  }
+}
+
 /* Side-by-side code diff (CodeMirror MergeView) — GitHub-style line + word blocks.
    Overrides the package's 2px gradient "underline" on changed text with a real box. */
 .cm-merge-a .cm-changedLine,

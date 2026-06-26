@@ -9,6 +9,7 @@ import { LanguageSwitcher } from "./LanguageSwitcher";
 import { BuilderMockShowcase } from "./BuilderMockShowcase";
 import { LandingUseCases } from "./LandingUseCases";
 import { AuthForm } from "./AuthForm";
+import { EnterpriseDialog } from "./EnterpriseDialog";
 
 export function Landing() {
   const { t } = useTranslation();
@@ -20,6 +21,7 @@ export function Landing() {
   );
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [contactOpen, setContactOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -107,6 +109,53 @@ export function Landing() {
         <BuilderMockShowcase />
         <LandingUseCases onUseCaseClick={() => openAuth("signup")} />
       </div>
+
+      <footer className="border-t border-border/40 px-4 py-3">
+        <div className="mx-auto flex w-full max-w-6xl items-center">
+          <div className="flex items-center gap-2">
+            <MergNLogo className="h-4 w-auto text-foreground" />
+            <span className="text-xs font-medium text-foreground/80">MergN</span>
+          </div>
+          <div className="ml-auto flex items-center gap-1">
+            <Button
+              asChild
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2 text-xs text-muted-foreground"
+            >
+              <a href="/terms" target="_blank" rel="noreferrer">
+                {t("header.termsOfService")}
+              </a>
+            </Button>
+            <Button
+              asChild
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2 text-xs text-muted-foreground"
+            >
+              <a href="/privacy" target="_blank" rel="noreferrer">
+                {t("header.privacyPolicy")}
+              </a>
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 px-2 text-xs text-muted-foreground"
+              onClick={() => setContactOpen(true)}
+            >
+              Contact us
+            </Button>
+          </div>
+        </div>
+      </footer>
+
+      {contactOpen && (
+        <EnterpriseDialog
+          title="Talk to us"
+          description="Found a bug or have an idea to make the product better? Send it our way — we read every message."
+          onClose={() => setContactOpen(false)}
+        />
+      )}
 
       <Dialog.Root open={authOpen} onOpenChange={setAuthOpen}>
         <Dialog.Portal>
