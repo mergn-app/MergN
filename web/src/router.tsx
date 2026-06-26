@@ -74,6 +74,11 @@ function IndexPage() {
 function LoginPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const mode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("mode") === "signup"
+      ? "signup"
+      : "signin";
   useEffect(() => {
     if (user) void navigate({ to: "/", replace: true });
   }, [user, navigate]);
@@ -89,7 +94,7 @@ function LoginPage() {
       </div>
       <div className="flex flex-1 items-center justify-center p-4">
         <div className="w-full max-w-sm rounded-2xl border border-border/50 bg-card p-6">
-          <AuthForm showLegalLinks={false} />
+          <AuthForm showLegalLinks={false} initialMode={mode} />
         </div>
       </div>
     </div>

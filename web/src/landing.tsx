@@ -1,21 +1,23 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useNavigate } from "@tanstack/react-router";
 import { Sun, Moon } from "lucide-react";
+import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
 import { LegalLinks } from "./LegalLinks";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { BuilderMockShowcase } from "./BuilderMockShowcase";
+import { AuthForm } from "./AuthForm";
 
 export function Landing() {
   const { t } = useTranslation();
-  const navigate = useNavigate();
   const [theme, setTheme] = useState<"dark" | "light">(() =>
     typeof document !== "undefined" &&
     document.documentElement.classList.contains("dark")
       ? "dark"
       : "light",
   );
+  const [authOpen, setAuthOpen] = useState(false);
+  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -25,6 +27,11 @@ export function Landing() {
       void 0;
     }
   }, [theme]);
+
+  const openAuth = (mode: "signin" | "signup") => {
+    setAuthMode(mode);
+    setAuthOpen(true);
+  };
 
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
@@ -54,6 +61,18 @@ export function Landing() {
               )}
             </Button>
           </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => openAuth("signin")}
+            >
+              {t("auth.signIn")}
+            </Button>
+            <Button size="sm" onClick={() => openAuth("signup")}>
+              {t("auth.createAccount")}
+            </Button>
+          </div>
         </header>
       </div>
       <div className="flex flex-1 flex-col items-center gap-4 p-6">
@@ -65,9 +84,7 @@ export function Landing() {
             {t("landing.heroSubtitle")}
           </p>
           <div className="mt-5 flex items-center justify-center gap-3">
-            <Button onClick={() => void navigate({ to: "/login" })}>
-              {t("auth.signIn")}
-            </Button>
+            <Button onClick={() => openAuth("signin")}>{t("auth.signIn")}</Button>
             <Button
               variant="outline"
               onClick={() =>
@@ -84,6 +101,20 @@ export function Landing() {
         </div>
         <BuilderMockShowcase />
       </div>
+
+      <Dialog.Root open={authOpen} onOpenChange={setAuthOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-xs data-[state=open]:animate-in data-[state=open]:fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[92vw] max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-border/50 bg-card p-6 shadow-xl focus:outline-none">
+            <Dialog.Title className="sr-only">Authentication</Dialog.Title>
+            <AuthForm
+              key={authMode}
+              showLegalLinks={false}
+              initialMode={authMode}
+            />
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }
