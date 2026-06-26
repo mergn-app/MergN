@@ -2,6 +2,14 @@ import { z } from "zod";
 import { genObject } from "./generate";
 import type { Registry } from "../providers/registry";
 import { authorProvider } from "./provider-author";
+import {
+  resolveCatalog,
+  catalogCandidates,
+  catalogListForPrompt,
+  catalogAuthorHint,
+  allCatalogEntries,
+  type CatalogEntry,
+} from "../providers/catalog";
 import { authorInputForm } from "./form-author";
 import { authorPollSource } from "./poll-author";
 import { reconcileWiring } from "./wiring-repair";
@@ -80,7 +88,15 @@ export const planZ = z.object({
       provider: z
         .string()
         .optional()
-        .describe("provider id for effectful steps, e.g. 'stripe', 'slack'"),
+        .describe(
+          "provider id for effectful steps. For a known public service, use its EXACT id from the SUPPORTED SERVICES catalog given in the prompt (e.g. 'stripe', 'slack', 'openai'). NEVER invent a generic placeholder id like 'ai_service' or 'enrichment_service' — pick the matching catalog id (AI/LLM -> 'openai', enrichment -> 'clearbit'/'apollo', etc.).",
+        ),
+      customApi: z
+        .boolean()
+        .optional()
+        .describe(
+          "set TRUE only when this step calls the USER'S OWN custom/internal API that they explicitly described (their own endpoint/URL) — a user-specific integration, not a known public SaaS. Leave false/omitted for public services (those MUST be a catalog provider id).",
+        ),
       intent: z
         .string()
         .describe(
@@ -145,16 +161,26 @@ const PLAN_SYSTEM = [
   "CONDITIONAL ACTIONS: when an action must run ONLY in some cases (refund ONLY when approved, create a record ONLY when NOT a duplicate, alert ONLY when risk is high), add a deciding step that outputs the flag (e.g. approval_status, is_duplicate, is_high_risk) and set the action step's `condition` to that step's output (equals 'approved', or truthy:false for is_duplicate, or truthy:true for is_high_risk). The engine then SKIPS the action and everything downstream of it when the condition is false — there is no branch node, so do NOT rely on code guards for this. Use condition for irreversible/one-way actions especially (refunds, charges, creating records, sending messages).",
   "When the user provides a LIST/multiple values (e.g. several channel ids, multiple emails/recipients), do NOT add a separate step to split or parse a delimited string. Instead, let the consuming step read that input DIRECTLY as an array (iterate it with for...of / forEach) — the UI gives the user a proper list editor for array inputs.",
   "FILES: when the user wants to SEND/UPLOAD a picked file to a service (e.g. 'send my file to Discord', 'email this attachment'), use a SINGLE effectful step that takes the file directly as an input and sends it. Do NOT add a separate step to 'read', 'decode', 'parse' or 'process' the file first — the file's bytes are delivered to the step automatically. Only add a processing step when the goal genuinely transforms the file's CONTENT (e.g. 'count rows in the CSV', 'extract text'). A file passed between steps stays the whole file object — never decode it to a string in one step and feed it to a step that expects a file.",
+  "SUPPORTED SERVICES: the prompt includes a CATALOG of supported public services (id — name). For every effectful step that uses a known public service, set `provider` to the matching catalog id — never invent a provider name. If the user needs a public service that is NOT in the catalog, do NOT fabricate one: first try to achieve the goal using catalog services or pure/HTTP steps; only if that is genuinely impossible, name the closest provider and the system will report that integration as unsupported. Set `customApi: true` ONLY for the user's OWN custom/internal API described with its endpoint (user-specific) — those are allowed without a catalog id.",
 ].join("\n");
 
 export async function planWorkflow(
   goal: string,
   meta?: AgentMeta,
 ): Promise<Plan> {
+  // The catalog is small enough to show the planner IN FULL — best matching, no
+  // keyword blind spot on paraphrased goals ("notify the team" -> slack/discord).
+  // Fall back to relevance-filtering only if the catalog grows large.
+  // Never suggest deprecated/dead services to the planner.
+  const all = allCatalogEntries().filter((e) => e.confidence !== "deprecated");
+  const entries = all.length <= 350 ? all : catalogCandidates(goal, 60);
+  const prompt = entries.length
+    ? `${goal}\n\nSUPPORTED SERVICES — use these EXACT provider ids for any known public service (never invent one):\n${catalogListForPrompt(entries)}`
+    : goal;
   return genObject({
     schema: planZ,
     system: PLAN_SYSTEM,
-    prompt: goal,
+    prompt,
     telemetry: trace("plan-workflow", meta),
     spaceId: meta?.spaceId,
   });
@@ -210,11 +236,37 @@ const BODY_SYSTEM = [
   "If the step SENDS an uploaded file to an external service (e.g. post a file to Discord/Slack/Telegram, attach to an email), the provider exposes a dedicated file-upload method that handles the multipart upload — call it and pass the WHOLE file object straight through: `await ctx.connections.discord.sendFile(input.channel_id, input.file, optionalCaption)`. The file object is { name, mime, size, base64 }. Do NOT decode it to a Buffer yourself, do NOT JSON-stringify it, and do NOT pass it as the text/content argument of a plain message method — those send JSON only and silently drop the file. Use the file method named in the provider's apiDoc.",
 ].join("\n");
 
+// Method names a provider's client actually exposes — parsed from its
+// clientSource factory (`async foo(`/`foo: async`). Used to constrain the
+// step-body author so it can't call a method the provider doesn't have
+// (the gmail.sendMail-vs-sendEmail class of hallucination).
+function providerMethodNames(clientSource?: string): string[] {
+  if (!clientSource) return [];
+  const names = new Set<string>();
+  for (const m of clientSource.matchAll(/async\s+([A-Za-z0-9_$]+)\s*\(/g))
+    names.add(m[1]);
+  for (const m of clientSource.matchAll(/([A-Za-z0-9_$]+)\s*:\s*async\b/g))
+    names.add(m[1]);
+  return [...names];
+}
+
+// Methods a step body calls on ctx.connections.<provider>.
+function calledProviderMethods(bodySource: string, provider: string): string[] {
+  const esc = provider.replace(/[^A-Za-z0-9_$]/g, "\\$&");
+  const re = new RegExp(
+    `ctx\\.connections\\.${esc}\\.([A-Za-z0-9_$]+)\\s*\\(`,
+    "g",
+  );
+  return [...bodySource.matchAll(re)].map((m) => m[1]);
+}
+
 async function authorStepBody(
   step: Step,
   providerApiDoc: string | undefined,
   meta?: AgentMeta,
   triggerHint?: string,
+  providerMethods: string[] = [],
+  extraRule?: string,
 ): Promise<z.infer<typeof stepBodyZ>> {
   const upstream = step.deps.map((d) => d.input);
   return genObject({
@@ -232,6 +284,10 @@ async function authorStepBody(
       step.effectful && step.provider
         ? `Use ctx.connections.${step.provider}. API: ${providerApiDoc}`
         : "This is a pure transform (no external service).",
+      step.effectful && step.provider && providerMethods.length
+        ? `ALLOWED methods on ctx.connections.${step.provider} — call ONLY these exact names: ${providerMethods.join(", ")}. Do NOT invent or call any method outside this list.`
+        : "",
+      extraRule ?? "",
     ]
       .filter(Boolean)
       .join("\n\n"),
@@ -242,7 +298,7 @@ export type DesignProgress = (ev: {
   kind: "provider" | "step" | "form" | "poll" | "wire";
   id: string;
   label: string;
-  status: "active" | "done";
+  status: "active" | "done" | "failed";
 }) => void;
 
 export async function designWorkflow(
@@ -264,27 +320,65 @@ export async function designWorkflow(
   if (plan.triggerKind === "poll" && plan.poll?.provider) {
     providerIds.add(plan.poll.provider);
   }
-  const apiDocs: Record<string, string> = {};
+  // Classify every required provider against the trusted catalog BEFORE authoring.
+  // Already-registered providers are reused; catalog services are authored grounded
+  // on their REAL API (host/auth/docs); the user's own custom API (customApi) is
+  // allowed; any other public service the catalog doesn't cover is refused rather
+  // than fabricated — this is what stops the hallucinated-provider bug.
+  const customProviders = new Set(
+    plan.steps
+      .filter((s) => s.effectful && s.provider && s.customApi)
+      .map((s) => s.provider!),
+  );
+  const toAuthor: { id: string; cat?: CatalogEntry }[] = [];
+  const unsupported: string[] = [];
   for (const id of providerIds) {
-    let spec = registry.getProvider(spaceId, id);
-    if (!spec) {
+    if (registry.getProvider(spaceId, id)) continue; // already available
+    const cat = resolveCatalog(id);
+    if (cat) toAuthor.push({ id, cat });
+    else if (customProviders.has(id)) toAuthor.push({ id });
+    else unsupported.push(id);
+  }
+  if (unsupported.length) {
+    // Surface each unsupported integration as a failed build step (the build
+    // panel renders these) before aborting with an actionable message.
+    for (const id of unsupported) {
       onProgress?.({
         kind: "provider",
         id,
-        label: `Creating provider ${id}`,
-        status: "active",
-      });
-      const draft = await authorProvider(id, undefined, m);
-      spec = registry.registerProviderFromDraft(spaceId, draft);
-      await registry.persistProvider(spaceId, draft);
-      onProgress?.({
-        kind: "provider",
-        id,
-        label: `Creating provider ${id}`,
-        status: "done",
+        label: `Unsupported integration: ${id}`,
+        status: "failed",
       });
     }
-    apiDocs[id] = spec.apiDoc;
+    throw new Error(
+      `Unsupported integration: ${unsupported.join(", ")}. This isn't in the ` +
+        `supported-services catalog yet — try a supported alternative, or describe ` +
+        `your own API endpoint to add it as a custom integration.`,
+    );
+  }
+
+  for (const { id, cat } of toAuthor) {
+    const label = `Creating provider ${cat?.name ?? id}`;
+    onProgress?.({ kind: "provider", id, label, status: "active" });
+    const draft = await authorProvider(
+      id,
+      cat ? catalogAuthorHint(cat) : undefined,
+      m,
+    );
+    // Pin egress to the catalog's known host so a drifted/guessed hostname can't
+    // silently reach a fabricated endpoint (the enrichment_service-style bug).
+    if (cat?.egressHost) draft.sandbox = { egressDomain: cat.egressHost };
+    registry.registerProviderFromDraft(spaceId, draft);
+    await registry.persistProvider(spaceId, draft);
+    onProgress?.({ kind: "provider", id, label, status: "done" });
+  }
+
+  const apiDocs: Record<string, string> = {};
+  const methodsByProvider: Record<string, string[]> = {};
+  for (const id of providerIds) {
+    const spec = registry.getProvider(spaceId, id);
+    if (spec) apiDocs[id] = spec.apiDoc;
+    methodsByProvider[id] = providerMethodNames(spec?.clientSource);
   }
 
   let pollDraft: Awaited<ReturnType<typeof authorPollSource>> | null = null;
@@ -340,12 +434,29 @@ export async function designWorkflow(
   for (const step of plan.steps) {
     const stepLabel = `Writing ${step.title || step.id}`;
     onProgress?.({ kind: "step", id: step.id, label: stepLabel, status: "active" });
-    const body = await authorStepBody(
-      step,
-      step.provider ? apiDocs[step.provider] : undefined,
-      m,
-      triggerHint,
-    );
+    const apiDoc = step.provider ? apiDocs[step.provider] : undefined;
+    const methods = step.provider ? (methodsByProvider[step.provider] ?? []) : [];
+    let body = await authorStepBody(step, apiDoc, m, triggerHint, methods);
+    // Method-name guard: if the body called a provider method that doesn't exist
+    // on the real client, re-author once constrained to the actual method list.
+    if (step.provider && methods.length) {
+      const bad = [
+        ...new Set(calledProviderMethods(body.bodySource, step.provider)),
+      ].filter((x) => !methods.includes(x));
+      if (bad.length) {
+        console.log(
+          `[method-fix] ${step.id}: invalid ${step.provider} method(s) ${bad.join(", ")}; re-authoring against ${methods.join(", ")}`,
+        );
+        body = await authorStepBody(
+          step,
+          apiDoc,
+          m,
+          triggerHint,
+          methods,
+          `Your previous code called ctx.connections.${step.provider}.${bad[0]}(...) which does NOT exist on this provider. Rewrite using ONLY these methods: ${methods.join(", ")}.`,
+        );
+      }
+    }
     const usedInputs = extractInputs(body.bodySource);
     // Trust the body's real return shape over the planner's declared outputs,
     // unioning both so a planner-declared field that the body forgot still shows.
