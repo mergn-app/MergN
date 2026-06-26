@@ -234,7 +234,7 @@ export function ConnectionDialog({
     >
       <div
         className={cn(
-          "w-full max-w-sm rounded-2xl border border-border/50 bg-card p-5 duration-200 ease-out",
+          "flex max-h-[80vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-border/50 bg-card p-5 duration-200 ease-out",
           closing
             ? "animate-out fade-out zoom-out-95 slide-out-to-bottom-2 fill-mode-forwards"
             : "animate-in fade-in zoom-in-95 slide-in-from-bottom-2",
@@ -261,8 +261,9 @@ export function ConnectionDialog({
           </button>
         </div>
 
-        {!creating ? (
-          <div className="space-y-3 text-sm">
+        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+          {!creating ? (
+            <div className="space-y-3 text-sm">
             <div className="space-y-1">
               <label className="text-xs font-medium">
                 {t("connectionDialog.name")}
@@ -363,175 +364,176 @@ export function ConnectionDialog({
             >
               {t("connectionDialog.addAnother")}
             </button>
-          </div>
-        ) : auth.isLoading ? (
-          <div className="py-6 text-center text-xs text-muted-foreground">
-            {t("common.loading")}
-          </div>
-        ) : isOAuth ? (
-          oauthStatus.isLoading ? (
+            </div>
+          ) : auth.isLoading ? (
             <div className="py-6 text-center text-xs text-muted-foreground">
-              loading…
+              {t("common.loading")}
             </div>
-          ) : configured ? (
-            <div className="space-y-3">
-              <p className="text-xs leading-relaxed text-muted-foreground">
-                {auth.data?.scopes?.length
-                  ? t("connectionDialog.redirectInfoScope", {
+          ) : isOAuth ? (
+            oauthStatus.isLoading ? (
+              <div className="py-6 text-center text-xs text-muted-foreground">
+                loading…
+              </div>
+            ) : configured ? (
+              <div className="space-y-3">
+                <p className="text-xs leading-relaxed text-muted-foreground">
+                  {auth.data?.scopes?.length
+                    ? t("connectionDialog.redirectInfoScope", {
+                        name: auth.data?.name,
+                        scopes: auth.data.scopes.join(", "),
+                      })
+                    : t("connectionDialog.redirectInfo", {
+                        name: auth.data?.name,
+                      })}
+                </p>
+                {oauthError && (
+                  <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                    {oauthError}
+                  </div>
+                )}
+                <Button className="w-full" disabled={oauthBusy} onClick={connectOAuth}>
+                  {oauthBusy
+                    ? t("connectionDialog.waitingAuth")
+                    : t("connectionDialog.connectWith", { name: auth.data?.name })}
+                </Button>
+                <button
+                  type="button"
+                  disabled={deleteApp.isPending}
+                  onClick={() => deleteApp.mutate()}
+                  className="w-full text-center text-[11px] text-muted-foreground/70 hover:text-muted-foreground"
+                >
+                  {t("connectionDialog.useDifferentApp")}
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {auth.data?.setupGuide ? (
+                  <>
+                    <Guide guide={auth.data.setupGuide} />
+                    <Divider label={t("connectionDialog.credentials")} />
+                  </>
+                ) : (
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {t("connectionDialog.noOAuthApp", {
                       name: auth.data?.name,
-                      scopes: auth.data.scopes.join(", "),
-                    })
-                  : t("connectionDialog.redirectInfo", {
-                      name: auth.data?.name,
+                      url: `${window.location.origin}/api/oauth/callback`,
                     })}
-              </p>
-              {oauthError && (
-                <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-                  {oauthError}
-                </div>
-              )}
-              <Button className="w-full" disabled={oauthBusy} onClick={connectOAuth}>
-                {oauthBusy
-                  ? t("connectionDialog.waitingAuth")
-                  : t("connectionDialog.connectWith", { name: auth.data?.name })}
-              </Button>
-              <button
-                type="button"
-                disabled={deleteApp.isPending}
-                onClick={() => deleteApp.mutate()}
-                className="w-full text-center text-[11px] text-muted-foreground/70 hover:text-muted-foreground"
-              >
-                {t("connectionDialog.useDifferentApp")}
-              </button>
-            </div>
+                  </p>
+                )}
+                <Input
+                  value={clientId}
+                  onChange={(e) => setClientId(e.target.value)}
+                  placeholder={t("connectionDialog.clientId")}
+                  autoFocus
+                />
+                <Input
+                  value={clientSecret}
+                  onChange={(e) => setClientSecret(e.target.value)}
+                  type="password"
+                  placeholder={t("connectionDialog.clientSecret")}
+                />
+                {needsEndpoints && (
+                  <>
+                    <Input
+                      value={authUrl}
+                      onChange={(e) => setAuthUrl(e.target.value)}
+                      placeholder={t("connectionDialog.authorizeUrl")}
+                    />
+                    <Input
+                      value={tokenUrl}
+                      onChange={(e) => setTokenUrl(e.target.value)}
+                      placeholder={t("connectionDialog.tokenUrl")}
+                    />
+                  </>
+                )}
+                {oauthError && (
+                  <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
+                    {oauthError}
+                  </div>
+                )}
+                <Button
+                  className="w-full"
+                  disabled={
+                    !clientId.trim() ||
+                    !clientSecret.trim() ||
+                    (needsEndpoints && (!authUrl.trim() || !tokenUrl.trim())) ||
+                    saveApp.isPending ||
+                    oauthBusy
+                  }
+                  onClick={saveAndConnect}
+                >
+                  {saveApp.isPending
+                    ? t("common.saving")
+                    : oauthBusy
+                      ? t("connectionDialog.waitingAuth")
+                      : t("connectionDialog.saveConnect", {
+                          name: auth.data?.name,
+                        })}
+                </Button>
+              </div>
+            )
           ) : (
             <div className="space-y-3">
-              {auth.data?.setupGuide ? (
+              {auth.data?.setupGuide && (
                 <>
                   <Guide guide={auth.data.setupGuide} />
                   <Divider label={t("connectionDialog.credentials")} />
                 </>
-              ) : (
-                <p className="text-xs leading-relaxed text-muted-foreground">
-                  {t("connectionDialog.noOAuthApp", {
-                    name: auth.data?.name,
-                    url: `${window.location.origin}/api/oauth/callback`,
-                  })}
-                </p>
               )}
-              <Input
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                placeholder={t("connectionDialog.clientId")}
-                autoFocus
-              />
-              <Input
-                value={clientSecret}
-                onChange={(e) => setClientSecret(e.target.value)}
-                type="password"
-                placeholder={t("connectionDialog.clientSecret")}
-              />
-              {needsEndpoints && (
-                <>
+              {fields.map((f, i) => (
+                <div key={f.name} className="space-y-1">
+                  <label className="flex items-center gap-2 text-xs">
+                    <span className="font-medium">{f.label}</span>
+                    {f.required && (
+                      <span className="text-[10px] text-rose-300/70">
+                        {t("connectionDialog.required")}
+                      </span>
+                    )}
+                  </label>
                   <Input
-                    value={authUrl}
-                    onChange={(e) => setAuthUrl(e.target.value)}
-                    placeholder={t("connectionDialog.authorizeUrl")}
+                    value={cred[f.name] ?? ""}
+                    onChange={(e) =>
+                      setCred((c) => ({ ...c, [f.name]: e.target.value }))
+                    }
+                    type={
+                      f.type === "number"
+                        ? "number"
+                        : f.type === "text"
+                          ? "text"
+                          : "password"
+                    }
+                    placeholder={f.placeholder ?? f.label}
+                    autoFocus={i === 0}
                   />
-                  <Input
-                    value={tokenUrl}
-                    onChange={(e) => setTokenUrl(e.target.value)}
-                    placeholder={t("connectionDialog.tokenUrl")}
-                  />
-                </>
-              )}
-              {oauthError && (
-                <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-300">
-                  {oauthError}
+                  {f.help && (
+                    <p className="text-[11px] leading-snug text-muted-foreground/70">
+                      {f.help}
+                    </p>
+                  )}
                 </div>
-              )}
+              ))}
+              <div className="space-y-1">
+                <Input
+                  value={account}
+                  onChange={(e) => setAccount(e.target.value)}
+                  placeholder={t("connectionDialog.nameThis")}
+                />
+                <p className="text-[11px] leading-snug text-muted-foreground/70">
+                  {t("connectionDialog.nameHelp")}
+                </p>
+              </div>
               <Button
                 className="w-full"
-                disabled={
-                  !clientId.trim() ||
-                  !clientSecret.trim() ||
-                  (needsEndpoints && (!authUrl.trim() || !tokenUrl.trim())) ||
-                  saveApp.isPending ||
-                  oauthBusy
-                }
-                onClick={saveAndConnect}
+                disabled={missingRequired || create.isPending}
+                onClick={connectApiKey}
               >
-                {saveApp.isPending
-                  ? t("common.saving")
-                  : oauthBusy
-                    ? t("connectionDialog.waitingAuth")
-                    : t("connectionDialog.saveConnect", {
-                        name: auth.data?.name,
-                      })}
+                {create.isPending
+                  ? t("connectionDialog.connecting")
+                  : t("connectionDialog.connect")}
               </Button>
             </div>
-          )
-        ) : (
-          <div className="space-y-3">
-            {auth.data?.setupGuide && (
-              <>
-                <Guide guide={auth.data.setupGuide} />
-                <Divider label={t("connectionDialog.credentials")} />
-              </>
-            )}
-            {fields.map((f, i) => (
-              <div key={f.name} className="space-y-1">
-                <label className="flex items-center gap-2 text-xs">
-                  <span className="font-medium">{f.label}</span>
-                  {f.required && (
-                    <span className="text-[10px] text-rose-300/70">
-                      {t("connectionDialog.required")}
-                    </span>
-                  )}
-                </label>
-                <Input
-                  value={cred[f.name] ?? ""}
-                  onChange={(e) =>
-                    setCred((c) => ({ ...c, [f.name]: e.target.value }))
-                  }
-                  type={
-                    f.type === "number"
-                      ? "number"
-                      : f.type === "text"
-                        ? "text"
-                        : "password"
-                  }
-                  placeholder={f.placeholder ?? f.label}
-                  autoFocus={i === 0}
-                />
-                {f.help && (
-                  <p className="text-[11px] leading-snug text-muted-foreground/70">
-                    {f.help}
-                  </p>
-                )}
-              </div>
-            ))}
-            <div className="space-y-1">
-              <Input
-                value={account}
-                onChange={(e) => setAccount(e.target.value)}
-                placeholder={t("connectionDialog.nameThis")}
-              />
-              <p className="text-[11px] leading-snug text-muted-foreground/70">
-                {t("connectionDialog.nameHelp")}
-              </p>
-            </div>
-            <Button
-              className="w-full"
-              disabled={missingRequired || create.isPending}
-              onClick={connectApiKey}
-            >
-              {create.isPending
-                ? t("connectionDialog.connecting")
-                : t("connectionDialog.connect")}
-            </Button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>,
     document.body,
