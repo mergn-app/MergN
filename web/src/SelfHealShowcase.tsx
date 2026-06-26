@@ -89,20 +89,20 @@ const AUTO_RING_C = 2 * Math.PI * AUTO_RING_R;
 function SourceChip({ source }: { source: StepSource }) {
   if (source.kind === "unbound") {
     return (
-      <span className="text-tone-rose-fg">⚠ {`{unwired}`}</span>
+      <span className="text-[10px] text-tone-rose-fg">⚠ {`{unwired}`}</span>
     );
   }
   if (source.kind === "trigger") {
     return (
-      <span className="text-tone-amber-fg/90">
+      <span className="text-[10px] text-tone-amber-fg/90">
         ← <span className="text-tone-amber-fg">trigger</span>
       </span>
     );
   }
   return (
-    <span className="text-tone-blue-fg">
+    <span className="text-[10px] text-tone-blue-fg">
       ←{" "}
-      <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-tone-blue/12 px-1 text-[10px] font-medium text-tone-blue-fg">
+      <span className="inline-flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-tone-blue/12 px-0.5 text-[9px] font-medium text-tone-blue-fg">
         {source.num}
       </span>{" "}
       {source.title}
@@ -179,25 +179,25 @@ function Segmented({
 function DetectStage() {
   const { t } = useTranslation();
   return (
-    <div className="rounded-2xl border border-rose-500/30 bg-rose-500/5 p-4">
-      <div className="flex items-center gap-2">
-        <AlertTriangle className="size-4 text-rose-500" />
-        <span className="text-sm font-medium">
+    <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-3">
+      <div className="flex items-center gap-1.5">
+        <AlertTriangle className="size-3.5 text-rose-500" />
+        <span className="text-xs font-medium">
           {t("landing.selfHeal.runFailed")}
         </span>
-        <span className="ml-auto rounded-full bg-rose-500/15 px-2 py-0.5 text-[10px] font-medium text-rose-600 dark:text-rose-400">
+        <span className="ml-auto rounded-full bg-rose-500/15 px-1.5 py-px text-[9px] font-medium text-rose-600 dark:text-rose-400">
           {t("status.failed")}
         </span>
       </div>
-      <div className="mt-1 text-[11px] text-muted-foreground">
+      <div className="mt-0.5 text-[10px] text-muted-foreground">
         {t("landing.selfHeal.detectMeta")}
       </div>
-      <div className="mt-3 space-y-1.5">
+      <div className="mt-2 space-y-1">
         {["parse_event", "format_alert", "post_discord"].map((id, i) => (
           <div
             key={id}
             className={cn(
-              "flex items-center gap-2.5 rounded-xl border px-2.5 py-1.5 text-[13px]",
+              "flex items-center gap-2 rounded-lg border px-2 py-1 text-[11px]",
               i === 2
                 ? "border-rose-500/40 bg-rose-500/5"
                 : "border-border/40 bg-background/50",
@@ -205,20 +205,20 @@ function DetectStage() {
           >
             <span
               className={cn(
-                "size-2 shrink-0 rounded-full",
+                "size-1.5 shrink-0 rounded-full",
                 i === 2 ? "bg-rose-500" : "bg-emerald-500",
               )}
             />
             <span className="font-mono text-foreground/80">{id}</span>
             {i === 2 && (
-              <span className="ml-auto font-mono text-[11px] text-rose-600 dark:text-rose-400">
+              <span className="ml-auto font-mono text-[10px] text-rose-600 dark:text-rose-400">
                 {t("status.failed")}
               </span>
             )}
           </div>
         ))}
       </div>
-      <div className="mt-3 rounded-lg border border-rose-500/30 bg-background px-3 py-2 font-mono text-[11px] text-rose-600 dark:text-rose-400">
+      <div className="mt-2 rounded-md border border-rose-500/30 bg-background px-2 py-1.5 font-mono text-[10px] text-rose-600 dark:text-rose-400">
         {t("landing.selfHeal.detectError")}
       </div>
     </div>
@@ -229,22 +229,22 @@ function DiagnoseStage() {
   const { t } = useTranslation();
   return (
     <div>
-      <div className="mb-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2">
-        <Stethoscope className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
-        <span className="text-xs leading-relaxed text-foreground/90">
+      <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5">
+        <Stethoscope className="mt-px size-3 shrink-0 text-amber-500" />
+        <span className="text-[11px] leading-relaxed text-foreground/90">
           {t("landing.selfHeal.diagnosis")}
         </span>
       </div>
       <div className="flex flex-col">
-        <div className="rounded-2xl border border-tone-amber/30 bg-tone-amber/5 px-3 py-2">
-          <div className="flex items-center gap-2">
-            <span className="flex items-center justify-center rounded-lg bg-tone-amber/15 p-1.5 text-tone-amber-fg">
-              <Zap className="h-3.5 w-3.5" />
+        <div className="rounded-xl border border-tone-amber/30 bg-tone-amber/5 px-2 py-1.5">
+          <div className="flex items-center gap-1.5">
+            <span className="flex items-center justify-center rounded-md bg-tone-amber/15 p-1 text-tone-amber-fg">
+              <Zap className="h-3 w-3" />
             </span>
-            <span className="text-xs font-medium text-tone-amber-fg">
+            <span className="text-[11px] font-medium text-tone-amber-fg">
               {t("trigger.title")}
             </span>
-            <span className="ml-auto rounded-md bg-tone-amber/12 px-1.5 py-0.5 font-mono text-[10px] text-tone-amber-fg">
+            <span className="ml-auto rounded bg-tone-amber/12 px-1 py-px font-mono text-[9px] text-tone-amber-fg">
               payload
             </span>
           </div>
@@ -254,52 +254,52 @@ function DiagnoseStage() {
           <div key={s.id} className="flex flex-col items-stretch">
             <span
               className={cn(
-                "mx-auto h-4 w-px",
+                "mx-auto h-2.5 w-px",
                 s.modified ? "bg-rose-500/60" : "bg-border",
               )}
             />
             <div
               className={cn(
-                "rounded-2xl border bg-card p-3",
+                "rounded-xl border bg-card p-2",
                 s.modified
-                  ? "border-amber-500/40 ring-2 ring-amber-500/70"
+                  ? "border-amber-500/40 ring-1 ring-amber-500/70"
                   : "border-border/60",
               )}
             >
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 <span
                   className={cn(
-                    "flex items-center justify-center rounded-xl p-1.5",
+                    "flex items-center justify-center rounded-md p-1",
                     s.pure
                       ? "bg-tone-emerald/15 text-tone-emerald-fg"
                       : "bg-tone-blue/15 text-tone-blue-fg",
                   )}
                 >
                   {s.pure ? (
-                    <ArrowLeftRight className="h-3.5 w-3.5" />
+                    <ArrowLeftRight className="h-3 w-3" />
                   ) : (
-                    <Zap className="h-3.5 w-3.5" />
+                    <Zap className="h-3 w-3" />
                   )}
                 </span>
-                <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-muted px-1 text-[11px] font-medium text-muted-foreground">
+                <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-muted px-0.5 text-[10px] font-medium text-muted-foreground">
                   {s.num}
                 </span>
-                <span className="truncate text-sm font-medium">{s.title}</span>
-                <div className="ml-auto flex items-center gap-2">
+                <span className="truncate text-xs font-medium">{s.title}</span>
+                <div className="ml-auto flex items-center gap-1.5">
                   {s.provider && (
-                    <span className="font-mono text-[11px] text-muted-foreground">
+                    <span className="font-mono text-[10px] text-muted-foreground">
                       {s.provider}
                     </span>
                   )}
                   {s.modified && (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-medium text-rose-600 dark:text-rose-400">
-                      <AlertTriangle className="size-2.5" />
+                    <span className="inline-flex items-center rounded-full bg-rose-500/15 px-1 py-px text-[9px] font-medium text-rose-600 dark:text-rose-400">
+                      <AlertTriangle className="size-2" />
                     </span>
                   )}
                 </div>
               </div>
-              <div className="mt-2.5 flex items-center gap-2 border-t border-border/60 pt-2.5 font-mono text-[11px]">
-                <span className="w-6 shrink-0 text-muted-foreground/60">in</span>
+              <div className="mt-1.5 flex items-center gap-1.5 border-t border-border/60 pt-1.5 font-mono text-[10px]">
+                <span className="w-5 shrink-0 text-muted-foreground/60">in</span>
                 <span className="text-foreground/90">{s.input.name}</span>
                 <span className="ml-auto">
                   <SourceChip source={s.input.source} />
@@ -327,27 +327,27 @@ function FixStage({
   const { t } = useTranslation();
   return (
     <div>
-      <div className="rounded-2xl border border-border/50 bg-background-subtle/30 p-4">
-        <div className="flex items-center gap-2">
-          <Wrench className="size-4 text-emerald-500" />
-          <span className="text-sm font-medium">{t("heal.fixTitle")}</span>
-          <span className="ml-auto rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-600 dark:text-emerald-400">
+      <div className="rounded-xl border border-border/50 bg-background-subtle/30 p-3">
+        <div className="flex items-center gap-1.5">
+          <Wrench className="size-3.5 text-emerald-500" />
+          <span className="text-xs font-medium">{t("heal.fixTitle")}</span>
+          <span className="ml-auto rounded-full bg-emerald-500/15 px-1.5 py-px text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
             {t("heal.confidence.high")}
           </span>
         </div>
 
-        <div className="mt-3 font-mono text-[11px] text-foreground/80">
+        <div className="mt-2 font-mono text-[10px] text-foreground/80">
           post_discord · message
         </div>
-        <div className="mt-2 space-y-1.5">
-          <div className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 font-mono text-[11px]">
-            <span className="w-10 shrink-0 text-rose-600 dark:text-rose-400">
+        <div className="mt-1.5 space-y-1">
+          <div className="flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/5 px-2 py-1.5 font-mono text-[10px]">
+            <span className="w-9 shrink-0 text-rose-600 dark:text-rose-400">
               {t("review.removed")}
             </span>
             <span className="text-tone-rose-fg">⚠ message {`{unwired}`}</span>
           </div>
-          <div className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 px-3 py-2 font-mono text-[11px]">
-            <span className="w-10 shrink-0 text-emerald-600 dark:text-emerald-400">
+          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2 py-1.5 font-mono text-[10px]">
+            <span className="w-9 shrink-0 text-emerald-600 dark:text-emerald-400">
               {t("review.added")}
             </span>
             <span className="text-emerald-600 dark:text-emerald-400">
@@ -357,7 +357,7 @@ function FixStage({
         </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-1.5 text-[11px] font-medium text-foreground/80">
+      <div className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-foreground/80">
         <ShieldAlert className="size-3.5 text-amber-500" />
         {t("landing.selfHeal.controlBanner")}
       </div>
@@ -445,134 +445,136 @@ export function SelfHealShowcase() {
   };
 
   return (
-    <div className="grid w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm lg:grid-cols-[2fr_1fr]">
-      {/* Left: the Detect → Diagnose → Fix lifecycle, animated */}
-      <div className="flex min-h-[420px] flex-col border-b border-border/40 lg:border-b-0 lg:border-r">
-        {/* stepper */}
-        <div className="border-b border-border/40 bg-muted/20 px-3 pt-3">
-          <div className="flex items-center gap-2">
-            {STAGES.map((st, i) => {
-              const Icon = st.icon;
-              const active = i === stage;
-              const done = i < stage;
-              return (
-                <button
-                  key={st.id}
-                  onClick={() => goStage(i)}
+    <div className="grid w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_1fr]">
+      {/* Left header — shares row with right header on lg for equal height */}
+      <div className="border-b border-border/40 bg-muted/20 px-3 py-3 lg:col-start-1 lg:row-start-1 lg:border-r">
+        <div className="flex items-center gap-2">
+          {STAGES.map((st, i) => {
+            const Icon = st.icon;
+            const active = i === stage;
+            const done = i < stage;
+            return (
+              <button
+                key={st.id}
+                onClick={() => goStage(i)}
+                className={cn(
+                  "flex flex-1 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
+                  active
+                    ? "border-primary/40 bg-background text-foreground"
+                    : "border-border/50 bg-background/40 text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <span
                   className={cn(
-                    "flex flex-1 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
+                    "flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium",
                     active
-                      ? "border-primary/40 bg-background text-foreground"
-                      : "border-border/50 bg-background/40 text-muted-foreground hover:text-foreground",
+                      ? "bg-primary/15 text-primary"
+                      : done
+                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                        : "bg-muted text-muted-foreground",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium",
-                      active
-                        ? "bg-primary/15 text-primary"
-                        : done
-                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                          : "bg-muted text-muted-foreground",
-                    )}
-                  >
-                    {done ? <Check className="size-3" /> : i + 1}
+                  {done ? <Check className="size-3" /> : i + 1}
+                </span>
+                <span className="flex items-center gap-1.5 truncate text-xs font-medium">
+                  <Icon className="size-3.5 shrink-0" />
+                  <span className="truncate">
+                    {t(`landing.selfHeal.${st.id}`)}
                   </span>
-                  <span className="flex items-center gap-1.5 truncate text-xs font-medium">
-                    <Icon className="size-3.5 shrink-0" />
-                    <span className="truncate">
-                      {t(`landing.selfHeal.${st.id}`)}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-            <button
-              type="button"
-              onClick={() => setAutoPlay((v) => !v)}
-              className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition-colors hover:text-foreground"
-              title={
-                autoPlay
-                  ? t("landing.autoRotate.pause", { defaultValue: "Pause rotation" })
-                  : t("landing.autoRotate.resume", { defaultValue: "Resume rotation" })
-              }
-            >
-              {autoPlay && (
-                <svg
-                  viewBox="0 0 28 28"
-                  className="pointer-events-none absolute inset-0 h-full w-full -rotate-90"
-                  aria-hidden="true"
-                >
-                  <circle
-                    cx="14"
-                    cy="14"
-                    r={AUTO_RING_R}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    className="text-border/60"
-                  />
-                  <circle
-                    key={stage}
-                    cx="14"
-                    cy="14"
-                    r={AUTO_RING_R}
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeDasharray={AUTO_RING_C}
-                    className="landing-rotate-ring text-primary"
-                    style={
-                      {
-                        "--ring-c": AUTO_RING_C,
-                        "--ring-duration": `${STAGE_MS}ms`,
-                      } as React.CSSProperties
-                    }
-                  />
-                </svg>
-              )}
-              {autoPlay ? (
-                <Pause className="h-3.5 w-3.5" />
-              ) : (
-                <Play className="h-3.5 w-3.5" />
-              )}
-            </button>
-          </div>
-          <div className="px-0.5 pb-2 pt-2 text-[11px] text-muted-foreground">
-            {t(`landing.selfHeal.${STAGES[stage].id}Desc`)}
-          </div>
-        </div>
-
-        {/* animated stage content */}
-        <div className="min-h-0 flex-1 overflow-auto p-4">
-          <div
-            key={STAGES[stage].id}
-            className="animate-in fade-in slide-in-from-bottom-2 duration-500"
+                </span>
+              </button>
+            );
+          })}
+          <button
+            type="button"
+            onClick={() => setAutoPlay((v) => !v)}
+            className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition-colors hover:text-foreground"
+            title={
+              autoPlay
+                ? t("landing.autoRotate.pause", { defaultValue: "Pause rotation" })
+                : t("landing.autoRotate.resume", { defaultValue: "Resume rotation" })
+            }
           >
-            {STAGES[stage].id === "detect" && <DetectStage />}
-            {STAGES[stage].id === "diagnose" && <DiagnoseStage />}
-            {STAGES[stage].id === "fix" && (
-              <FixStage
-                decision={decision}
-                setDecision={setDecision}
-                locked={locked}
-                onInteract={() => setAutoPlay(false)}
-              />
+            {autoPlay && (
+              <svg
+                viewBox="0 0 28 28"
+                className="pointer-events-none absolute inset-0 h-full w-full -rotate-90"
+                aria-hidden="true"
+              >
+                <circle
+                  cx="14"
+                  cy="14"
+                  r={AUTO_RING_R}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  className="text-border/60"
+                />
+                <circle
+                  key={stage}
+                  cx="14"
+                  cy="14"
+                  r={AUTO_RING_R}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeDasharray={AUTO_RING_C}
+                  className="landing-rotate-ring text-primary"
+                  style={
+                    {
+                      "--ring-c": AUTO_RING_C,
+                      "--ring-duration": `${STAGE_MS}ms`,
+                    } as React.CSSProperties
+                  }
+                />
+              </svg>
             )}
+            {autoPlay ? (
+              <Pause className="h-3.5 w-3.5" />
+            ) : (
+              <Play className="h-3.5 w-3.5" />
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Left body */}
+      <div className="border-b border-border/40 lg:col-start-1 lg:row-start-2 lg:border-b-0 lg:border-r">
+        <p className="absolute mt-2 text-[11px] pl-2 text-muted-foreground">
+          {t(`landing.selfHeal.${STAGES[stage].id}Desc`)}
+        </p>
+        <div className="h-108 shrink-0 p-4">
+          <div className="flex min-h-full items-center justify-center">
+            <div
+              key={STAGES[stage].id}
+              className="w-full max-w-md animate-in fade-in slide-in-from-bottom-2 duration-500"
+            >
+              {STAGES[stage].id === "detect" && <DetectStage />}
+              {STAGES[stage].id === "diagnose" && <DiagnoseStage />}
+              {STAGES[stage].id === "fix" && (
+                <FixStage
+                  decision={decision}
+                  setDecision={setDecision}
+                  locked={locked}
+                  onInteract={() => setAutoPlay(false)}
+                />
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Right: the control panel (fixed) */}
-      <div className="flex min-h-[300px] flex-col gap-3 p-4">
-        <div className="flex items-center gap-2">
-          <Sparkles className="size-4 text-emerald-500" />
-          <span className="text-sm font-semibold">
-            {t("landing.selfHeal.controlTitle")}
-          </span>
-        </div>
+      {/* Right header — stretches to match left header height on lg */}
+      <div className="flex items-center gap-2 border-b border-border/40 bg-muted/20 px-4 py-3 lg:col-start-2 lg:row-start-1">
+        <Sparkles className="size-4 text-emerald-500" />
+        <span className="text-sm font-semibold">
+          {t("landing.selfHeal.controlTitle")}
+        </span>
+      </div>
 
+      {/* Right body */}
+      <div className="flex flex-col gap-3 p-4 lg:col-start-2 lg:row-start-2">
         <section className="rounded-xl border border-border/40 bg-background-subtle/30 p-3">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
