@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Background,
   Controls,
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  useReactFlow,
   type Edge,
   type Node,
 } from "@xyflow/react";
@@ -493,45 +494,59 @@ function buildGraph(
   return { nodes, edges: [...wireEdges, ...triggerEdges] };
 }
 
-function GraphView({
-  scenario,
-  selectedId,
-  onSelect,
-  theme,
-}: {
+interface GraphViewProps {
   scenario: MockScenario;
   selectedId: string | null;
   onSelect: (id: string) => void;
   theme: "dark" | "light";
-}) {
+}
+
+function GraphCanvas({ scenario, selectedId, onSelect, theme }: GraphViewProps) {
   const { nodes, edges } = useMemo(
     () => buildGraph(scenario, selectedId),
     [scenario, selectedId],
   );
+  const { fitView } = useReactFlow();
+
+  // Re-center whenever the open flow changes so each scenario is framed nicely.
+  useEffect(() => {
+    const id = setTimeout(
+      () => fitView({ duration: 300, padding: 0.2, minZoom: 0.15 }),
+      0,
+    );
+    return () => clearTimeout(id);
+  }, [scenario.id, fitView]);
 
   return (
+    <ReactFlow
+      nodes={nodes}
+      edges={edges}
+      nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
+      fitView
+      fitViewOptions={{ padding: 0.2, minZoom: 0.15 }}
+      minZoom={0.15}
+      colorMode={theme}
+      proOptions={{ hideAttribution: true }}
+      nodesConnectable={false}
+      onNodeClick={(_, node) => node.type === "func" && onSelect(node.id)}
+    >
+      <Background />
+      <Controls showInteractive={false} />
+      <Panel position="top-right">
+        <div className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-muted-foreground">
+          <Network className="h-3.5 w-3.5" />
+          graph
+        </div>
+      </Panel>
+    </ReactFlow>
+  );
+}
+
+function GraphView(props: GraphViewProps) {
+  return (
     <ReactFlowProvider>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        edgeTypes={edgeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.28 }}
-        colorMode={theme}
-        proOptions={{ hideAttribution: true }}
-        nodesConnectable={false}
-        onNodeClick={(_, node) => node.type === "func" && onSelect(node.id)}
-      >
-        <Background />
-        <Controls showInteractive={false} />
-        <Panel position="top-right">
-          <div className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-muted-foreground">
-            <Network className="h-3.5 w-3.5" />
-            graph
-          </div>
-        </Panel>
-      </ReactFlow>
+      <GraphCanvas {...props} />
     </ReactFlowProvider>
   );
 }
