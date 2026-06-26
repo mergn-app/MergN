@@ -21,11 +21,7 @@ export function Landing() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [contactOpen, setContactOpen] = useState(false);
-  const communityGlowTarget = useRef({
-    x: 50,
-    y: 50,
-    active: false,
-  });
+  const glowMoveRaf = useRef<number | null>(null);
   const [communityGlow, setCommunityGlow] = useState({
     x: 50,
     y: 50,
@@ -41,31 +37,12 @@ export function Landing() {
     }
   }, [theme]);
 
-  useEffect(() => {
-    let raf = 0;
-    const loop = () => {
-      setCommunityGlow((prev) => {
-        const target = communityGlowTarget.current;
-        const ease = target.active ? 0.1 : 0.06;
-        const x = prev.x + (target.x - prev.x) * ease;
-        const y = prev.y + (target.y - prev.y) * ease;
-        const closeEnough =
-          Math.abs(x - target.x) < 0.25 && Math.abs(y - target.y) < 0.25;
-        const active = target.active || !closeEnough;
-        if (
-          Math.abs(x - prev.x) < 0.01 &&
-          Math.abs(y - prev.y) < 0.01 &&
-          active === prev.active
-        ) {
-          return prev;
-        }
-        return { x, y, active };
-      });
-      raf = requestAnimationFrame(loop);
-    };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
-  }, []);
+  useEffect(
+    () => () => {
+      if (glowMoveRaf.current != null) cancelAnimationFrame(glowMoveRaf.current);
+    },
+    [],
+  );
 
   const openAuth = (mode: "signin" | "signup") => {
     setAuthMode(mode);
@@ -158,30 +135,40 @@ export function Landing() {
         <div
           className="relative mx-auto mt-8 w-full max-w-6xl overflow-hidden rounded-3xl bg-[#f6efe3] px-8 py-10 text-center transition-colors duration-300 dark:bg-zinc-800/90"
           onMouseEnter={() =>
-            (communityGlowTarget.current = {
-              ...communityGlowTarget.current,
+            setCommunityGlow((prev) => ({
+              ...prev,
               active: true,
-            })
+            }))
           }
-          onMouseLeave={() =>
-            (communityGlowTarget.current = {
-              ...communityGlowTarget.current,
+          onMouseLeave={() => {
+            if (glowMoveRaf.current != null) {
+              cancelAnimationFrame(glowMoveRaf.current);
+              glowMoveRaf.current = null;
+            }
+            setCommunityGlow((prev) => ({
+              ...prev,
               active: false,
-            })
-          }
+            }));
+          }}
           onMouseMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const x = ((e.clientX - rect.left) / rect.width) * 100;
             const y = ((e.clientY - rect.top) / rect.height) * 100;
-            communityGlowTarget.current = {
-              x: Math.min(100, Math.max(0, x)),
-              y: Math.min(100, Math.max(0, y)),
-              active: true,
-            };
+            const nx = Math.min(100, Math.max(0, x));
+            const ny = Math.min(100, Math.max(0, y));
+            if (glowMoveRaf.current != null) return;
+            glowMoveRaf.current = requestAnimationFrame(() => {
+              setCommunityGlow({
+                x: nx,
+                y: ny,
+                active: true,
+              });
+              glowMoveRaf.current = null;
+            });
           }}
         >
           <div
-            className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+            className="pointer-events-none absolute inset-0 transition-opacity duration-150"
             style={{
               opacity: communityGlow.active ? 1 : 0,
               background:
@@ -191,7 +178,7 @@ export function Landing() {
             }}
           />
           <div
-            className="pointer-events-none absolute inset-0 blur-md transition-opacity duration-500"
+            className="pointer-events-none absolute inset-0 blur-md transition-opacity duration-200"
             style={{
               opacity: communityGlow.active ? 0.4 : 0,
               background: `radial-gradient(260px circle at ${communityGlow.x}% ${communityGlow.y}%, ${
