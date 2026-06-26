@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
+import * as Dialog from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -46,13 +46,13 @@ function CopyChip({ value }: { value: string }) {
 function Guide({ guide }: { guide: SetupGuide }) {
   const redirectUrl = `${window.location.origin}/api/oauth/callback`;
   return (
-    <div className="space-y-2.5">
+    <div className="flex max-h-[42vh] flex-col gap-2.5">
       {guide.intro && (
-        <p className="text-xs leading-relaxed text-muted-foreground">
+        <p className="shrink-0 text-xs leading-relaxed text-muted-foreground">
           {guide.intro}
         </p>
       )}
-      <ol className="space-y-2.5">
+      <ol className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-1">
         {guide.steps.map((s, i) => (
           <li key={i} className="flex gap-2.5">
             <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-secondary text-[11px] font-medium text-foreground/80">
@@ -138,14 +138,7 @@ export function ConnectionDialog({
   const [tokenUrl, setTokenUrl] = useState("");
   const [oauthBusy, setOauthBusy] = useState(false);
   const [oauthError, setOauthError] = useState<string | null>(null);
-  const [closing, setClosing] = useState(false);
   const listenerRef = useRef<((e: MessageEvent) => void) | null>(null);
-
-  const requestClose = () => setClosing(true);
-  const onOverlayAnimEnd = (e: React.AnimationEvent<HTMLDivElement>) => {
-    if (e.target !== e.currentTarget || !closing) return;
-    onClose();
-  };
 
   useEffect(() => {
     return () => {
@@ -167,7 +160,7 @@ export function ConnectionDialog({
     }
     create.mutate(
       { provider, cred: trimmed, account: account.trim() || undefined },
-      { onSuccess: requestClose },
+      { onSuccess: onClose },
     );
   };
 
@@ -187,7 +180,7 @@ export function ConnectionDialog({
       setOauthBusy(false);
       if (d.ok) {
         qc.invalidateQueries({ queryKey: ["connections"] });
-        requestClose();
+        onClose();
       } else {
         setOauthError(d.detail || t("connectionDialog.connectionFailed"));
       }
@@ -205,7 +198,7 @@ export function ConnectionDialog({
   };
 
   const disconnect = () => {
-    if (resolved) del.mutate(resolved.id, { onSuccess: requestClose });
+    if (resolved) del.mutate(resolved.id, { onSuccess: onClose });
   };
 
   const configured = oauthStatus.data?.configured ?? false;
@@ -223,24 +216,17 @@ export function ConnectionDialog({
     );
   };
 
-  return createPortal(
-    <div
-      className={cn(
-        "fixed inset-0 z-50 flex items-center justify-center bg-background/70 p-6 backdrop-blur-xs duration-200",
-        closing ? "animate-out fade-out fill-mode-forwards" : "animate-in fade-in",
-      )}
-      onClick={requestClose}
-      onAnimationEnd={onOverlayAnimEnd}
-    >
-      <div
-        className={cn(
-          "flex max-h-[80vh] w-full max-w-sm flex-col overflow-hidden rounded-2xl border border-border/50 bg-card p-5 duration-200 ease-out",
-          closing
-            ? "animate-out fade-out zoom-out-95 slide-out-to-bottom-2 fill-mode-forwards"
-            : "animate-in fade-in zoom-in-95 slide-in-from-bottom-2",
-        )}
-        onClick={(e) => e.stopPropagation()}
-      >
+  return (
+    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Portal>
+        <Dialog.Overlay className="fixed inset-0 z-50 bg-background/70 backdrop-blur-xs data-[state=open]:animate-in data-[state=open]:fade-in data-[state=closed]:animate-out data-[state=closed]:fade-out" />
+        <Dialog.Content
+          className={cn(
+            "fixed left-1/2 top-1/2 z-50 flex max-h-[80vh] w-[calc(100vw-3rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-border/50 bg-card p-5",
+            "data-[state=open]:animate-in data-[state=open]:fade-in data-[state=open]:zoom-in-95 data-[state=open]:slide-in-from-bottom-2",
+            "data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95 data-[state=closed]:slide-out-to-bottom-2",
+          )}
+        >
         <div className="mb-4 flex items-center gap-2">
           <span className="text-sm font-semibold">
             {auth.data?.name ?? provider}
@@ -254,14 +240,14 @@ export function ConnectionDialog({
             <Badge variant="outline">{t("connectionDialog.notConnected")}</Badge>
           )}
           <button
-            onClick={requestClose}
+            onClick={onClose}
             className="ml-auto text-muted-foreground hover:text-foreground"
           >
             ✕
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+        <div className="min-h-0 flex-1 overflow-y-scroll pr-1">
           {!creating ? (
             <div className="space-y-3 text-sm">
             <div className="space-y-1">
@@ -534,8 +520,8 @@ export function ConnectionDialog({
             </div>
           )}
         </div>
-      </div>
-    </div>,
-    document.body,
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }

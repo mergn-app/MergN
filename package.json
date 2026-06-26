@@ -35,6 +35,7 @@
     "@nats-io/jetstream": "^3.4.0",
     "@nats-io/transport-node": "^3.4.0",
     "@opentelemetry/sdk-node": "^0.218.0",
+    "@radix-ui/react-dialog": "^1.1.17",
     "ai": "^6.0.196",
     "better-auth": "^1.6.14",
     "hono": "^4.12.23",
