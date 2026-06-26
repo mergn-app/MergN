@@ -13,6 +13,7 @@ import { AuthForm } from "./AuthForm";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { LegalLinks } from "./LegalLinks";
 import { AuthProvider, useAuth } from "./authContext";
+import { Landing } from "./landing";
 import { useSpaces } from "./queries";
 import { setSpace, getLastSpace } from "./space";
 import { BillingPage, BillingModal } from "./BillingPage";
@@ -65,8 +66,9 @@ function IndexPage() {
     }
   }, [user, spaces, navigate]);
 
-  if (pending || user) return <Loader />;
-  return <App key="anon" spaceId="" routeWorkflowId={null} />;
+  if (pending) return <Loader />;
+  if (!user) return <Landing />;
+  return <Loader />;
 }
 
 function LoginPage() {
@@ -95,10 +97,13 @@ function LoginPage() {
 }
 
 function BuilderPage() {
+  const { user, pending } = useAuth();
   const params = useParams({ strict: false }) as {
     spaceId?: string;
     workflowId?: string;
   };
+  if (pending) return <Loader />;
+  if (!user) return <Landing />;
   const spaceId = params.spaceId ?? "";
   return (
     <App
