@@ -13,6 +13,7 @@ import "@xyflow/react/dist/style.css";
 import { useTranslation } from "react-i18next";
 import { ArrowUp, Network, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useShowcaseSpacePause } from "@/hooks/useShowcaseSpacePause";
 import { FuncNode } from "./FuncNode";
 import { TriggerNode } from "./TriggerNode";
 import { GateEdge } from "./GateEdge";
@@ -714,8 +715,15 @@ export function BuilderMockShowcase() {
     return () => clearInterval(timer);
   }, [autoRotate]);
 
+  const { rootRef, onPointerDown } = useShowcaseSpacePause(setAutoRotate);
+
   return (
-    <div className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm lg:grid-cols-[2fr_1fr]">
+    <div
+      ref={rootRef}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30 lg:grid-cols-[2fr_1fr]"
+    >
       <div className="flex min-h-[320px] flex-col border-b border-border/40 lg:border-b-0 lg:border-r">
         <div className="flex items-center gap-2 border-b border-border/40 bg-muted/30 p-3">
           <span className="mr-1 text-[11px] font-medium text-muted-foreground">

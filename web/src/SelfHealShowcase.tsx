@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useShowcaseSpacePause } from "@/hooks/useShowcaseSpacePause";
 
 // A compact, faithful replica of the real self-heal surface. The right panel
 // ("You stay in control") is fixed; the left panel walks through the real
@@ -82,9 +83,34 @@ const STAGES: { id: "detect" | "diagnose" | "fix"; icon: LucideIcon }[] = [
   { id: "diagnose", icon: Stethoscope },
   { id: "fix", icon: Wrench },
 ];
-const STAGE_MS = 3200;
+const STAGE_MS = 4200;
 const AUTO_RING_R = 11;
 const AUTO_RING_C = 2 * Math.PI * AUTO_RING_R;
+
+type FixLineKind = "removed" | "added" | "modified";
+
+interface FixChangeBlock {
+  nodeId: string;
+  category: "wire" | "input" | "provider";
+  lines: { kind: FixLineKind; text: string }[];
+}
+
+const FIX_CHANGES: FixChangeBlock[] = [
+  {
+    nodeId: "post_discord",
+    category: "wire",
+    lines: [
+      { kind: "removed", text: "message ← {unwired}" },
+      { kind: "added", text: "message ← format_alert.message" },
+      { kind: "added", text: "channelId ← format_alert.channel" },
+    ],
+  },
+  {
+    nodeId: "format_alert",
+    category: "input",
+    lines: [{ kind: "modified", text: "severity ← trigger.level" }],
+  },
+];
 
 function SourceChip({ source }: { source: StepSource }) {
   if (source.kind === "unbound") {
@@ -178,48 +204,67 @@ function Segmented({
 
 function DetectStage() {
   const { t } = useTranslation();
+  const steps = [
+    { id: "parse_event", status: "ok" as const, ms: 12 },
+    { id: "format_alert", status: "ok" as const, ms: 9 },
+    { id: "post_discord", status: "failed" as const, ms: 18 },
+  ];
   return (
-    <div className="rounded-xl border border-rose-500/30 bg-rose-500/5 p-3">
-      <div className="flex items-center gap-1.5">
-        <AlertTriangle className="size-3.5 text-rose-500" />
-        <span className="text-xs font-medium">
-          {t("landing.selfHeal.runFailed")}
-        </span>
-        <span className="ml-auto rounded-full bg-rose-500/15 px-1.5 py-px text-[9px] font-medium text-rose-600 dark:text-rose-400">
-          {t("status.failed")}
-        </span>
+    <div className="flex h-full flex-col gap-4">
+      <div>
+        <div className="flex items-center gap-1.5">
+          <AlertTriangle className="size-3.5 shrink-0 text-rose-500" />
+          <span className="text-xs font-medium">
+            {t("landing.selfHeal.runFailed")}
+          </span>
+          <span className="ml-auto font-mono text-[10px] text-rose-600 dark:text-rose-400">
+            {t("status.failed")}
+          </span>
+        </div>
+        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground/70">
+          POST /hooks/payment-alert · #run-a3f2
+        </p>
+        <p className="mt-0.5 text-[10px] text-muted-foreground">
+          {t("landing.selfHeal.detectMeta")} · 39ms
+        </p>
       </div>
-      <div className="mt-0.5 text-[10px] text-muted-foreground">
-        {t("landing.selfHeal.detectMeta")}
-      </div>
-      <div className="mt-2 space-y-1">
-        {["parse_event", "format_alert", "post_discord"].map((id, i) => (
+
+      <div className="min-h-0 flex-1 divide-y divide-border/40">
+        {steps.map((step) => (
           <div
-            key={id}
-            className={cn(
-              "flex items-center gap-2 rounded-lg border px-2 py-1 text-[11px]",
-              i === 2
-                ? "border-rose-500/40 bg-rose-500/5"
-                : "border-border/40 bg-background/50",
-            )}
+            key={step.id}
+            className="flex items-center gap-2 py-2 first:pt-0 last:pb-0"
           >
             <span
               className={cn(
                 "size-1.5 shrink-0 rounded-full",
-                i === 2 ? "bg-rose-500" : "bg-emerald-500",
+                step.status === "failed" ? "bg-rose-500" : "bg-emerald-500",
               )}
             />
-            <span className="font-mono text-foreground/80">{id}</span>
-            {i === 2 && (
+            <span className="text-xs font-medium">{step.id.replace(/_/g, " ")}</span>
+            <span className="font-mono text-[10px] text-muted-foreground/60">
+              {step.id}
+            </span>
+            {step.status === "failed" ? (
               <span className="ml-auto font-mono text-[10px] text-rose-600 dark:text-rose-400">
-                {t("status.failed")}
+                {t("status.failed")} · {step.ms}ms
+              </span>
+            ) : (
+              <span className="ml-auto font-mono text-[10px] text-muted-foreground/50">
+                {step.ms}ms
               </span>
             )}
           </div>
         ))}
       </div>
-      <div className="mt-2 rounded-md border border-rose-500/30 bg-background px-2 py-1.5 font-mono text-[10px] text-rose-600 dark:text-rose-400">
-        {t("landing.selfHeal.detectError")}
+
+      <div className="space-y-1">
+        <div className="border-l-2 border-rose-500/50 pl-2.5 font-mono text-[10px] leading-relaxed text-rose-600 dark:text-rose-400">
+          {t("landing.selfHeal.detectError")}
+        </div>
+        <p className="pl-2.5 font-mono text-[10px] text-muted-foreground/70">
+          input.message: undefined
+        </p>
       </div>
     </div>
   );
@@ -228,14 +273,14 @@ function DetectStage() {
 function DiagnoseStage() {
   const { t } = useTranslation();
   return (
-    <div>
+    <div className="flex h-full flex-col">
       <div className="mb-2 flex items-start gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/5 px-2.5 py-1.5">
         <Stethoscope className="mt-px size-3 shrink-0 text-amber-500" />
         <span className="text-[11px] leading-relaxed text-foreground/90">
           {t("landing.selfHeal.diagnosis")}
         </span>
       </div>
-      <div className="flex flex-col">
+      <div className="flex min-h-0 flex-1 flex-col justify-center">
         <div className="rounded-xl border border-tone-amber/30 bg-tone-amber/5 px-2 py-1.5">
           <div className="flex items-center gap-1.5">
             <span className="flex items-center justify-center rounded-md bg-tone-amber/15 p-1 text-tone-amber-fg">
@@ -313,6 +358,16 @@ function DiagnoseStage() {
   );
 }
 
+function FixLineSign({ kind }: { kind: FixLineKind }) {
+  if (kind === "removed") {
+    return <span className="w-4 shrink-0 text-rose-500">−</span>;
+  }
+  if (kind === "added") {
+    return <span className="w-4 shrink-0 text-emerald-500">+</span>;
+  }
+  return <span className="w-4 shrink-0 text-amber-500">~</span>;
+}
+
 function FixStage({
   decision,
   setDecision,
@@ -325,44 +380,62 @@ function FixStage({
   onInteract: () => void;
 }) {
   const { t } = useTranslation();
+  const changeCount = FIX_CHANGES.reduce((n, b) => n + b.lines.length, 0);
+  const nodeCount = new Set(FIX_CHANGES.map((b) => b.nodeId)).size;
+
   return (
-    <div>
-      <div className="rounded-xl border border-border/50 bg-background-subtle/30 p-3">
+    <div className="flex h-full flex-col gap-4">
+      <div>
         <div className="flex items-center gap-1.5">
-          <Wrench className="size-3.5 text-emerald-500" />
+          <Wrench className="size-3.5 shrink-0 text-emerald-500" />
           <span className="text-xs font-medium">{t("heal.fixTitle")}</span>
-          <span className="ml-auto rounded-full bg-emerald-500/15 px-1.5 py-px text-[9px] font-medium text-emerald-600 dark:text-emerald-400">
+          <span className="ml-auto text-[10px] text-emerald-600 dark:text-emerald-400">
             {t("heal.confidence.high")}
           </span>
         </div>
-
-        <div className="mt-2 font-mono text-[10px] text-foreground/80">
-          post_discord · message
-        </div>
-        <div className="mt-1.5 space-y-1">
-          <div className="flex items-center gap-1.5 rounded-md border border-rose-500/30 bg-rose-500/5 px-2 py-1.5 font-mono text-[10px]">
-            <span className="w-9 shrink-0 text-rose-600 dark:text-rose-400">
-              {t("review.removed")}
-            </span>
-            <span className="text-tone-rose-fg">⚠ message {`{unwired}`}</span>
-          </div>
-          <div className="flex items-center gap-1.5 rounded-md border border-emerald-500/30 bg-emerald-500/5 px-2 py-1.5 font-mono text-[10px]">
-            <span className="w-9 shrink-0 text-emerald-600 dark:text-emerald-400">
-              {t("review.added")}
-            </span>
-            <span className="text-emerald-600 dark:text-emerald-400">
-              message ← Format Alert
-            </span>
-          </div>
-        </div>
+        <p className="mt-0.5 font-mono text-[10px] text-muted-foreground">
+          {nodeCount} nodes · {changeCount} {t("heal.changes").toLowerCase()}
+        </p>
       </div>
 
-      <div className="mt-2 flex items-center gap-1.5 text-[10px] font-medium text-foreground/80">
-        <ShieldAlert className="size-3.5 text-amber-500" />
-        {t("landing.selfHeal.controlBanner")}
+      <div className="min-h-0 flex-1 space-y-3 overflow-auto font-mono text-[10px]">
+        {FIX_CHANGES.map((block) => (
+          <div key={`${block.nodeId}-${block.category}`}>
+            <div className="flex items-center gap-2 text-[10px]">
+              <span className="font-medium text-foreground/90">{block.nodeId}</span>
+              <span className="rounded bg-muted px-1.5 py-px text-[9px] text-muted-foreground">
+                {t(`review.cat.${block.category}`)}
+              </span>
+            </div>
+            <div className="mt-1 space-y-0.5">
+              {block.lines.map((line, i) => (
+                <div key={i} className="flex items-start gap-2 py-0.5">
+                  <FixLineSign kind={line.kind} />
+                  <span
+                    className={cn(
+                      line.kind === "removed" && "text-tone-rose-fg",
+                      line.kind === "added" &&
+                        "text-emerald-600 dark:text-emerald-400",
+                      line.kind === "modified" &&
+                        "text-amber-600 dark:text-amber-400",
+                    )}
+                  >
+                    {line.text}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
 
-      <div className="mt-2">
+      <div className="mt-auto space-y-3 border-t border-border/40 pt-4">
+        <div className="flex items-center gap-1.5 text-[10px] font-medium text-foreground/80">
+          <ShieldAlert className="size-3 shrink-0 text-amber-500" />
+          {t("landing.selfHeal.controlBanner")}
+        </div>
+
+        <div>
         {decision === "proposed" ? (
           <div className="flex items-center justify-end gap-2">
             <button
@@ -405,10 +478,11 @@ function FixStage({
           </div>
         )}
         {locked && (
-          <div className="mt-2 flex items-center gap-1.5 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] text-amber-600 dark:text-amber-400">
-            <Lock className="size-3" /> {t("heal.reason.kill-switch")}
+          <div className="mt-2 flex items-center gap-1.5 text-[10px] text-amber-600 dark:text-amber-400">
+            <Lock className="size-3 shrink-0" /> {t("heal.reason.kill-switch")}
           </div>
         )}
+        </div>
       </div>
     </div>
   );
@@ -444,8 +518,15 @@ export function SelfHealShowcase() {
     if (STAGES[i].id !== "fix") setDecision("proposed");
   };
 
+  const { rootRef, onPointerDown } = useShowcaseSpacePause(setAutoPlay);
+
   return (
-    <div className="grid w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_1fr]">
+    <div
+      ref={rootRef}
+      tabIndex={0}
+      onPointerDown={onPointerDown}
+      className="grid w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30 lg:grid-cols-[2fr_1fr] lg:grid-rows-[auto_1fr]"
+    >
       {/* Left header — shares row with right header on lg for equal height */}
       <div className="border-b border-border/40 bg-muted/20 px-3 py-3 lg:col-start-1 lg:row-start-1 lg:border-r">
         <div className="flex items-center gap-2">
@@ -538,30 +619,27 @@ export function SelfHealShowcase() {
           </button>
         </div>
       </div>
+       
 
       {/* Left body */}
-      <div className="border-b border-border/40 lg:col-start-1 lg:row-start-2 lg:border-b-0 lg:border-r">
-        <p className="absolute mt-2 text-[11px] pl-2 text-muted-foreground">
+      <div className="flex h-108 flex-col border-b border-border/40 lg:col-start-1 lg:row-start-2 lg:border-b-0 lg:border-r">
+        <div
+          key={STAGES[stage].id}
+          className="flex min-h-0 flex-1 gap-7 flex-col p-4 animate-in fade-in slide-in-from-bottom-2 duration-500"
+        > 
+        <p className=" text-[11px] text-muted-foreground">
           {t(`landing.selfHeal.${STAGES[stage].id}Desc`)}
         </p>
-        <div className="h-108 shrink-0 p-4">
-          <div className="flex min-h-full items-center justify-center">
-            <div
-              key={STAGES[stage].id}
-              className="w-full max-w-md animate-in fade-in slide-in-from-bottom-2 duration-500"
-            >
-              {STAGES[stage].id === "detect" && <DetectStage />}
-              {STAGES[stage].id === "diagnose" && <DiagnoseStage />}
-              {STAGES[stage].id === "fix" && (
-                <FixStage
-                  decision={decision}
-                  setDecision={setDecision}
-                  locked={locked}
-                  onInteract={() => setAutoPlay(false)}
-                />
-              )}
-            </div>
-          </div>
+          {STAGES[stage].id === "detect" && <DetectStage />}
+          {STAGES[stage].id === "diagnose" && <DiagnoseStage />}
+          {STAGES[stage].id === "fix" && (
+            <FixStage
+              decision={decision}
+              setDecision={setDecision}
+              locked={locked}
+              onInteract={() => setAutoPlay(false)}
+            />
+          )}
         </div>
       </div>
 
