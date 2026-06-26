@@ -68,6 +68,71 @@
     "termsOfService": "Terms of Service",
     "privacyPolicy": "Privacy Policy"
   },
+  "landing": {
+    "heroTitle": "Build automations with AI",
+    "heroSubtitle": "Describe what you want to automate. MergN builds and runs the whole flow in real time — steps, logic, and integrations included.",
+    "learnMore": "Learn more",
+    "tryIdea": "Try an idea",
+    "ideas": {
+      "payment-alerts": "Payment Alerts",
+      "invoice-reminders": "Invoice Reminders",
+      "order-notifications": "Order Notifications",
+      "incident-escalation": "Incident Escalation",
+      "refund-handler": "Refund Handler"
+    },
+    "describeChange": "Describe a change…",
+    "useCases": {
+      "title": "What can you build?",
+      "subtitle": "Connect the tools you already use and let AI wire the steps together.",
+      "items": {
+        "payments": {
+          "title": "Payment alerts",
+          "desc": "Post a rich alert to Slack the moment a Stripe payment succeeds."
+        },
+        "orders": {
+          "title": "Order notifications",
+          "desc": "Announce every new Shopify order in your Discord community."
+        },
+        "leads": {
+          "title": "Lead capture",
+          "desc": "Send new Typeform submissions straight into HubSpot as contacts."
+        },
+        "support": {
+          "title": "Support triage",
+          "desc": "Turn incoming Gmail requests into tracked Linear tickets."
+        },
+        "incidents": {
+          "title": "Incident escalation",
+          "desc": "Route critical Datadog alerts to the on-call Slack channel."
+        },
+        "digests": {
+          "title": "Daily digests",
+          "desc": "Summarize activity on a schedule and save it to Notion."
+        },
+        "approvals": {
+          "title": "Approval routing",
+          "desc": "Send Airtable approval requests to Slack and capture the decision instantly."
+        },
+        "reports": {
+          "title": "Weekly reports",
+          "desc": "Take weekly summaries from Google Sheets and post them to Discord automatically."
+        }
+      },
+      "scrollHint": "Scroll"
+    },
+    "chat": {
+      "payment1": "When a payment succeeds in Stripe, post a rich alert to our Discord channel.",
+      "payment2": "Also include the customer's email and only alert for charges over $100.",
+      "invoice1": "Every morning, find overdue Stripe invoices, nudge customers, then summarize it in Slack.",
+      "invoice2": "Include the invoice due date and total amount in each reminder.",
+      "order1": "On a new Stripe order, tell fulfillment in Slack and celebrate the sale in Discord.",
+      "order2": "Mention the customer's first name in the Discord message.",
+      "incident1": "Triage monitoring alerts and escalate the critical ones to Slack and Discord.",
+      "incident2": "Only ping Discord when the incident is marked critical.",
+      "refund1": "When Stripe issues a refund, alert support in Slack and log it to Discord.",
+      "refund2": "Include the refund reason if Stripe provides one."
+    }
+  },
   "legal": {
     "backHome": "Back to home"
   },

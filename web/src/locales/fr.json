@@ -68,6 +68,71 @@
     "termsOfService": "Conditions d'utilisation",
     "privacyPolicy": "Politique de confidentialité"
   },
+  "landing": {
+    "heroTitle": "Créez des automatisations avec l'IA",
+    "heroSubtitle": "Décrivez ce que vous voulez automatiser. MergN construit et exécute tout le flux en temps réel — étapes, logique et intégrations incluses.",
+    "learnMore": "En savoir plus",
+    "tryIdea": "Essayer une idée",
+    "ideas": {
+      "payment-alerts": "Alertes Paiement",
+      "invoice-reminders": "Rappels Facture",
+      "order-notifications": "Notifications Commande",
+      "incident-escalation": "Escalade Incident",
+      "refund-handler": "Gestion Remboursement"
+    },
+    "describeChange": "Décrivez une modification…",
+    "useCases": {
+      "title": "Que pouvez-vous créer ?",
+      "subtitle": "Connectez les outils que vous utilisez déjà et laissez l'IA relier les étapes.",
+      "items": {
+        "payments": {
+          "title": "Alertes de paiement",
+          "desc": "Publiez une alerte détaillée dans Slack dès qu'un paiement Stripe réussit."
+        },
+        "orders": {
+          "title": "Notifications de commande",
+          "desc": "Annoncez chaque nouvelle commande Shopify dans votre communauté Discord."
+        },
+        "leads": {
+          "title": "Capture de leads",
+          "desc": "Envoyez les nouvelles réponses Typeform directement dans HubSpot comme contacts."
+        },
+        "support": {
+          "title": "Tri du support",
+          "desc": "Transformez les demandes Gmail entrantes en tickets Linear suivis."
+        },
+        "incidents": {
+          "title": "Escalade d'incident",
+          "desc": "Acheminez les alertes Datadog critiques vers le canal Slack d'astreinte."
+        },
+        "digests": {
+          "title": "Résumés quotidiens",
+          "desc": "Résumez l'activité selon un planning et enregistrez-la dans Notion."
+        },
+        "approvals": {
+          "title": "Flux d’approbation",
+          "desc": "Envoyez les demandes d’approbation Airtable vers Slack et récupérez la décision immédiatement."
+        },
+        "reports": {
+          "title": "Rapports hebdomadaires",
+          "desc": "Publiez automatiquement dans Discord les résumés hebdomadaires issus de Google Sheets."
+        }
+      },
+      "scrollHint": "Faire défiler"
+    },
+    "chat": {
+      "payment1": "Quand un paiement réussit dans Stripe, publie une alerte détaillée sur notre canal Discord.",
+      "payment2": "Inclus aussi l'e-mail du client et n'alerte que pour les paiements supérieurs à 100 $.",
+      "invoice1": "Chaque matin, trouve les factures Stripe en retard, relance les clients, puis résume-le dans Slack.",
+      "invoice2": "Inclus la date d'échéance et le montant total de la facture dans chaque relance.",
+      "order1": "Pour une nouvelle commande Stripe, préviens l'équipe logistique dans Slack et célèbre la vente dans Discord.",
+      "order2": "Mentionne le prénom du client dans le message Discord.",
+      "incident1": "Trie les alertes de supervision et escalade les plus critiques vers Slack et Discord.",
+      "incident2": "Ne notifie Discord que lorsque l'incident est marqué comme critique.",
+      "refund1": "Quand Stripe émet un remboursement, alerte le support dans Slack et consigne-le dans Discord.",
+      "refund2": "Inclus le motif du remboursement si Stripe en fournit un."
+    }
+  },
   "legal": {
     "backHome": "Retour à l'accueil"
   },

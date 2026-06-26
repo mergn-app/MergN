@@ -68,6 +68,71 @@
     "termsOfService": "Kullanım Koşulları",
     "privacyPolicy": "Gizlilik Politikası"
   },
+  "landing": {
+    "heroTitle": "Otomasyonları yapay zekâ ile oluştur",
+    "heroSubtitle": "Neyi otomatikleştirmek istediğini anlat. MergN akışın tamamını çalışma anında senin için üretir ve çalıştırır; adımlar, mantık ve entegrasyonlar dahil.",
+    "learnMore": "Daha fazla bilgi",
+    "tryIdea": "Bir fikir dene",
+    "ideas": {
+      "payment-alerts": "Ödeme Uyarıları",
+      "invoice-reminders": "Fatura Hatırlatmaları",
+      "order-notifications": "Sipariş Bildirimleri",
+      "incident-escalation": "Olay Eskalasyonu",
+      "refund-handler": "İade Takibi"
+    },
+    "describeChange": "Bir değişiklik yaz…",
+    "useCases": {
+      "title": "Neler kurabilirsin?",
+      "subtitle": "Zaten kullandığın araçları bağla, adımları yapay zekâ birbirine bağlasın.",
+      "items": {
+        "payments": {
+          "title": "Ödeme uyarıları",
+          "desc": "Stripe'da bir ödeme başarılı olur olmaz Slack'e zengin bir bildirim gönder."
+        },
+        "orders": {
+          "title": "Sipariş bildirimleri",
+          "desc": "Her yeni Shopify siparişini Discord topluluğunda duyur."
+        },
+        "leads": {
+          "title": "Müşteri adayı toplama",
+          "desc": "Yeni Typeform yanıtlarını doğrudan HubSpot'a kişi olarak gönder."
+        },
+        "support": {
+          "title": "Destek triyajı",
+          "desc": "Gelen Gmail taleplerini takip edilen Linear kayıtlarına dönüştür."
+        },
+        "incidents": {
+          "title": "Olay eskalasyonu",
+          "desc": "Kritik Datadog uyarılarını nöbetteki Slack kanalına yönlendir."
+        },
+        "digests": {
+          "title": "Günlük özetler",
+          "desc": "Etkinliği zamanlanmış olarak özetle ve Notion'a kaydet."
+        },
+        "approvals": {
+          "title": "Onay akışı",
+          "desc": "Airtable onay taleplerini Slacke gönder ve kararı anında yakala."
+        },
+        "reports": {
+          "title": "Haftalık raporlar",
+          "desc": "Google Sheetsteki haftalık özetleri otomatik olarak Discorda paylaş."
+        }
+      },
+      "scrollHint": "Kaydır"
+    },
+    "chat": {
+      "payment1": "Stripe'da bir ödeme başarılı olunca Discord kanalımıza zengin bir bildirim gönder.",
+      "payment2": "Ayrıca müşterinin e-postasını da ekle ve yalnızca 100 dolar üzeri ödemeler için bildir.",
+      "invoice1": "Her sabah Stripe'daki gecikmiş faturaları bul, müşterileri dürt ve sonra Slack'te özetle.",
+      "invoice2": "Her hatırlatmaya faturanın son ödeme tarihini ve toplam tutarı ekle.",
+      "order1": "Yeni bir Stripe siparişinde Slack'te sevkiyat ekibine haber ver ve satışı Discord'da kutla.",
+      "order2": "Discord mesajında müşterinin adını belirt.",
+      "incident1": "İzleme uyarılarını triyaj et ve kritik olanları Slack ve Discord'a yükselt.",
+      "incident2": "Yalnızca olay kritik olarak işaretlendiğinde Discord'a bildir.",
+      "refund1": "Stripe bir iade yaptığında Slack'te desteğe haber ver ve Discord'a kaydet.",
+      "refund2": "Stripe bir iade nedeni sağlıyorsa onu da ekle."
+    }
+  },
   "legal": {
     "backHome": "Ana sayfaya dön"
   },

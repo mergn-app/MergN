@@ -1081,7 +1081,7 @@ export function App({
   return (
     <div className="flex h-screen w-screen flex-col bg-background text-foreground">
       <div className="p-2 pb-0">
-        <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-4 py-2">
+        <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-2 py-2">
           {user && <SpaceSwitcher />}
           {user && managed && <PlanChip />}
       
@@ -1148,15 +1148,17 @@ export function App({
                 <span className="max-w-32 truncate text-xs text-muted-foreground">
                   {user.email}
                 </span>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
-                  title={t("auth.signOut")}
-                  onClick={signOut}
-                >
-                  <LogOut className="h-4 w-4" />
-                </Button>
+                {managed === true && (
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    title={t("auth.signOut")}
+                    onClick={signOut}
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             ) : (
               <Button

@@ -7,9 +7,15 @@ import { LegalLinks } from "./LegalLinks";
 
 type Mode = "signin" | "signup";
 
-export function AuthForm({ showLegalLinks = true }: { showLegalLinks?: boolean }) {
+export function AuthForm({
+  showLegalLinks = true,
+  initialMode = "signin",
+}: {
+  showLegalLinks?: boolean;
+  initialMode?: Mode;
+}) {
   const { t } = useTranslation();
-  const [mode, setMode] = useState<Mode>("signin");
+  const [mode, setMode] = useState<Mode>(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");

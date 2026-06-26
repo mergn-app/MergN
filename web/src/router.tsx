@@ -13,6 +13,7 @@ import { AuthForm } from "./AuthForm";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { LegalLinks } from "./LegalLinks";
 import { AuthProvider, useAuth } from "./authContext";
+import { Landing } from "./landing";
 import { useSpaces } from "./queries";
 import { setSpace, getLastSpace } from "./space";
 import { BillingPage, BillingModal } from "./BillingPage";
@@ -65,13 +66,19 @@ function IndexPage() {
     }
   }, [user, spaces, navigate]);
 
-  if (pending || user) return <Loader />;
-  return <App key="anon" spaceId="" routeWorkflowId={null} />;
+  if (pending) return <Loader />;
+  if (!user) return <Landing />;
+  return <Loader />;
 }
 
 function LoginPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const mode =
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).get("mode") === "signup"
+      ? "signup"
+      : "signin";
   useEffect(() => {
     if (user) void navigate({ to: "/", replace: true });
   }, [user, navigate]);
@@ -87,7 +94,7 @@ function LoginPage() {
       </div>
       <div className="flex flex-1 items-center justify-center p-4">
         <div className="w-full max-w-sm rounded-2xl border border-border/50 bg-card p-6">
-          <AuthForm showLegalLinks={false} />
+          <AuthForm showLegalLinks={false} initialMode={mode} />
         </div>
       </div>
     </div>
@@ -95,10 +102,13 @@ function LoginPage() {
 }
 
 function BuilderPage() {
+  const { user, pending } = useAuth();
   const params = useParams({ strict: false }) as {
     spaceId?: string;
     workflowId?: string;
   };
+  if (pending) return <Loader />;
+  if (!user) return <Landing />;
   const spaceId = params.spaceId ?? "";
   return (
     <App
