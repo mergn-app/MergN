@@ -5,6 +5,7 @@ import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { LegalLinks } from "./LegalLinks";
 import { LanguageSwitcher } from "./LanguageSwitcher";
+import { BuilderMockShowcase } from "./BuilderMockShowcase";
 
 export function Landing() {
   const { t } = useTranslation();
@@ -55,16 +56,16 @@ export function Landing() {
           </div>
         </header>
       </div>
-      <div className="flex flex-1 items-center justify-center p-6">
-        <div className="w-full max-w-2xl rounded-2xl border border-border/50 bg-card p-8 text-center">
+      <div className="flex flex-1 flex-col items-center gap-4 p-6">
+        <div className="w-full max-w-4xl text-center">
           <h1 className="text-3xl font-semibold tracking-tight">
             Build automations with AI
           </h1>
-          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
             Describe your workflow, connect providers, and run it with full
             visibility. Sign in to access your spaces and workflows.
           </p>
-          <div className="mt-6 flex items-center justify-center gap-3">
+          <div className="mt-5 flex items-center justify-center gap-3">
             <Button onClick={() => void navigate({ to: "/login" })}>
               {t("auth.signIn")}
             </Button>
@@ -82,6 +83,7 @@ export function Landing() {
             </Button>
           </div>
         </div>
+        <BuilderMockShowcase />
       </div>
     </div>
   );
