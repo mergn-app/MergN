@@ -73,6 +73,13 @@
     "heroSubtitle": "Beschreibe deinen Workflow, verbinde Anbieter und führe ihn mit voller Transparenz aus. Melde dich an, um auf deine Spaces und Workflows zuzugreifen.",
     "learnMore": "Mehr erfahren",
     "tryIdea": "Eine Idee ausprobieren",
+    "ideas": {
+      "payment-alerts": "Zahlungsalarme",
+      "invoice-reminders": "Rechnungserinnerungen",
+      "order-notifications": "Bestellbenachrichtigungen",
+      "incident-escalation": "Vorfalleskalation",
+      "refund-handler": "Rückerstattungsverwaltung"
+    },
     "describeChange": "Beschreibe eine Änderung…",
     "chat": {
       "payment1": "Wenn eine Zahlung in Stripe erfolgreich ist, poste eine ausführliche Benachrichtigung in unseren Discord-Kanal.",

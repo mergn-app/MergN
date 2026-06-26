@@ -686,7 +686,7 @@ export function BuilderMockShowcase() {
                   : "border-border/60 bg-background text-muted-foreground hover:text-foreground",
               )}
             >
-              {item.title}
+              {t(`landing.ideas.${item.id}`, { defaultValue: item.title })}
             </button>
           ))}
         </div>

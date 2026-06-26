@@ -73,6 +73,13 @@
     "heroSubtitle": "İş akışını anlat, sağlayıcıları bağla ve tam görünürlükle çalıştır. Alanlarına ve iş akışlarına erişmek için giriş yap.",
     "learnMore": "Daha fazla bilgi",
     "tryIdea": "Bir fikir dene",
+    "ideas": {
+      "payment-alerts": "Ödeme Uyarıları",
+      "invoice-reminders": "Fatura Hatırlatmaları",
+      "order-notifications": "Sipariş Bildirimleri",
+      "incident-escalation": "Olay Eskalasyonu",
+      "refund-handler": "İade Takibi"
+    },
     "describeChange": "Bir değişiklik yaz…",
     "chat": {
       "payment1": "Stripe'da bir ödeme başarılı olunca Discord kanalımıza zengin bir bildirim gönder.",

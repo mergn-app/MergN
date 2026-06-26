@@ -73,6 +73,13 @@
     "heroSubtitle": "Describe tu flujo de trabajo, conecta proveedores y ejecútalo con total visibilidad. Inicia sesión para acceder a tus espacios y flujos.",
     "learnMore": "Más información",
     "tryIdea": "Prueba una idea",
+    "ideas": {
+      "payment-alerts": "Alertas Pago",
+      "invoice-reminders": "Recordatorios Factura",
+      "order-notifications": "Notificaciones Pedido",
+      "incident-escalation": "Escalada Incidente",
+      "refund-handler": "Gestión Reembolsos"
+    },
     "describeChange": "Describe un cambio…",
     "chat": {
       "payment1": "Cuando un pago se complete en Stripe, publica una alerta detallada en nuestro canal de Discord.",

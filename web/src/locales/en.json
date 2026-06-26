@@ -73,6 +73,13 @@
     "heroSubtitle": "Describe your workflow, connect providers, and run it with full visibility. Sign in to access your spaces and workflows.",
     "learnMore": "Learn more",
     "tryIdea": "Try an idea",
+    "ideas": {
+      "payment-alerts": "Payment Alerts",
+      "invoice-reminders": "Invoice Reminders",
+      "order-notifications": "Order Notifications",
+      "incident-escalation": "Incident Escalation",
+      "refund-handler": "Refund Handler"
+    },
     "describeChange": "Describe a change…",
     "chat": {
       "payment1": "When a payment succeeds in Stripe, post a rich alert to our Discord channel.",
