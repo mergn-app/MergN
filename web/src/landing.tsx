@@ -4,7 +4,6 @@ import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { MergNLogo } from "@/components/MergNLogo";
-import { LegalLinks } from "./LegalLinks";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { BuilderMockShowcase } from "./BuilderMockShowcase";
 import { LandingUseCases } from "./LandingUseCases";
@@ -47,7 +46,6 @@ export function Landing() {
             <div className="text-sm font-semibold">MergN</div>
           </div>
           <div className="ml-auto flex items-center gap-3">
-            <LegalLinks />
             <LanguageSwitcher />
             <Button
               size="icon"

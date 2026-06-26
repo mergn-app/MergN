@@ -40,7 +40,6 @@ import { RightPanel, type RightTab } from "./RightPanel";
 import { SpaceSwitcher } from "./SpaceSwitcher";
 import { PlanChip } from "./PlanChip";
 import { LanguageSwitcher } from "./LanguageSwitcher";
-import { LegalLinks } from "./LegalLinks";
 import { EnterpriseDialog } from "./EnterpriseDialog";
 import { McpConnectDialog } from "./McpConnectDialog";
 import { LeftSidebar } from "./LeftSidebar";
@@ -1086,7 +1085,6 @@ export function App({
           {user && managed && <PlanChip />}
       
           <div className="ml-auto flex items-center gap-3">
-            <LegalLinks />
             <ContactUsLink />
             <Badge variant="secondary" className="font-normal">
               {t("header.funcCount", { n: funcs.length })}
