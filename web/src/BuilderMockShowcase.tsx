@@ -10,6 +10,7 @@ import {
   type Node,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
+import { useTranslation } from "react-i18next";
 import { ArrowUp, Network } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { FuncNode } from "./FuncNode";
@@ -24,7 +25,11 @@ import type { AuthoredFunc, TriggerConfig, Wire } from "./types";
 const nodeTypes = { func: FuncNode, trigger: TriggerNode };
 const edgeTypes = { gate: GateEdge };
 
-type ChatMsg = { role: "user" | "assistant"; text: string; tokens?: string };
+// User turns reference an i18n key (localized); assistant turns stay in English
+// because they represent the AI's own output.
+type ChatMsg =
+  | { role: "user"; key: string }
+  | { role: "assistant"; text: string };
 
 interface MockScenario {
   id: string;
@@ -134,18 +139,12 @@ const SCENARIOS: MockScenario[] = [
       w("format_alert", "message", "post_discord", "message"),
     ],
     chat: [
-      {
-        role: "user",
-        text: "When a payment succeeds in Stripe, post a rich alert to our Discord channel.",
-      },
+      { role: "user", key: "landing.chat.payment1" },
       {
         role: "assistant",
         text: "Done. I parse the Stripe webhook, enrich the customer through the Stripe API, format a clean summary, and post it to Discord.",
       },
-      {
-        role: "user",
-        text: "Also include the customer's email and only alert for charges over $100.",
-      },
+      { role: "user", key: "landing.chat.payment2" },
     ],
   },
   {
@@ -197,18 +196,12 @@ const SCENARIOS: MockScenario[] = [
       w("send_reminders", "sent", "finance_summary", "sent"),
     ],
     chat: [
-      {
-        role: "user",
-        text: "Every morning, find overdue Stripe invoices, nudge customers, then summarize it in Slack.",
-      },
+      { role: "user", key: "landing.chat.invoice1" },
       {
         role: "assistant",
         text: "Set up a daily schedule that pulls overdue invoices from Stripe, builds reminders, sends them, and drops a summary in the finance Slack channel.",
       },
-      {
-        role: "user",
-        text: "Include the invoice due date and total amount in each reminder.",
-      },
+      { role: "user", key: "landing.chat.invoice2" },
     ],
   },
   {
@@ -262,18 +255,12 @@ const SCENARIOS: MockScenario[] = [
       w("confirm_charge", "receipt", "ping_community", "receipt"),
     ],
     chat: [
-      {
-        role: "user",
-        text: "On a new Stripe order, tell fulfillment in Slack and celebrate the sale in Discord.",
-      },
+      { role: "user", key: "landing.chat.order1" },
       {
         role: "assistant",
         text: "Built it: parse the Stripe order, confirm the charge via the Stripe API, alert Slack with the items, and post a sale message to Discord.",
       },
-      {
-        role: "user",
-        text: "Mention the customer's first name in the Discord message.",
-      },
+      { role: "user", key: "landing.chat.order2" },
     ],
   },
   {
@@ -327,18 +314,12 @@ const SCENARIOS: MockScenario[] = [
       w("classify_severity", "critical", "alert_discord", "critical"),
     ],
     chat: [
-      {
-        role: "user",
-        text: "Triage monitoring alerts and escalate the critical ones to Slack and Discord.",
-      },
+      { role: "user", key: "landing.chat.incident1" },
       {
         role: "assistant",
         text: "Added normalization, severity classification, a Slack page to on-call, and a Discord mirror for critical incidents.",
       },
-      {
-        role: "user",
-        text: "Only ping Discord when the incident is marked critical.",
-      },
+      { role: "user", key: "landing.chat.incident2" },
     ],
   },
   {
@@ -392,18 +373,12 @@ const SCENARIOS: MockScenario[] = [
       w("lookup_charge", "order", "log_discord", "order"),
     ],
     chat: [
-      {
-        role: "user",
-        text: "When Stripe issues a refund, alert support in Slack and log it to Discord.",
-      },
+      { role: "user", key: "landing.chat.refund1" },
       {
         role: "assistant",
         text: "Done: parse the Stripe refund, look up the original charge, notify support in Slack, and log it to the Discord channel.",
       },
-      {
-        role: "user",
-        text: "Include the refund reason if Stripe provides one.",
-      },
+      { role: "user", key: "landing.chat.refund2" },
     ],
   },
 ];
@@ -502,6 +477,7 @@ interface GraphViewProps {
 }
 
 function GraphCanvas({ scenario, selectedId, onSelect, theme }: GraphViewProps) {
+  const { t } = useTranslation();
   const { nodes, edges } = useMemo(
     () => buildGraph(scenario, selectedId),
     [scenario, selectedId],
@@ -536,7 +512,7 @@ function GraphCanvas({ scenario, selectedId, onSelect, theme }: GraphViewProps) 
       <Panel position="top-right">
         <div className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-muted-foreground">
           <Network className="h-3.5 w-3.5" />
-          graph
+          {t("view.graph")}
         </div>
       </Panel>
     </ReactFlow>
@@ -553,15 +529,19 @@ function GraphView(props: GraphViewProps) {
 
 // Faithful, static replica of Chat.DesignProgress in its "all done" state.
 function MockBuildCard({ funcs }: { funcs: AuthoredFunc[] }) {
+  const { t } = useTranslation();
   return (
     <div className="my-1.5 w-full overflow-hidden rounded-3xl border border-dashed border-border/40 bg-background p-4">
       <div className="flex items-center gap-2.5">
         <div className="min-w-0 flex-1">
           <div className="text-sm font-medium leading-tight text-foreground">
-            Workflow ready
+            {t("chat.workflowReady")}
           </div>
           <div className="text-xs leading-tight text-muted-foreground">
-            {funcs.length} of {funcs.length} steps
+            {t("chat.stepsProgress", {
+              done: funcs.length,
+              total: funcs.length,
+            })}
           </div>
         </div>
         <span className="shrink-0 font-mono text-[11px] text-muted-foreground/70">
@@ -590,8 +570,14 @@ function MockBuildCard({ funcs }: { funcs: AuthoredFunc[] }) {
 
 // Faithful replica of Chat.MessageItem: user gets a right-aligned secondary
 // bubble; the assistant is left-aligned, full-width plain text (no bubble).
-function MockMessage({ msg }: { msg: ChatMsg }) {
-  const isUser = msg.role === "user";
+function MockMessage({
+  role,
+  text,
+}: {
+  role: "user" | "assistant";
+  text: string;
+}) {
+  const isUser = role === "user";
   return (
     <div
       className={cn(
@@ -606,11 +592,11 @@ function MockMessage({ msg }: { msg: ChatMsg }) {
             : "w-full min-w-0 overflow-hidden text-[14px] leading-relaxed text-foreground/90",
         )}
       >
-        {msg.text}
+        {text}
       </div>
       {!isUser && (
         <div className="font-mono text-[10px] text-muted-foreground/60">
-          {msg.tokens ?? "↑1.9k ↓0.4k"}
+          ↑1.9k ↓0.4k
         </div>
       )}
     </div>
@@ -619,6 +605,7 @@ function MockMessage({ msg }: { msg: ChatMsg }) {
 
 // Faithful replica of ChatComposer's frame (visual only).
 function MockComposer() {
+  const { t } = useTranslation();
   const [value, setValue] = useState("");
   return (
     <form
@@ -633,7 +620,7 @@ function MockComposer() {
           rows={1}
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Describe a change..."
+          placeholder={t("landing.describeChange")}
           className="max-h-52 min-h-[44px] flex-1 resize-none self-stretch border-none bg-transparent px-1 py-1 text-sm leading-relaxed text-foreground outline-none placeholder:text-muted-foreground"
         />
         <button
@@ -648,6 +635,7 @@ function MockComposer() {
 }
 
 export function BuilderMockShowcase() {
+  const { t } = useTranslation();
   const [view, setView] = useState<"story" | "pipeline" | "graph">("graph");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selected, setSelected] = useState(SCENARIOS[0].id);
@@ -684,7 +672,7 @@ export function BuilderMockShowcase() {
       <div className="flex min-h-[320px] flex-col border-b border-border/40 lg:border-b-0 lg:border-r">
         <div className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-muted/30 p-3">
           <span className="mr-1 text-[11px] font-medium text-muted-foreground">
-            Try an idea
+            {t("landing.tryIdea")}
           </span>
           {SCENARIOS.map((item) => (
             <button
@@ -716,7 +704,7 @@ export function BuilderMockShowcase() {
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
-                {item}
+                {t(`view.${item}`)}
               </button>
             ))}
           </div>
@@ -757,7 +745,7 @@ export function BuilderMockShowcase() {
       <div className="flex min-h-[300px] flex-col">
         <div className="flex items-center gap-2 border-b border-border/40 px-3 py-1.5">
           <span className="ml-auto rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground/80">
-            {tokenCount} tokens
+            {t("chat.tokens", { n: tokenCount })}
           </span>
         </div>
 
@@ -768,7 +756,12 @@ export function BuilderMockShowcase() {
                 {idx === firstAssistantIdx && (
                   <MockBuildCard funcs={scenario.funcs} />
                 )}
-                <MockMessage msg={message} />
+                <MockMessage
+                  role={message.role}
+                  text={
+                    message.role === "user" ? t(message.key) : message.text
+                  }
+                />
               </div>
             ))}
           </div>

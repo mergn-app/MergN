@@ -59,11 +59,10 @@ export function Landing() {
       <div className="flex flex-1 flex-col items-center gap-4 p-6">
         <div className="w-full max-w-4xl text-center">
           <h1 className="text-3xl font-semibold tracking-tight">
-            Build automations with AI
+            {t("landing.heroTitle")}
           </h1>
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-            Describe your workflow, connect providers, and run it with full
-            visibility. Sign in to access your spaces and workflows.
+            {t("landing.heroSubtitle")}
           </p>
           <div className="mt-5 flex items-center justify-center gap-3">
             <Button onClick={() => void navigate({ to: "/login" })}>
@@ -79,7 +78,7 @@ export function Landing() {
                 )
               }
             >
-              Learn more
+              {t("landing.learnMore")}
             </Button>
           </div>
         </div>

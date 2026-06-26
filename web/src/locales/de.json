@@ -68,6 +68,25 @@
     "termsOfService": "Nutzungsbedingungen",
     "privacyPolicy": "Datenschutz"
   },
+  "landing": {
+    "heroTitle": "Automatisierungen mit KI erstellen",
+    "heroSubtitle": "Beschreibe deinen Workflow, verbinde Anbieter und führe ihn mit voller Transparenz aus. Melde dich an, um auf deine Spaces und Workflows zuzugreifen.",
+    "learnMore": "Mehr erfahren",
+    "tryIdea": "Eine Idee ausprobieren",
+    "describeChange": "Beschreibe eine Änderung…",
+    "chat": {
+      "payment1": "Wenn eine Zahlung in Stripe erfolgreich ist, poste eine ausführliche Benachrichtigung in unseren Discord-Kanal.",
+      "payment2": "Füge außerdem die E-Mail des Kunden hinzu und benachrichtige nur bei Beträgen über 100 $.",
+      "invoice1": "Finde jeden Morgen überfällige Stripe-Rechnungen, erinnere die Kunden und fasse es dann in Slack zusammen.",
+      "invoice2": "Füge jeder Erinnerung das Fälligkeitsdatum und den Gesamtbetrag der Rechnung hinzu.",
+      "order1": "Informiere bei einer neuen Stripe-Bestellung das Fulfillment-Team in Slack und feiere den Verkauf in Discord.",
+      "order2": "Erwähne den Vornamen des Kunden in der Discord-Nachricht.",
+      "incident1": "Triagiere Monitoring-Warnungen und eskaliere die kritischen nach Slack und Discord.",
+      "incident2": "Pinge Discord nur an, wenn der Vorfall als kritisch markiert ist.",
+      "refund1": "Wenn Stripe eine Rückerstattung ausstellt, benachrichtige den Support in Slack und protokolliere es in Discord.",
+      "refund2": "Füge den Erstattungsgrund hinzu, falls Stripe einen angibt."
+    }
+  },
   "legal": {
     "backHome": "Zur Startseite"
   },

@@ -68,6 +68,25 @@
     "termsOfService": "Términos de servicio",
     "privacyPolicy": "Política de privacidad"
   },
+  "landing": {
+    "heroTitle": "Crea automatizaciones con IA",
+    "heroSubtitle": "Describe tu flujo de trabajo, conecta proveedores y ejecútalo con total visibilidad. Inicia sesión para acceder a tus espacios y flujos.",
+    "learnMore": "Más información",
+    "tryIdea": "Prueba una idea",
+    "describeChange": "Describe un cambio…",
+    "chat": {
+      "payment1": "Cuando un pago se complete en Stripe, publica una alerta detallada en nuestro canal de Discord.",
+      "payment2": "Incluye también el correo del cliente y avisa solo para pagos superiores a 100 $.",
+      "invoice1": "Cada mañana, encuentra las facturas vencidas de Stripe, recuerda a los clientes y luego resúmelo en Slack.",
+      "invoice2": "Incluye la fecha de vencimiento y el importe total de la factura en cada recordatorio.",
+      "order1": "En un nuevo pedido de Stripe, avisa al equipo de logística en Slack y celebra la venta en Discord.",
+      "order2": "Menciona el nombre del cliente en el mensaje de Discord.",
+      "incident1": "Clasifica las alertas de monitoreo y escala las críticas a Slack y Discord.",
+      "incident2": "Notifica a Discord solo cuando el incidente esté marcado como crítico.",
+      "refund1": "Cuando Stripe emita un reembolso, avisa a soporte en Slack y regístralo en Discord.",
+      "refund2": "Incluye el motivo del reembolso si Stripe lo proporciona."
+    }
+  },
   "legal": {
     "backHome": "Volver al inicio"
   },

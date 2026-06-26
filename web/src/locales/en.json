@@ -68,6 +68,25 @@
     "termsOfService": "Terms of Service",
     "privacyPolicy": "Privacy Policy"
   },
+  "landing": {
+    "heroTitle": "Build automations with AI",
+    "heroSubtitle": "Describe your workflow, connect providers, and run it with full visibility. Sign in to access your spaces and workflows.",
+    "learnMore": "Learn more",
+    "tryIdea": "Try an idea",
+    "describeChange": "Describe a change…",
+    "chat": {
+      "payment1": "When a payment succeeds in Stripe, post a rich alert to our Discord channel.",
+      "payment2": "Also include the customer's email and only alert for charges over $100.",
+      "invoice1": "Every morning, find overdue Stripe invoices, nudge customers, then summarize it in Slack.",
+      "invoice2": "Include the invoice due date and total amount in each reminder.",
+      "order1": "On a new Stripe order, tell fulfillment in Slack and celebrate the sale in Discord.",
+      "order2": "Mention the customer's first name in the Discord message.",
+      "incident1": "Triage monitoring alerts and escalate the critical ones to Slack and Discord.",
+      "incident2": "Only ping Discord when the incident is marked critical.",
+      "refund1": "When Stripe issues a refund, alert support in Slack and log it to Discord.",
+      "refund2": "Include the refund reason if Stripe provides one."
+    }
+  },
   "legal": {
     "backHome": "Back to home"
   },
