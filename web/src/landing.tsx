@@ -7,6 +7,7 @@ import { MergNLogo } from "@/components/MergNLogo";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { BuilderMockShowcase } from "./BuilderMockShowcase";
 import { LandingUseCases } from "./LandingUseCases";
+import { SelfHealShowcase } from "./SelfHealShowcase";
 import { AuthForm } from "./AuthForm";
 import { EnterpriseDialog } from "./EnterpriseDialog";
 
@@ -132,6 +133,21 @@ export function Landing() {
 
       <div className="px-10 pb-16 pt-4">
         <LandingUseCases onUseCaseClick={() => openAuth("signup")} />
+
+        <div className="mx-auto mt-14 w-full max-w-6xl">
+          <div className="text-center">
+            <h2 className="text-xl font-semibold tracking-tight">
+              {t("landing.selfHeal.title")}
+            </h2>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">
+              {t("landing.selfHeal.subtitle")}
+            </p>
+          </div>
+          <div className="mt-6">
+            <SelfHealShowcase />
+          </div>
+        </div>
+
         <div
           className="relative mx-auto mt-8 w-full max-w-6xl overflow-hidden rounded-3xl bg-[#f6efe3] px-8 py-10 text-center transition-colors duration-300 dark:bg-zinc-800/90"
           onMouseEnter={() =>
