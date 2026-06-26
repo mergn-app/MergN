@@ -73,6 +73,8 @@
     "heroSubtitle": "Neyi otomatikleştirmek istediğini anlat. MergN akışın tamamını çalışma anında senin için üretir ve çalıştırır; adımlar, mantık ve entegrasyonlar dahil.",
     "learnMore": "Daha fazla bilgi",
     "tryIdea": "Bir fikir dene",
+    "joinDiscord": "Discord'a Katıl",
+    "starGithub": "GitHub'da Yıldızla",
     "ideas": {
       "payment-alerts": "Ödeme Uyarıları",
       "invoice-reminders": "Fatura Hatırlatmaları",
@@ -119,6 +121,14 @@
         }
       },
       "scrollHint": "Kaydır"
+    },
+    "community": {
+      "badge": "Topluluk",
+      "title": "Aramıza katıl, gelişen ürün akışını birlikte kuralım.",
+      "desc": "Discord sohbetleri, yeni özelliklere erken erişim ve hızlı destek ile MergN yolculuğuna şimdi dahil ol.",
+      "joinNow": "Hemen Katıl",
+      "joinDiscord": "Discord'a Gel",
+      "starGithub": "GitHub'da Yıldızla"
     },
     "chat": {
       "payment1": "Stripe'da bir ödeme başarılı olunca Discord kanalımıza zengin bir bildirim gönder.",

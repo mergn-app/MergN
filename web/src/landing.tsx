@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Sun, Moon } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,16 @@ export function Landing() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [contactOpen, setContactOpen] = useState(false);
+  const communityGlowTarget = useRef({
+    x: 50,
+    y: 50,
+    active: false,
+  });
+  const [communityGlow, setCommunityGlow] = useState({
+    x: 50,
+    y: 50,
+    active: false,
+  });
 
   useEffect(() => {
     document.documentElement.classList.toggle("dark", theme === "dark");
@@ -30,6 +40,32 @@ export function Landing() {
       void 0;
     }
   }, [theme]);
+
+  useEffect(() => {
+    let raf = 0;
+    const loop = () => {
+      setCommunityGlow((prev) => {
+        const target = communityGlowTarget.current;
+        const ease = target.active ? 0.1 : 0.06;
+        const x = prev.x + (target.x - prev.x) * ease;
+        const y = prev.y + (target.y - prev.y) * ease;
+        const closeEnough =
+          Math.abs(x - target.x) < 0.25 && Math.abs(y - target.y) < 0.25;
+        const active = target.active || !closeEnough;
+        if (
+          Math.abs(x - prev.x) < 0.01 &&
+          Math.abs(y - prev.y) < 0.01 &&
+          active === prev.active
+        ) {
+          return prev;
+        }
+        return { x, y, active };
+      });
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   const openAuth = (mode: "signin" | "signup") => {
     setAuthMode(mode);
@@ -97,7 +133,7 @@ export function Landing() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Join Discord
+                  {t("landing.joinDiscord")}
                 </a>
               </Button>
               <Button asChild variant="outline">
@@ -106,7 +142,7 @@ export function Landing() {
                   target="_blank"
                   rel="noreferrer"
                 >
-                  Star on GitHub
+                  {t("landing.starGithub")}
                 </a>
               </Button>
             </div>
@@ -119,6 +155,85 @@ export function Landing() {
 
       <div className="px-10 pb-16 pt-4">
         <LandingUseCases onUseCaseClick={() => openAuth("signup")} />
+        <div
+          className="relative mx-auto mt-8 w-full max-w-6xl overflow-hidden rounded-3xl bg-[#f6efe3] px-8 py-10 text-center transition-colors duration-300 dark:bg-zinc-800/90"
+          onMouseEnter={() =>
+            (communityGlowTarget.current = {
+              ...communityGlowTarget.current,
+              active: true,
+            })
+          }
+          onMouseLeave={() =>
+            (communityGlowTarget.current = {
+              ...communityGlowTarget.current,
+              active: false,
+            })
+          }
+          onMouseMove={(e) => {
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = ((e.clientX - rect.left) / rect.width) * 100;
+            const y = ((e.clientY - rect.top) / rect.height) * 100;
+            communityGlowTarget.current = {
+              x: Math.min(100, Math.max(0, x)),
+              y: Math.min(100, Math.max(0, y)),
+              active: true,
+            };
+          }}
+        >
+          <div
+            className="pointer-events-none absolute inset-0 transition-opacity duration-300"
+            style={{
+              opacity: communityGlow.active ? 1 : 0,
+              background:
+                theme === "dark"
+                  ? `radial-gradient(340px circle at ${communityGlow.x}% ${communityGlow.y}%, rgba(255,255,255,0.24), rgba(255,255,255,0) 64%), radial-gradient(180px circle at calc(${communityGlow.x}% + 5%) calc(${communityGlow.y}% - 4%), rgba(255,255,255,0.08), rgba(255,255,255,0) 72%)`
+                  : `radial-gradient(340px circle at ${communityGlow.x}% ${communityGlow.y}%, rgba(255,243,212,0.9), rgba(255,243,212,0) 64%), radial-gradient(180px circle at calc(${communityGlow.x}% + 5%) calc(${communityGlow.y}% - 4%), rgba(255,255,255,0.5), rgba(255,255,255,0) 72%)`,
+            }}
+          />
+          <div
+            className="pointer-events-none absolute inset-0 blur-md transition-opacity duration-500"
+            style={{
+              opacity: communityGlow.active ? 0.56 : 0,
+              background: `radial-gradient(420px circle at ${communityGlow.x}% ${communityGlow.y}%, ${
+                theme === "dark" ? "rgba(255,255,255,0.2)" : "rgba(255,246,224,0.58)"
+              }, rgba(255,255,255,0) 70%)`,
+            }}
+          />
+          <div className="relative z-10">
+          <p className="text-xs font-medium uppercase tracking-[0.2em] text-foreground/60">
+            {t("landing.community.badge")}
+          </p>
+          <h3 className="mt-3 text-3xl font-semibold tracking-tight text-foreground md:text-4xl">
+            {t("landing.community.title")}
+          </h3>
+          <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-foreground/75">
+            {t("landing.community.desc")}
+          </p>
+          <div className="mt-6 flex items-center justify-center gap-3">
+            <Button size="sm" onClick={() => openAuth("signup")}>
+              {t("landing.community.joinNow")}
+            </Button>
+            <Button asChild size="sm" variant="ghost">
+              <a
+                href="https://discord.gg/wDxHFkcbhD"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t("landing.community.joinDiscord")}
+              </a>
+            </Button>
+            <Button asChild size="sm" variant="ghost">
+              <a
+                href="https://github.com/mergn-app/mergn"
+                target="_blank"
+                rel="noreferrer"
+              >
+                {t("landing.community.starGithub")}
+              </a>
+            </Button>
+          </div>
+          </div>
+        </div>
       </div>
 
       <footer className="border-t border-border/40 px-4 py-3">

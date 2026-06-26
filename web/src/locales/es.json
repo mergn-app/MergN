@@ -73,6 +73,8 @@
     "heroSubtitle": "Describe lo que quieres automatizar. MergN crea y ejecuta todo el flujo en tiempo real, con pasos, lógica e integraciones incluidas.",
     "learnMore": "Más información",
     "tryIdea": "Prueba una idea",
+    "joinDiscord": "Unirse a Discord",
+    "starGithub": "Dar estrella en GitHub",
     "ideas": {
       "payment-alerts": "Alertas Pago",
       "invoice-reminders": "Recordatorios Factura",
@@ -119,6 +121,14 @@
         }
       },
       "scrollHint": "Desplazar"
+    },
+    "community": {
+      "badge": "Comunidad",
+      "title": "Únete y construyamos juntos la próxima ola de workflows.",
+      "desc": "Entra a Discord para darnos feedback directo, acceder antes a nuevas funciones y recibir soporte rápido.",
+      "joinNow": "Unirme ahora",
+      "joinDiscord": "Unirse a Discord",
+      "starGithub": "Dar estrella en GitHub"
     },
     "chat": {
       "payment1": "Cuando un pago se complete en Stripe, publica una alerta detallada en nuestro canal de Discord.",
