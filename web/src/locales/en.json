@@ -81,6 +81,45 @@
       "refund-handler": "Refund Handler"
     },
     "describeChange": "Describe a change…",
+    "useCases": {
+      "title": "What can you build?",
+      "subtitle": "Connect the tools you already use and let AI wire the steps together.",
+      "items": {
+        "payments": {
+          "title": "Payment alerts",
+          "desc": "Post a rich alert to Slack the moment a Stripe payment succeeds."
+        },
+        "orders": {
+          "title": "Order notifications",
+          "desc": "Announce every new Shopify order in your Discord community."
+        },
+        "leads": {
+          "title": "Lead capture",
+          "desc": "Send new Typeform submissions straight into HubSpot as contacts."
+        },
+        "support": {
+          "title": "Support triage",
+          "desc": "Turn incoming Gmail requests into tracked Linear tickets."
+        },
+        "incidents": {
+          "title": "Incident escalation",
+          "desc": "Route critical Datadog alerts to the on-call Slack channel."
+        },
+        "digests": {
+          "title": "Daily digests",
+          "desc": "Summarize activity on a schedule and save it to Notion."
+        },
+        "approvals": {
+          "title": "Approval routing",
+          "desc": "Send Airtable approval requests to Slack and capture the decision instantly."
+        },
+        "reports": {
+          "title": "Weekly reports",
+          "desc": "Take weekly summaries from Google Sheets and post them to Discord automatically."
+        }
+      },
+      "scrollHint": "Scroll"
+    },
     "chat": {
       "payment1": "When a payment succeeds in Stripe, post a rich alert to our Discord channel.",
       "payment2": "Also include the customer's email and only alert for charges over $100.",

@@ -81,6 +81,45 @@
       "refund-handler": "Rückerstattungsverwaltung"
     },
     "describeChange": "Beschreibe eine Änderung…",
+    "useCases": {
+      "title": "Was kannst du bauen?",
+      "subtitle": "Verbinde die Tools, die du bereits nutzt, und lass die KI die Schritte verknüpfen.",
+      "items": {
+        "payments": {
+          "title": "Zahlungsalarme",
+          "desc": "Poste eine ausführliche Slack-Benachrichtigung, sobald eine Stripe-Zahlung erfolgreich ist."
+        },
+        "orders": {
+          "title": "Bestellbenachrichtigungen",
+          "desc": "Kündige jede neue Shopify-Bestellung in deiner Discord-Community an."
+        },
+        "leads": {
+          "title": "Lead-Erfassung",
+          "desc": "Sende neue Typeform-Einsendungen direkt als Kontakte an HubSpot."
+        },
+        "support": {
+          "title": "Support-Triage",
+          "desc": "Verwandle eingehende Gmail-Anfragen in nachverfolgte Linear-Tickets."
+        },
+        "incidents": {
+          "title": "Vorfalleskalation",
+          "desc": "Leite kritische Datadog-Warnungen an den Bereitschafts-Slack-Kanal weiter."
+        },
+        "digests": {
+          "title": "Tägliche Zusammenfassungen",
+          "desc": "Fasse Aktivitäten nach Zeitplan zusammen und speichere sie in Notion."
+        },
+        "approvals": {
+          "title": "Freigabe-Flow",
+          "desc": "Sende Airtable-Freigaben an Slack und erfasse die Entscheidung sofort."
+        },
+        "reports": {
+          "title": "Wochenberichte",
+          "desc": "Veröffentliche wöchentliche Zusammenfassungen aus Google Sheets automatisch in Discord."
+        }
+      },
+      "scrollHint": "Scrollen"
+    },
     "chat": {
       "payment1": "Wenn eine Zahlung in Stripe erfolgreich ist, poste eine ausführliche Benachrichtigung in unseren Discord-Kanal.",
       "payment2": "Füge außerdem die E-Mail des Kunden hinzu und benachrichtige nur bei Beträgen über 100 $.",

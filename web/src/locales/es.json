@@ -81,6 +81,45 @@
       "refund-handler": "Gestión Reembolsos"
     },
     "describeChange": "Describe un cambio…",
+    "useCases": {
+      "title": "¿Qué puedes crear?",
+      "subtitle": "Conecta las herramientas que ya usas y deja que la IA enlace los pasos.",
+      "items": {
+        "payments": {
+          "title": "Alertas de pago",
+          "desc": "Publica una alerta detallada en Slack en cuanto un pago de Stripe se complete."
+        },
+        "orders": {
+          "title": "Notificaciones de pedido",
+          "desc": "Anuncia cada nuevo pedido de Shopify en tu comunidad de Discord."
+        },
+        "leads": {
+          "title": "Captura de leads",
+          "desc": "Envía las nuevas respuestas de Typeform directamente a HubSpot como contactos."
+        },
+        "support": {
+          "title": "Triaje de soporte",
+          "desc": "Convierte las solicitudes entrantes de Gmail en tickets de Linear con seguimiento."
+        },
+        "incidents": {
+          "title": "Escalado de incidentes",
+          "desc": "Dirige las alertas críticas de Datadog al canal de Slack de guardia."
+        },
+        "digests": {
+          "title": "Resúmenes diarios",
+          "desc": "Resume la actividad de forma programada y guárdala en Notion."
+        },
+        "approvals": {
+          "title": "Flujo de aprobación",
+          "desc": "Envía solicitudes de aprobación de Airtable a Slack y captura la decisión al instante."
+        },
+        "reports": {
+          "title": "Informes semanales",
+          "desc": "Publica automáticamente en Discord los resúmenes semanales de Google Sheets."
+        }
+      },
+      "scrollHint": "Desplazar"
+    },
     "chat": {
       "payment1": "Cuando un pago se complete en Stripe, publica una alerta detallada en nuestro canal de Discord.",
       "payment2": "Incluye también el correo del cliente y avisa solo para pagos superiores a 100 $.",

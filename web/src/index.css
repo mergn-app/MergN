@@ -231,6 +231,26 @@
   font-family: var(--font-mono);
 }
 
+@keyframes landing-use-cases-marquee {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(calc(-50% - 0.5rem), 0, 0);
+  }
+}
+
+.landing-use-cases-track {
+  will-change: transform;
+  animation: landing-use-cases-marquee 44s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-use-cases-track {
+    animation: none;
+  }
+}
+
 /* Side-by-side code diff (CodeMirror MergeView) — GitHub-style line + word blocks.
    Overrides the package's 2px gradient "underline" on changed text with a real box. */
 .cm-merge-a .cm-changedLine,

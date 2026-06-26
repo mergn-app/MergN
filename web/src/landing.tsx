@@ -3,9 +3,11 @@ import { useTranslation } from "react-i18next";
 import { Sun, Moon } from "lucide-react";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Button } from "@/components/ui/button";
+import { MergNLogo } from "@/components/MergNLogo";
 import { LegalLinks } from "./LegalLinks";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { BuilderMockShowcase } from "./BuilderMockShowcase";
+import { LandingUseCases } from "./LandingUseCases";
 import { AuthForm } from "./AuthForm";
 
 export function Landing() {
@@ -34,10 +36,13 @@ export function Landing() {
   };
 
   return (
-    <div className="flex h-screen w-screen flex-col bg-background text-foreground">
+    <div className="flex min-h-screen w-screen flex-col overflow-y-auto bg-background text-foreground">
       <div className="p-2 pb-0">
         <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-4 py-2">
-          <div className="text-sm font-semibold">MergN</div>
+          <div className="flex items-center gap-2">
+            <MergNLogo className="h-5 w-auto text-foreground" />
+            <div className="text-sm font-semibold">MergN</div>
+          </div>
           <div className="ml-auto flex items-center gap-3">
             <LegalLinks />
             <LanguageSwitcher />
@@ -75,8 +80,8 @@ export function Landing() {
           </div>
         </header>
       </div>
-      <div className="flex flex-1 flex-col items-center gap-4 p-6">
-        <div className="w-full max-w-4xl text-center">
+      <div className="flex flex-1 flex-col items-center gap-10 p-6 pb-16">
+        <div className="w-full max-w-4xl text-center mt-2">
           <h1 className="text-3xl font-semibold tracking-tight">
             {t("landing.heroTitle")}
           </h1>
@@ -100,6 +105,7 @@ export function Landing() {
           </div>
         </div>
         <BuilderMockShowcase />
+        <LandingUseCases onUseCaseClick={() => openAuth("signup")} />
       </div>
 
       <Dialog.Root open={authOpen} onOpenChange={setAuthOpen}>

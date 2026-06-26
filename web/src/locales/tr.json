@@ -81,6 +81,45 @@
       "refund-handler": "İade Takibi"
     },
     "describeChange": "Bir değişiklik yaz…",
+    "useCases": {
+      "title": "Neler kurabilirsin?",
+      "subtitle": "Zaten kullandığın araçları bağla, adımları yapay zekâ birbirine bağlasın.",
+      "items": {
+        "payments": {
+          "title": "Ödeme uyarıları",
+          "desc": "Stripe'da bir ödeme başarılı olur olmaz Slack'e zengin bir bildirim gönder."
+        },
+        "orders": {
+          "title": "Sipariş bildirimleri",
+          "desc": "Her yeni Shopify siparişini Discord topluluğunda duyur."
+        },
+        "leads": {
+          "title": "Müşteri adayı toplama",
+          "desc": "Yeni Typeform yanıtlarını doğrudan HubSpot'a kişi olarak gönder."
+        },
+        "support": {
+          "title": "Destek triyajı",
+          "desc": "Gelen Gmail taleplerini takip edilen Linear kayıtlarına dönüştür."
+        },
+        "incidents": {
+          "title": "Olay eskalasyonu",
+          "desc": "Kritik Datadog uyarılarını nöbetteki Slack kanalına yönlendir."
+        },
+        "digests": {
+          "title": "Günlük özetler",
+          "desc": "Etkinliği zamanlanmış olarak özetle ve Notion'a kaydet."
+        },
+        "approvals": {
+          "title": "Onay akışı",
+          "desc": "Airtable onay taleplerini Slacke gönder ve kararı anında yakala."
+        },
+        "reports": {
+          "title": "Haftalık raporlar",
+          "desc": "Google Sheetsteki haftalık özetleri otomatik olarak Discorda paylaş."
+        }
+      },
+      "scrollHint": "Kaydır"
+    },
     "chat": {
       "payment1": "Stripe'da bir ödeme başarılı olunca Discord kanalımıza zengin bir bildirim gönder.",
       "payment2": "Ayrıca müşterinin e-postasını da ekle ve yalnızca 100 dolar üzeri ödemeler için bildir.",
