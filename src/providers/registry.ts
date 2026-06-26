@@ -32,6 +32,8 @@ export type AuthSpec =
       scopes: string[];
       clientIdEnv: string;
       clientSecretEnv: string;
+      authParams?: Record<string, string>;
+      tokenAuthStyle?: "body" | "basic";
     };
 
 export interface SetupStep {
@@ -81,6 +83,19 @@ export interface ProviderDraft {
   dependencies?: string[];
   credential?: Credential;
   setupGuide?: SetupGuide;
+  // Set (managed/prod only) when this provider authenticates via the platform's
+  // central OAuth2 app. The runtime injects cred.accessToken (auto-refreshed);
+  // no per-user credential fields. Client id/secret come from env (clientIdEnv/
+  // clientSecretEnv), so they live only in prod and never ship to self-host.
+  oauth2?: {
+    authUrl: string;
+    tokenUrl: string;
+    scopes: string[];
+    clientIdEnv: string;
+    clientSecretEnv: string;
+    authParams?: Record<string, string>;
+    tokenAuthStyle?: "body" | "basic";
+  };
 }
 
 const builtins = new Map<string, ProviderSpec>();
@@ -129,6 +144,7 @@ function specFromDraft(d: ProviderDraft): ProviderSpec {
     aiWritten: true,
     clientSource: d.clientSource,
     dependencies: d.dependencies ?? [],
+    auth: d.oauth2 ? { type: "oauth2", ...d.oauth2 } : undefined,
   };
 }
 

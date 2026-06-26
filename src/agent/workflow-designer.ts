@@ -357,17 +357,37 @@ export async function designWorkflow(
     );
   }
 
+  // OAuth is offered ONLY on managed/prod (MANAGED=1): the central OAuth app
+  // client id/secret live in prod env and must never ship to self-host. On
+  // self-host this is false, so providers fall back to the API-key/token flow.
+  const oauthEnabled =
+    process.env.MANAGED === "1" || process.env.MANAGED === "true";
   for (const { id, cat } of toAuthor) {
     const label = `Creating provider ${cat?.name ?? id}`;
     onProgress?.({ kind: "provider", id, label, status: "active" });
+    // Use OAuth only when it's actually configured: managed deployment, the
+    // catalog has an oauth block, AND the central app's client id is present in
+    // env. Otherwise fall back to the API-key/token flow — so OAuth turns on for
+    // a provider simply by setting its *_OAUTH_CLIENT_ID/SECRET in prod, with no
+    // catalog edits and no half-configured "Connect" that errors out.
+    const useOAuth =
+      oauthEnabled && !!cat?.oauth && !!process.env[cat.oauth.clientIdEnv];
     const draft = await authorProvider(
       id,
-      cat ? catalogAuthorHint(cat) : undefined,
+      cat ? catalogAuthorHint(cat, useOAuth) : undefined,
       m,
+      useOAuth,
     );
     // Pin egress to the catalog's known host so a drifted/guessed hostname can't
     // silently reach a fabricated endpoint (the enrichment_service-style bug).
     if (cat?.egressHost) draft.sandbox = { egressDomain: cat.egressHost };
+    if (useOAuth && cat?.oauth) {
+      // Wire to the platform's central OAuth app: runtime does the login + token
+      // refresh + injection, so there are no user-entered credential fields.
+      draft.oauth2 = cat.oauth;
+      draft.credential = undefined;
+      draft.setupGuide = undefined;
+    }
     registry.registerProviderFromDraft(spaceId, draft);
     await registry.persistProvider(spaceId, draft);
     onProgress?.({ kind: "provider", id, label, status: "done" });

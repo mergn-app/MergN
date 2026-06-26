@@ -14,6 +14,18 @@ export interface CatalogEntry {
   docsUrl: string;
   confidence: string; // "high" | "needs-verify" | "deprecated"
   note?: string; // human-readable caveat shown in the UI for non-"high" entries
+  // Present only for services wired to the platform's central OAuth (managed/prod).
+  // Lets the user click "Connect" instead of pasting a token/key. clientId/secret
+  // come from env (clientIdEnv/clientSecretEnv) so they live only in prod.
+  oauth?: {
+    authUrl: string;
+    tokenUrl: string;
+    scopes: string[];
+    clientIdEnv: string;
+    clientSecretEnv: string;
+    authParams?: Record<string, string>;
+    tokenAuthStyle?: "body" | "basic";
+  };
 }
 
 const __dir = dirname(fileURLToPath(import.meta.url));
@@ -80,14 +92,17 @@ export function catalogListForPrompt(entries: CatalogEntry[]): string {
 
 // Grounding hint handed to authorProvider so the generated client targets the
 // service's REAL API surface (host/auth/docs) instead of a hallucinated one.
-export function catalogAuthorHint(e: CatalogEntry): string {
+export function catalogAuthorHint(e: CatalogEntry, useOAuth = false): string {
   const host = e.egressHost
     ? `Fixed public API host: ${e.egressHost} — all requests go here.`
     : `Host is per-tenant/region: derive it from the user's credential (use sandbox.egressFromField), do not hardcode one.`;
+  const authLine = useOAuth
+    ? `Auth: OAuth2 handled by the platform — use Authorization: Bearer \${cred.accessToken}; declare NO credential fields.`
+    : `Credential method (this system has NO interactive OAuth redirect): ${e.auth}.`;
   return [
     `This is the real, known public service "${e.name}" (id: ${e.id}). Use its ACTUAL documented REST API — correct base URL, endpoints, and method names.`,
     `Official API reference: ${e.docsUrl}`,
-    `Credential method (this system has NO interactive OAuth redirect): ${e.auth}.`,
+    authLine,
     host,
     `Do NOT invent endpoints, hostnames, or methods. If unsure of an endpoint, use the most standard documented one for this service.`,
   ].join("\n");

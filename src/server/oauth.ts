@@ -27,6 +27,8 @@ export interface ResolvedOAuth {
   authUrl: string;
   tokenUrl: string;
   scopes: string[];
+  authParams: Record<string, string>;
+  tokenAuthStyle: "body" | "basic";
 }
 
 export interface OAuth {
@@ -66,13 +68,20 @@ export function redirectUri(): string {
 async function postToken(
   tokenUrl: string,
   params: Record<string, string>,
+  basicAuth?: string,
 ): Promise<OAuthTokens> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/x-www-form-urlencoded",
+    Accept: "application/json",
+  };
+  // Some providers (Notion, Spotify, Zoom…) require the client id/secret as an
+  // HTTP Basic header on the token endpoint instead of in the body.
+  if (basicAuth)
+    headers.Authorization =
+      "Basic " + Buffer.from(basicAuth).toString("base64");
   const res = await fetch(tokenUrl, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
+    headers,
     body: new URLSearchParams(params).toString(),
   });
   const data = (await res.json()) as Record<string, unknown>;
@@ -151,7 +160,20 @@ export function createOAuth(deps: {
     if (missing.length)
       throw new Error(`OAuth app not configured: missing ${missing.join(", ")}`);
 
-    return { clientId, clientSecret, authUrl, tokenUrl, scopes };
+    const authParams =
+      auth.type === "oauth2" ? (auth.authParams ?? {}) : {};
+    const tokenAuthStyle: "body" | "basic" =
+      auth.type === "oauth2" ? (auth.tokenAuthStyle ?? "body") : "body";
+
+    return {
+      clientId,
+      clientSecret,
+      authUrl,
+      tokenUrl,
+      scopes,
+      authParams,
+      tokenAuthStyle,
+    };
   }
 
   return {
@@ -211,7 +233,10 @@ export function createOAuth(deps: {
       u.searchParams.set("scope", cfg.scopes.join(" "));
       u.searchParams.set("state", state);
       u.searchParams.set("response_type", "code");
-      u.searchParams.set("access_type", "offline");
+      // Provider-specific extras (e.g. Google access_type=offline+prompt=consent,
+      // Dropbox token_access_type=offline) come from the catalog's oauth config.
+      for (const [k, v] of Object.entries(cfg.authParams))
+        u.searchParams.set(k, v);
       return { url: u.toString() };
     },
 
@@ -220,24 +245,40 @@ export function createOAuth(deps: {
       if (!p) throw new Error("invalid or expired state");
       pending.delete(state);
       const cfg = await resolveOAuthConfig(p.spaceId, p.provider);
-      const tokens = await postToken(cfg.tokenUrl, {
-        client_id: cfg.clientId,
-        client_secret: cfg.clientSecret,
+      const basic = cfg.tokenAuthStyle === "basic";
+      const params: Record<string, string> = {
         code,
         redirect_uri: redirectUri(),
         grant_type: "authorization_code",
-      });
+      };
+      if (!basic) {
+        params.client_id = cfg.clientId;
+        params.client_secret = cfg.clientSecret;
+      }
+      const tokens = await postToken(
+        cfg.tokenUrl,
+        params,
+        basic ? `${cfg.clientId}:${cfg.clientSecret}` : undefined,
+      );
       return { spaceId: p.spaceId, provider: p.provider, tokens };
     },
 
     async refreshOAuthToken(spaceId, provider, refreshToken) {
       const cfg = await resolveOAuthConfig(spaceId, provider);
-      return postToken(cfg.tokenUrl, {
-        client_id: cfg.clientId,
-        client_secret: cfg.clientSecret,
+      const basic = cfg.tokenAuthStyle === "basic";
+      const params: Record<string, string> = {
         refresh_token: refreshToken,
         grant_type: "refresh_token",
-      });
+      };
+      if (!basic) {
+        params.client_id = cfg.clientId;
+        params.client_secret = cfg.clientSecret;
+      }
+      return postToken(
+        cfg.tokenUrl,
+        params,
+        basic ? `${cfg.clientId}:${cfg.clientSecret}` : undefined,
+      );
     },
   };
 }

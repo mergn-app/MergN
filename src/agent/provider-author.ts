@@ -217,14 +217,22 @@ export async function updateProvider(
   return { draft: { ...rest, id: draft.id }, changeNote };
 }
 
+// OAuth providers (managed/prod) don't take user credentials — the platform's
+// central OAuth app issues a token the runtime injects. Swap the no-OAuth
+// credential rule for an OAuth one so the client uses the bearer access token.
+const OAUTH_RULE =
+  "CREDENTIAL METHOD — this provider authenticates via OAuth2 handled by the PLATFORM. At runtime the factory receives `cred.accessToken`: a valid, automatically-refreshed OAuth access token. EVERY request MUST authorize with `Authorization: Bearer ${cred.accessToken}`. Return an EMPTY credential.fields array, set authEnv to '', do NOT write a setupGuide, and do NOT implement any token exchange, refresh, or login — the platform does all of that. Read no credential value other than cred.accessToken.";
+
 export async function authorProvider(
   service: string,
   docs?: string,
   meta?: AgentMeta,
+  oauth = false,
 ): Promise<ProviderDraft> {
+  const system = oauth ? SYSTEM.replace(CREDENTIAL_RULES, OAUTH_RULE) : SYSTEM;
   const output = await genObject({
     schema: providerDraftZ,
-    system: SYSTEM,
+    system,
     telemetry: trace("author-provider", { ...meta, service }),
     spaceId: meta?.spaceId,
     prompt: [`Service: ${service}`, docs ? `API docs / notes: ${docs}` : ""].join(
