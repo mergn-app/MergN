@@ -186,16 +186,16 @@ export function Landing() {
               opacity: communityGlow.active ? 1 : 0,
               background:
                 theme === "dark"
-                  ? `radial-gradient(340px circle at ${communityGlow.x}% ${communityGlow.y}%, rgba(255,255,255,0.24), rgba(255,255,255,0) 64%), radial-gradient(180px circle at calc(${communityGlow.x}% + 5%) calc(${communityGlow.y}% - 4%), rgba(255,255,255,0.08), rgba(255,255,255,0) 72%)`
-                  : `radial-gradient(340px circle at ${communityGlow.x}% ${communityGlow.y}%, rgba(255,243,212,0.9), rgba(255,243,212,0) 64%), radial-gradient(180px circle at calc(${communityGlow.x}% + 5%) calc(${communityGlow.y}% - 4%), rgba(255,255,255,0.5), rgba(255,255,255,0) 72%)`,
+                  ? `radial-gradient(220px circle at ${communityGlow.x}% ${communityGlow.y}%, rgba(113,113,122,0.2), rgba(113,113,122,0) 64%), radial-gradient(120px circle at calc(${communityGlow.x}% + 5%) calc(${communityGlow.y}% - 4%), rgba(82,82,91,0.12), rgba(82,82,91,0) 72%)`
+                  : `radial-gradient(220px circle at ${communityGlow.x}% ${communityGlow.y}%, rgba(255,243,212,0.9), rgba(255,243,212,0) 64%), radial-gradient(120px circle at calc(${communityGlow.x}% + 5%) calc(${communityGlow.y}% - 4%), rgba(255,255,255,0.5), rgba(255,255,255,0) 72%)`,
             }}
           />
           <div
             className="pointer-events-none absolute inset-0 blur-md transition-opacity duration-500"
             style={{
-              opacity: communityGlow.active ? 0.56 : 0,
-              background: `radial-gradient(420px circle at ${communityGlow.x}% ${communityGlow.y}%, ${
-                theme === "dark" ? "rgba(255,255,255,0.2)" : "rgba(255,246,224,0.58)"
+              opacity: communityGlow.active ? 0.4 : 0,
+              background: `radial-gradient(260px circle at ${communityGlow.x}% ${communityGlow.y}%, ${
+                theme === "dark" ? "rgba(63,63,70,0.26)" : "rgba(255,246,224,0.58)"
               }, rgba(255,255,255,0) 70%)`,
             }}
           />
