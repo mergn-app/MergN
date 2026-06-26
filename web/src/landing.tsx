@@ -256,7 +256,7 @@ export function Landing() {
               className="h-8 px-2 text-xs text-muted-foreground"
               onClick={() => setContactOpen(true)}
             >
-              Contact us
+              {t("landing.contactUs")}
             </Button>
           </div>
         </div>
