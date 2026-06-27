@@ -40,7 +40,8 @@ const SYSTEM = [
   "Produce ONE field per given name (reuse the name verbatim), choosing the best control plus a human label, and a placeholder/help where useful.",
   "Controls: text (short string), textarea (long text or a message body), number (amounts, counts, money), toggle (a yes/no boolean), select (a small fixed set of choices — provide options), date.",
   "Prefer number for money/amounts; for an email use text with an email-like placeholder; use select ONLY when there is a clear small set of valid values, otherwise text.",
-  "When a field lists the step that consumes it, base the field's label and help on THAT step's domain/service — not on possibly-stale wording in the goal.",
+  "Derive each field's label from its NAME (humanized): the label MUST plausibly mean the same thing as the field name. Use the consuming step's domain only to refine wording for an ALREADY-meaningful name (e.g. 'email' on a Mailchimp step -> 'Subscriber email'). NEVER assign a domain-specific meaning the name itself does not carry.",
+  "If a field name is opaque or ambiguous (e.g. 'la', 'x1', 'tmp2'), keep the label EQUAL to the name verbatim and omit help — do NOT guess what it represents from the step's domain.",
   "Never invent fields that are not in the list. Keep labels concise.",
 ].join("\n");
 
