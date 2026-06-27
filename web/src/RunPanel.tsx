@@ -1299,10 +1299,10 @@ export function RunPanel({
                         ) : (
                           r.output !== undefined && (
                             <div>
-                              <div className="text-[10px] text-muted-foreground/60">
+                              <div className="text-[10px] text-tone-emerald-fg/80">
                                 {t("node.outputLabel")}
                               </div>
-                              <pre className="mt-0.5 overflow-auto rounded-lg bg-muted/40 p-2 font-mono text-[11px] leading-relaxed text-emerald-200/85">
+                              <pre className="mt-0.5 overflow-auto rounded-lg border border-tone-emerald/30 bg-tone-emerald/10 p-2 font-mono text-[11px] leading-relaxed text-tone-emerald-fg">
                                 {pretty(r.output)}
                               </pre>
                             </div>
