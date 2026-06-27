@@ -408,7 +408,10 @@
     "fromWorkflow": "akıştan"
   },
   "canvas": {
-    "autoArrange": "Otomatik diz"
+    "autoArrange": "Otomatik diz",
+    "addStep": "Adım ekle",
+    "removeWire": "Bağlantıyı kaldır",
+    "deleteStep": "Adımı sil"
   },
   "mcp": {
     "title": "Claude / ChatGPT Bağla",

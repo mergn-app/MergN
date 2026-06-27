@@ -408,7 +408,10 @@
     "fromWorkflow": "from a flow"
   },
   "canvas": {
-    "autoArrange": "Auto-arrange"
+    "autoArrange": "Auto-arrange",
+    "addStep": "Add step",
+    "removeWire": "Remove connection",
+    "deleteStep": "Delete step"
   },
   "mcp": {
     "title": "Connect Claude / ChatGPT",

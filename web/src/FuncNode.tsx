@@ -1,6 +1,6 @@
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeftRight, Zap } from "lucide-react";
+import { ArrowLeftRight, Trash2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Port {
@@ -19,6 +19,7 @@ interface FuncNodeData {
   gated?: boolean;
   inputs: Port[];
   outputs: string[];
+  onDelete?: () => void;
 }
 
 function PortDot({
@@ -135,8 +136,22 @@ export function FuncNode({ data, selected }: NodeProps) {
               ? t("connections.needsConnection")
               : t("node.needsValue")
           }
-          className="absolute -right-1 -top-1 size-2.5 rounded-full bg-amber-500 ring-2 ring-background"
+          className="absolute -left-1 -top-1 size-2.5 rounded-full bg-amber-500 ring-2 ring-background"
         />
+      )}
+
+      {d.onDelete && (
+        <button
+          type="button"
+          title={t("canvas.deleteStep")}
+          onClick={(e) => {
+            e.stopPropagation();
+            d.onDelete!();
+          }}
+          className="nodrag absolute -right-2 -top-2 flex size-6 items-center justify-center rounded-full border border-border bg-background text-muted-foreground opacity-0 shadow-sm transition-all hover:border-rose-400/70 hover:text-rose-500 group-hover:opacity-100"
+        >
+          <Trash2 className="size-3.5" />
+        </button>
       )}
     </div>
   );

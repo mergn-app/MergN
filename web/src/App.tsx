@@ -10,6 +10,7 @@ import {
   useReactFlow,
   type Node,
   type Edge,
+  type Connection,
   type OnNodesChange,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
@@ -22,6 +23,7 @@ import {
   Check,
   Network,
   Plug,
+  Plus,
 } from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
 import { spaceHeaders } from "./space";
@@ -34,6 +36,7 @@ import { Pipeline } from "./Pipeline";
 import { Story } from "./Story";
 import { FuncNode } from "./FuncNode";
 import { GateEdge } from "./GateEdge";
+import { WireEdge } from "./WireEdge";
 import { layoutPositions } from "./layout";
 import { TriggerNode } from "./TriggerNode";
 import { NodePanel } from "./NodePanel";
@@ -85,7 +88,7 @@ const wireKey = (w: Wire) => `${w.from}.${w.fromOutput}->${w.to}.${w.toInput}`;
 const NO_CONNECTIONS: ConnectionMeta[] = [];
 
 const nodeTypes = { func: FuncNode, trigger: TriggerNode };
-const edgeTypes = { gate: GateEdge };
+const edgeTypes = { gate: GateEdge, wire: WireEdge };
 
 function buildNode(
   f: AuthoredFunc,
@@ -94,6 +97,7 @@ function buildNode(
   needsConnection: boolean,
   inputs: { name: string; bound: boolean; variable?: boolean }[],
   needsValue: boolean,
+  onDelete?: () => void,
 ): Node {
   return {
     id: f.id,
@@ -109,6 +113,7 @@ function buildNode(
       gated: !!f.gate,
       inputs,
       outputs: outputsOf(f),
+      onDelete,
     },
   };
 }
@@ -117,15 +122,21 @@ function Canvas({
   nodes,
   edges,
   onNodesChange,
+  onConnect,
+  isValidConnection,
   onSelect,
   onArrange,
+  onAddStep,
   colorMode,
 }: {
   nodes: Node[];
   edges: Edge[];
   onNodesChange: OnNodesChange<Node>;
+  onConnect: (c: Connection) => void;
+  isValidConnection: (c: Connection | Edge) => boolean;
   onSelect: (id: string) => void;
   onArrange: () => void;
+  onAddStep: () => void;
   colorMode: "dark" | "light";
 }) {
   const { fitView } = useReactFlow();
@@ -141,6 +152,8 @@ function Canvas({
       nodeTypes={nodeTypes}
       edgeTypes={edgeTypes}
       onNodesChange={onNodesChange}
+      onConnect={onConnect}
+      isValidConnection={isValidConnection}
       fitView
       fitViewOptions={{ padding: 0.28 }}
       colorMode={colorMode}
@@ -148,6 +161,19 @@ function Canvas({
     >
       <Background />
       <Controls />
+      <Panel
+        position="top-left"
+        style={{ marginLeft: "0.75rem", marginTop: "0.75rem" }}
+      >
+        <button
+          onClick={onAddStep}
+          title={t("canvas.addStep")}
+          className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs font-medium text-foreground/90 shadow-sm transition-colors hover:border-border"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          {t("canvas.addStep")}
+        </button>
+      </Panel>
       {nodes.length > 1 && (
         // sit just left of the monitoring entry pill (absolute right-3 top-3),
         // top-aligned to it (marginTop matches the pill's top-3), tight gap
@@ -775,6 +801,90 @@ export function App({
     [trigger.eventFields],
   );
 
+  // --- Canvas manual editing: add/remove edges, add/delete steps -------------
+  const removeWire = useCallback((wk: string) => {
+    setWires((prev) => prev.filter((w) => wireKey(w) !== wk));
+  }, []);
+
+  const onConnect = useCallback((c: Connection) => {
+    if (!c.source || !c.target || !c.sourceHandle || !c.targetHandle) return;
+    if (c.source === c.target) return;
+    const wire: Wire = {
+      from: c.source,
+      fromOutput: c.sourceHandle,
+      to: c.target,
+      toInput: c.targetHandle,
+    };
+    setWires((prev) => {
+      if (prev.some((w) => wireKey(w) === wireKey(wire))) return prev;
+      // an input takes a single source: replace any existing wire into it
+      const cleaned = prev.filter(
+        (w) => !(w.to === wire.to && w.toInput === wire.toInput),
+      );
+      return [...cleaned, wire];
+    });
+  }, []);
+
+  const isValidConnection = useCallback(
+    (c: Connection | Edge) => {
+      const source = c.source;
+      const target = c.target;
+      if (!source || !target || source === target) return false;
+      if (source === "trigger") return true; // trigger has no inbound edges
+      // reject if it would create a cycle (target can already reach source)
+      const adj = new Map<string, Set<string>>();
+      for (const w of wires) {
+        if (!adj.has(w.from)) adj.set(w.from, new Set());
+        adj.get(w.from)!.add(w.to);
+      }
+      const seen = new Set<string>();
+      const stack = [target];
+      while (stack.length) {
+        const cur = stack.pop()!;
+        if (cur === source) return false;
+        if (seen.has(cur)) continue;
+        seen.add(cur);
+        for (const n of adj.get(cur) ?? []) stack.push(n);
+      }
+      return true;
+    },
+    [wires],
+  );
+
+  const addStep = useCallback(() => {
+    const id = `step_${crypto.randomUUID().slice(0, 8)}`;
+    const stub: AuthoredFunc = {
+      id,
+      title: "New step",
+      summary: "",
+      version: 1,
+      kind: "adapter",
+      pure: true,
+      inputs: [],
+      outputSchema: { type: "object", properties: {}, required: [] },
+      bodySource: "export default async (ctx, input) => {\n  return {};\n}",
+      requires: [],
+      dangerClass: "benign",
+      idempotency: null,
+    };
+    setFuncs((prev) => [...prev, stub]);
+    setSelectedId(id);
+  }, []);
+
+  const deleteNode = useCallback((id: string) => {
+    setFuncs((prev) =>
+      prev
+        .filter((f) => f.id !== id)
+        .map((f) =>
+          f.gate?.ref && String(f.gate.ref).startsWith(`${id}.`)
+            ? { ...f, gate: undefined }
+            : f,
+        ),
+    );
+    setWires((prev) => prev.filter((w) => w.from !== id && w.to !== id));
+    setSelectedId((cur) => (cur === id ? null : cur));
+  }, []);
+
   useEffect(() => {
     const eventFields = trigger.eventFields ?? [];
     setWires((prev) => {
@@ -844,6 +954,7 @@ export function App({
           needsConnection,
           inputs,
           needsValue,
+          () => deleteNode(f.id),
         );
       });
       // The trigger node only exposes the actual event-data fields it carries —
@@ -906,6 +1017,7 @@ export function App({
     justFired,
     fireStatus,
     setNodes,
+    deleteNode,
   ]);
 
   const rfEdges: Edge[] = useMemo(() => {
@@ -920,8 +1032,10 @@ export function App({
         target: w.to,
         sourceHandle: w.fromOutput || undefined,
         targetHandle: w.toInput || undefined,
+        type: "wire",
         animated: true,
         style: { stroke: "#6ea8ff" },
+        data: { onDelete: () => removeWire(wireKey(w)) },
       }));
     // Trigger-fed inputs are implicit bindings (not wires) — draw them as edges
     // from the trigger node. ONLY the actual event-data fields (trigger.eventFields,
@@ -974,7 +1088,7 @@ export function App({
       });
     }
     return [...wireEdges, ...triggerEdges, ...gateEdges];
-  }, [wires, funcs, trigger.kind, trigger.eventFields]);
+  }, [wires, funcs, trigger.kind, trigger.eventFields, removeWire]);
 
   // Re-run the graph layout for ALL nodes (overrides manual positions on demand).
   const arrangeLayout = useCallback(() => {
@@ -1364,8 +1478,11 @@ export function App({
                   nodes={nodes}
                   edges={rfEdges}
                   onNodesChange={onNodesChange}
+                  onConnect={onConnect}
+                  isValidConnection={isValidConnection}
                   onSelect={onSelectNode}
                   onArrange={arrangeLayout}
+                  onAddStep={addStep}
                   colorMode={theme}
                 />
               </ReactFlowProvider>
