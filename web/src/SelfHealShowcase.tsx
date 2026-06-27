@@ -529,47 +529,50 @@ export function SelfHealShowcase() {
     >
       {/* Left header — shares row with right header on lg for equal height */}
       <div className="border-b border-border/40 bg-muted/20 px-3 py-3 lg:col-start-1 lg:row-start-1 lg:border-r">
-        <div className="flex items-center gap-2">
-          {STAGES.map((st, i) => {
-            const Icon = st.icon;
-            const active = i === stage;
-            const done = i < stage;
-            return (
-              <button
-                key={st.id}
-                onClick={() => goStage(i)}
-                className={cn(
-                  "flex flex-1 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors",
-                  active
-                    ? "border-primary/40 bg-background text-foreground"
-                    : "border-border/50 bg-background/40 text-muted-foreground hover:text-foreground",
-                )}
-              >
-                <span
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-1.5 sm:flex-1 sm:flex-row sm:gap-2">
+            {STAGES.map((st, i) => {
+              const Icon = st.icon;
+              const active = i === stage;
+              const done = i < stage;
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  onClick={() => goStage(i)}
                   className={cn(
-                    "flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium",
+                    "flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-left transition-colors sm:flex-1",
                     active
-                      ? "bg-primary/15 text-primary"
-                      : done
-                        ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                        : "bg-muted text-muted-foreground",
+                      ? "border-primary/40 bg-background text-foreground"
+                      : "border-border/50 bg-background/40 text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  {done ? <Check className="size-3" /> : i + 1}
-                </span>
-                <span className="flex items-center gap-1.5 truncate text-xs font-medium">
-                  <Icon className="size-3.5 shrink-0" />
-                  <span className="truncate">
-                    {t(`landing.selfHeal.${st.id}`)}
+                  <span
+                    className={cn(
+                      "flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium",
+                      active
+                        ? "bg-primary/15 text-primary"
+                        : done
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                          : "bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {done ? <Check className="size-3" /> : i + 1}
                   </span>
-                </span>
-              </button>
-            );
-          })}
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <Icon className="size-3.5 shrink-0" />
+                    <span className="truncate text-xs font-medium">
+                      {t(`landing.selfHeal.${st.id}`)}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
           <button
             type="button"
             onClick={() => setAutoPlay((v) => !v)}
-            className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition-colors hover:text-foreground"
+            className="relative inline-flex h-7 w-7 shrink-0 self-end items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition-colors hover:text-foreground sm:self-auto"
             title={
               autoPlay
                 ? t("landing.autoRotate.pause", { defaultValue: "Pause rotation" })

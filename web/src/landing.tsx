@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Menu, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { MergNLogo } from "@/components/MergNLogo";
@@ -23,6 +23,7 @@ export function Landing() {
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
   const [contactOpen, setContactOpen] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const glowMoveRaf = useRef<number | null>(null);
   const [communityGlow, setCommunityGlow] = useState({
     x: 50,
@@ -49,52 +50,103 @@ export function Landing() {
   const openAuth = (mode: "signin" | "signup") => {
     setAuthMode(mode);
     setAuthOpen(true);
+    setMobileMenuOpen(false);
   };
+
+  useEffect(() => {
+    if (!mobileMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileMenuOpen]);
 
   return (
     <div className="flex min-h-screen w-full flex-col overflow-x-hidden overflow-y-auto bg-background text-foreground">
       <section className="flex flex-col lg:h-screen lg:min-h-screen">
-        <div className="p-2 pb-0">
-          <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-2 py-2">
-          <div className="flex items-center gap-2">
-            <MergNLogo className="h-5  w-auto text-foreground" />
-            <div className="text-sm font-semibold">MergN</div>
-          </div>
-          <div className="ml-auto flex items-center gap-3">
-            <LanguageSwitcher />
-            <Button
-              size="icon"
-              variant="ghost"
-              className="h-8 w-8"
-              title={
-                theme === "dark"
-                  ? t("header.switchToLight")
-                  : t("header.switchToDark")
-              }
-              onClick={() =>
-                setTheme((prev) => (prev === "dark" ? "light" : "dark"))
-              }
-            >
-              {theme === "dark" ? (
-                <Sun className="h-4 w-4" />
-              ) : (
-                <Moon className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => openAuth("signin")}
-            >
-              {t("auth.signIn")}
-            </Button>
-            <Button size="sm" onClick={() => openAuth("signup")}>
-              {t("auth.createAccount")}
-            </Button>
-          </div>
+        <div className="relative p-2 pb-0">
+          <header className="flex items-center gap-3 rounded-2xl border border-border/40 bg-muted/40 px-3 py-2">
+            <div className="flex items-center gap-2">
+              <MergNLogo className="h-5 w-auto text-foreground" />
+              <div className="text-sm font-semibold">MergN</div>
+            </div>
+
+            <div className="ml-auto flex items-center gap-2 md:gap-3">
+              <LanguageSwitcher />
+              <Button
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8"
+                title={
+                  theme === "dark"
+                    ? t("header.switchToLight")
+                    : t("header.switchToDark")
+                }
+                onClick={() =>
+                  setTheme((prev) => (prev === "dark" ? "light" : "dark"))
+                }
+              >
+                {theme === "dark" ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Moon className="h-4 w-4" />
+                )}
+              </Button>
+              <div className="hidden items-center gap-2 md:flex">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openAuth("signin")}
+                >
+                  {t("auth.signIn")}
+                </Button>
+                <Button size="sm" onClick={() => openAuth("signup")}>
+                  {t("auth.createAccount")}
+                </Button>
+              </div>
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 md:hidden"
+                aria-expanded={mobileMenuOpen}
+                aria-label={mobileMenuOpen ? "Close menu" : "Open menu"}
+                onClick={() => setMobileMenuOpen((open) => !open)}
+              >
+                {mobileMenuOpen ? (
+                  <X className="h-4 w-4" />
+                ) : (
+                  <Menu className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
           </header>
+
+          {mobileMenuOpen && (
+            <>
+              <button
+                type="button"
+                aria-label="Close menu"
+                className="fixed inset-0 z-40 bg-background/60 md:hidden"
+                onClick={() => setMobileMenuOpen(false)}
+              />
+              <div className="absolute inset-x-2 top-full z-50 mt-1 rounded-2xl border border-border/50 bg-card p-3 shadow-lg md:hidden">
+                <div className="flex flex-col gap-2">
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => openAuth("signin")}
+                  >
+                    {t("auth.signIn")}
+                  </Button>
+                  <Button className="w-full" onClick={() => openAuth("signup")}>
+                    {t("auth.createAccount")}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
         </div>
         <div className="flex min-h-0 flex-1 flex-col items-center gap-6 p-6 pb-6">
           <div className="w-full max-w-4xl text-center mt-1">
@@ -217,11 +269,11 @@ export function Landing() {
           <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-foreground/75">
             {t("landing.community.desc")}
           </p>
-          <div className="mt-6 flex items-center justify-center gap-3">
-            <Button size="sm" onClick={() => openAuth("signup")}>
+          <div className="mt-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
+            <Button size="sm" className="w-full sm:w-auto" onClick={() => openAuth("signup")}>
               {t("landing.community.joinNow")}
             </Button>
-            <Button asChild size="sm" variant="ghost">
+            <Button asChild size="sm" variant="ghost" className="w-full sm:w-auto">
               <a
                 href="https://discord.gg/wDxHFkcbhD"
                 target="_blank"
@@ -230,7 +282,7 @@ export function Landing() {
                 {t("landing.community.joinDiscord")}
               </a>
             </Button>
-            <Button asChild size="sm" variant="ghost">
+            <Button asChild size="sm" variant="ghost" className="w-full sm:w-auto">
               <a
                 href="https://github.com/mergn-app/mergn"
                 target="_blank"

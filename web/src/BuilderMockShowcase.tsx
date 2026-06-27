@@ -917,19 +917,19 @@ export function BuilderMockShowcase() {
       onPointerDown={onPointerDown}
       className="grid h-full min-h-0 w-full grid-cols-1 overflow-hidden rounded-2xl border border-border/50 bg-card shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-primary/30 lg:grid-cols-[2fr_1fr]"
     >
-      <div className="flex min-h-[320px] flex-col border-b border-border/40 lg:border-b-0 lg:border-r">
-        <div className="flex items-center gap-2 border-b border-border/40 bg-muted/30 p-3">
-          <span className="mr-1 text-[11px] font-medium text-muted-foreground">
+      <div className="flex flex-col border-b border-border/40 lg:min-h-0 lg:flex-1 lg:border-b-0 lg:border-r">
+        <div className="flex shrink-0 flex-col gap-2 border-b border-border/40 bg-muted/30 p-3 sm:flex-row sm:items-center">
+          <span className="text-[11px] font-medium text-muted-foreground sm:mr-1 sm:shrink-0">
             {t("landing.tryIdea")}
           </span>
-          <div className="scrollbar-none flex min-w-0 flex-1 items-center gap-2 overflow-x-auto">
+          <div className="flex flex-col gap-1.5 sm:min-w-0 sm:flex-1 sm:flex-row sm:items-center sm:gap-2 sm:overflow-x-auto scrollbar-none">
             {SHOWCASE_SCENARIOS.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 onClick={() => onSelectScenario(item.id, true)}
                 className={cn(
-                  "shrink-0 rounded-lg border px-2.5 py-1 text-[11px] transition-colors",
+                  "w-full rounded-lg border px-2.5 py-1.5 text-left text-[11px] transition-colors sm:w-auto sm:shrink-0 sm:py-1",
                   selected === item.id
                     ? "border-tone-amber/50 bg-tone-amber-surface text-tone-amber-fg"
                     : "border-border/60 bg-background text-muted-foreground hover:text-foreground",
@@ -942,7 +942,7 @@ export function BuilderMockShowcase() {
           <button
             type="button"
             onClick={() => setAutoRotate((v) => !v)}
-            className="relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition-colors hover:text-foreground"
+            className="relative inline-flex h-7 w-7 shrink-0 self-end items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground transition-colors hover:text-foreground sm:self-auto"
             title={
               autoRotate
                 ? t("landing.autoRotate.pause", { defaultValue: "Pause rotation" })
@@ -992,8 +992,8 @@ export function BuilderMockShowcase() {
           </button>
         </div>
 
-        <div className="relative flex min-h-0 flex-1 flex-col">
-          <div className="relative min-h-0 flex-1">
+        <div className="relative flex flex-col lg:min-h-0 lg:flex-1">
+          <div className="relative h-[360px] shrink-0 lg:h-auto lg:min-h-0 lg:flex-1">
             <div className="absolute left-3 top-3 z-10 flex rounded-lg border border-border/50 bg-muted p-0.5 text-xs">
               {(["story", "pipeline", "graph"] as const).map((item) => (
                 <button
@@ -1042,19 +1042,18 @@ export function BuilderMockShowcase() {
                 onSelect={onSelectNode}
               />
             )}
-          </div>
 
-          <div
-            className={cn(
-              "pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center transition-opacity duration-300",
-              panelOpen ? "opacity-0" : "opacity-100",
-            )}
-          >
-            <div className="mb-3 rounded-full border border-border/50 bg-muted/90 px-3 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
-              {t("landing.showcase.clickStep")}
+            <div
+              className={cn(
+                "pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center transition-opacity duration-300",
+                panelOpen ? "opacity-0" : "opacity-100",
+              )}
+            >
+              <div className="mb-3 rounded-full border border-border/50 bg-muted/90 px-3 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
+                {t("landing.showcase.clickStep")}
+              </div>
             </div>
           </div>
-        </div>
 
         <div className="group flex h-2 shrink-0 cursor-default items-center justify-center border-t border-border/40">
           <div className="h-0.5 w-8 rounded-full bg-border transition-colors group-hover:bg-foreground/40" />
@@ -1066,6 +1065,7 @@ export function BuilderMockShowcase() {
           <div style={{ height: MOCK_PANEL_HEIGHT }}>
             <MockRunPanel selected={selectedFunc} theme={theme} />
           </div>
+        </div>
         </div>
       </div>
 
