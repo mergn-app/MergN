@@ -407,13 +407,26 @@ export function App({
     [connections],
   );
 
+  // Per-provider { methods, needsAuth } for the workflow's providers. needsAuth
+  // is false for credential-less providers (auth: none) — those need NO
+  // connection, so they must not count as "missing".
+  const [providerInfo, setProviderInfo] = useState<
+    Record<string, { methods: string[]; needsAuth: boolean }>
+  >({});
+  // unknown (not yet fetched) defaults to needing auth, so we don't flash a
+  // false "ready" before info loads.
+  const needsConn = useCallback(
+    (p: string) => (providerInfo[p]?.needsAuth ?? true) && !connectedProviders.has(p),
+    [providerInfo, connectedProviders],
+  );
+
   const missingProviders = useMemo(() => {
     const required = new Set<string>();
     for (const f of funcs) {
       if (!f.pure) for (const r of f.requires) required.add(r.provider);
     }
-    return [...required].filter((p) => !connectedProviders.has(p));
-  }, [funcs, connectedProviders]);
+    return [...required].filter((p) => needsConn(p));
+  }, [funcs, needsConn]);
 
   const wiringIssues = useMemo(
     () =>
@@ -960,10 +973,8 @@ export function App({
     [funcs, updateFuncCode],
   );
 
-  // Provider method names for ctx.connections.<provider>.<method> autocomplete.
-  const [providerMethods, setProviderMethods] = useState<
-    Record<string, string[]>
-  >({});
+  // Fetch { methods, needsAuth } for the workflow's providers (drives both the
+  // ctx.connections.<provider>.<method> autocomplete and the no-connection logic).
   const providerIdsKey = useMemo(
     () =>
       [...new Set(funcs.flatMap((f) => f.requires.map((r) => r.provider)))]
@@ -975,7 +986,7 @@ export function App({
   useEffect(() => {
     const ids = providerIdsKey ? providerIdsKey.split(",") : [];
     if (!ids.length) {
-      setProviderMethods({});
+      setProviderInfo({});
       return;
     }
     let cancelled = false;
@@ -987,8 +998,11 @@ export function App({
           body: JSON.stringify({ ids }),
         });
         if (!res.ok) return;
-        const data = (await res.json()) as Record<string, string[]>;
-        if (!cancelled) setProviderMethods(data);
+        const data = (await res.json()) as Record<
+          string,
+          { methods: string[]; needsAuth: boolean }
+        >;
+        if (!cancelled) setProviderInfo(data);
       } catch {
         // ignore — autocomplete just won't have method names
       }
@@ -997,6 +1011,13 @@ export function App({
       cancelled = true;
     };
   }, [providerIdsKey]);
+  const providerMethods = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(providerInfo).map(([k, v]) => [k, v.methods]),
+      ),
+    [providerInfo],
+  );
 
   useEffect(() => {
     const eventFields = trigger.eventFields ?? [];
@@ -1034,7 +1055,7 @@ export function App({
       const layout = layoutPositions(funcs, wires, trigger);
       const funcNodes = funcs.map((f, i) => {
         const needsConnection =
-          !f.pure && f.requires.some((r) => !connectedProviders.has(r.provider));
+          !f.pure && f.requires.some((r) => needsConn(r.provider));
         const cfg = configValues[f.id] ?? {};
         const inputs = f.inputs.map((p) => {
           const wired = wires.some(
@@ -1122,6 +1143,7 @@ export function App({
     configValues,
     runStatus,
     connectedProviders,
+    needsConn,
     triggerFields,
     variableFields,
     trigger,

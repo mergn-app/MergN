@@ -3437,11 +3437,16 @@ app.get("/api/providers/:id/auth", async (c) => {
 app.post("/api/providers/methods", async (c) => {
   const spaceId = c.get("spaceId");
   const { ids } = await c.req.json<{ ids?: string[] }>();
-  const out: Record<string, string[]> = {};
+  const out: Record<string, { methods: string[]; needsAuth: boolean }> = {};
   for (const id of [...new Set(ids ?? [])]) {
     if (typeof id !== "string") continue;
     const spec = registry.getProvider(spaceId, id);
-    out[id] = providerMethodNames(spec?.clientSource);
+    out[id] = {
+      methods: providerMethodNames(spec?.clientSource),
+      // a provider whose auth resolves to "none" (no credential fields, no
+      // OAuth) needs no connection — don't flag it as "needs connection".
+      needsAuth: registry.needsAuth(spaceId, id),
+    };
   }
   return c.json(out);
 });
