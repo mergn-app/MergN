@@ -98,6 +98,8 @@ function buildNode(
   inputs: { name: string; bound: boolean; variable?: boolean }[],
   needsValue: boolean,
   onDelete?: () => void,
+  onAddInput?: (name: string) => void,
+  onAddOutput?: (name: string) => void,
 ): Node {
   return {
     id: f.id,
@@ -114,8 +116,35 @@ function buildNode(
       inputs,
       outputs: outputsOf(f),
       onDelete,
+      onAddInput,
+      onAddOutput,
     },
   };
+}
+
+const FIELD_BAD = /[^A-Za-z0-9_$]/g;
+function sanitizeField(raw: string): string {
+  const s = raw.trim().replace(FIELD_BAD, "_");
+  return /^[0-9]/.test(s) ? `_${s}` : s;
+}
+
+// Add a usable `const <name> = input.<name>;` to the top of the step body so the
+// input port is derived by the normalize pass (code stays the source of truth).
+function insertInputRef(body: string, name: string): string {
+  const m = body.match(/=>\s*\{|\)\s*\{/);
+  if (m && m.index !== undefined) {
+    const at = m.index + m[0].length;
+    return `${body.slice(0, at)}\n  const ${name} = input.${name};${body.slice(at)}`;
+  }
+  return `${body}\n// input.${name}`;
+}
+
+// Add a field to the step's returned object so the output port appears.
+function insertOutputField(body: string, name: string): string | null {
+  const m = body.match(/return\s*\{/);
+  if (!m || m.index === undefined) return null;
+  const at = m.index + m[0].length;
+  return `${body.slice(0, at)} ${name}: null,${body.slice(at)}`;
 }
 
 function Canvas({
@@ -889,6 +918,47 @@ export function App({
     setSelectedId((cur) => (cur === id ? null : cur));
   }, []);
 
+  // Apply a step code change then re-derive ports/wires via the normalize pass.
+  const updateFuncCode = useCallback(
+    (funcId: string, bodySource: string) => {
+      const updated = funcs.map((f) =>
+        f.id === funcId ? { ...f, bodySource } : f,
+      );
+      setFuncs(updated);
+      void normalizeAndApply(updated, wires);
+    },
+    [funcs, wires, normalizeAndApply],
+  );
+
+  // "+ input" / "+ output" on a node: write the matching code (a const reference
+  // / a return field), then normalize derives the port. No raw code typing.
+  const addInputToFunc = useCallback(
+    (funcId: string, rawName: string) => {
+      const name = sanitizeField(rawName);
+      if (!name) return;
+      const f = funcs.find((x) => x.id === funcId);
+      if (!f || f.inputs.some((i) => i.name === name)) return;
+      updateFuncCode(funcId, insertInputRef(f.bodySource, name));
+    },
+    [funcs, updateFuncCode],
+  );
+
+  const addOutputToFunc = useCallback(
+    (funcId: string, rawName: string) => {
+      const name = sanitizeField(rawName);
+      if (!name) return;
+      const f = funcs.find((x) => x.id === funcId);
+      if (!f || outputsOf(f).includes(name)) return;
+      const next = insertOutputField(f.bodySource, name);
+      if (next) updateFuncCode(funcId, next);
+      else
+        setLintDiag([
+          `Couldn't add output "${name}" automatically — make the step end with a "return { ... }" object.`,
+        ]);
+    },
+    [funcs, updateFuncCode],
+  );
+
   // Provider method names for ctx.connections.<provider>.<method> autocomplete.
   const [providerMethods, setProviderMethods] = useState<
     Record<string, string[]>
@@ -997,6 +1067,8 @@ export function App({
           inputs,
           needsValue,
           () => deleteNode(f.id),
+          (n) => addInputToFunc(f.id, n),
+          (n) => addOutputToFunc(f.id, n),
         );
       });
       // The trigger node only exposes the actual event-data fields it carries —
@@ -1060,6 +1132,8 @@ export function App({
     fireStatus,
     setNodes,
     deleteNode,
+    addInputToFunc,
+    addOutputToFunc,
   ]);
 
   const rfEdges: Edge[] = useMemo(() => {
@@ -1587,13 +1661,7 @@ export function App({
                   onStatus={setRunStatus}
                   onData={setRunData}
                   onRepair={onRepair}
-                  onUpdateFuncCode={(funcId, bodySource) => {
-                    const updated = funcs.map((f) =>
-                      f.id === funcId ? { ...f, bodySource } : f,
-                    );
-                    setFuncs(updated);
-                    void normalizeAndApply(updated, wires);
-                  }}
+                  onUpdateFuncCode={updateFuncCode}
                   onWireInput={onWireInput}
                   providerMethods={providerMethods}
                   lintDiag={lintDiag}

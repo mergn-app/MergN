@@ -1,6 +1,7 @@
+import { useState } from "react";
 import { Handle, Position, type NodeProps } from "@xyflow/react";
 import { useTranslation } from "react-i18next";
-import { ArrowLeftRight, Trash2, Zap } from "lucide-react";
+import { ArrowLeftRight, Plus, Trash2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Port {
@@ -20,6 +21,73 @@ interface FuncNodeData {
   inputs: Port[];
   outputs: string[];
   onDelete?: () => void;
+  onAddInput?: (name: string) => void;
+  onAddOutput?: (name: string) => void;
+}
+
+// Inline "+ input / + output" affordance on a node: a small button that turns
+// into a name field. Stops key/click propagation so typing (incl. Backspace)
+// doesn't pan/delete the node on the canvas.
+function AddPort({
+  kind,
+  align,
+  onAdd,
+}: {
+  kind: "input" | "output";
+  align?: "right";
+  onAdd: (name: string) => void;
+}) {
+  const { t } = useTranslation();
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState("");
+  const commit = () => {
+    const n = name.trim();
+    if (n) onAdd(n);
+    setName("");
+    setEditing(false);
+  };
+  if (!editing) {
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setEditing(true);
+        }}
+        className={cn(
+          "nodrag flex h-5 items-center gap-1 text-[10px] text-muted-foreground/60 transition-colors hover:text-foreground",
+          align === "right" && "justify-end",
+        )}
+      >
+        <Plus className="size-3" />
+        {kind === "input" ? t("canvas.addInput") : t("canvas.addOutput")}
+      </button>
+    );
+  }
+  return (
+    <input
+      autoFocus
+      value={name}
+      placeholder={
+        kind === "input" ? t("canvas.inputName") : t("canvas.outputName")
+      }
+      onChange={(e) => setName(e.target.value)}
+      onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        e.stopPropagation();
+        if (e.key === "Enter") commit();
+        else if (e.key === "Escape") {
+          setName("");
+          setEditing(false);
+        }
+      }}
+      onBlur={commit}
+      className={cn(
+        "nodrag h-5 w-full rounded border border-primary/40 bg-background px-1 font-mono text-[11px] outline-none",
+        align === "right" && "text-right",
+      )}
+    />
+  );
 }
 
 function PortDot({
@@ -94,7 +162,10 @@ export function FuncNode({ data, selected }: NodeProps) {
           </div>
         </div>
 
-        {(d.inputs.length > 0 || d.outputs.length > 0) && (
+        {(d.inputs.length > 0 ||
+          d.outputs.length > 0 ||
+          d.onAddInput ||
+          d.onAddOutput) && (
           <div className="flex gap-2 border-t border-border/60 px-1.5 py-1.5">
             <div className="flex flex-1 flex-col gap-0.5">
               {d.inputs.map((p) => (
@@ -114,6 +185,7 @@ export function FuncNode({ data, selected }: NodeProps) {
                   </span>
                 </div>
               ))}
+              {d.onAddInput && <AddPort kind="input" onAdd={d.onAddInput} />}
             </div>
             <div className="flex flex-1 flex-col gap-0.5">
               {d.outputs.map((o) => (
@@ -124,6 +196,9 @@ export function FuncNode({ data, selected }: NodeProps) {
                   <PortDot id={o} type="source" tone="!border-tone-emerald" />
                 </div>
               ))}
+              {d.onAddOutput && (
+                <AddPort kind="output" align="right" onAdd={d.onAddOutput} />
+              )}
             </div>
           </div>
         )}

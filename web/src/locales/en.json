@@ -411,7 +411,11 @@
     "autoArrange": "Auto-arrange",
     "addStep": "Add step",
     "removeWire": "Remove connection",
-    "deleteStep": "Delete step"
+    "deleteStep": "Delete step",
+    "addInput": "input",
+    "addOutput": "output",
+    "inputName": "input name…",
+    "outputName": "output name…"
   },
   "lint": {
     "title": "Graph updated after your edit",

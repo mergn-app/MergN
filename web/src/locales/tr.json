@@ -411,7 +411,11 @@
     "autoArrange": "Otomatik diz",
     "addStep": "Adım ekle",
     "removeWire": "Bağlantıyı kaldır",
-    "deleteStep": "Adımı sil"
+    "deleteStep": "Adımı sil",
+    "addInput": "girdi",
+    "addOutput": "çıktı",
+    "inputName": "girdi adı…",
+    "outputName": "çıktı adı…"
   },
   "lint": {
     "title": "Düzenlemenden sonra grafik güncellendi",
