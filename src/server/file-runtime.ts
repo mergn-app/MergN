@@ -5,6 +5,11 @@ export type FileResolver = (
   fileId: string,
 ) => Promise<{ name: string; mime: string; size: number; body: Buffer } | null>;
 
+// A stored file's id is a v4 UUID (see createFileService). Used to spot inputs
+// that are file references even when the step never declared/read them as files.
+const FILE_ID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Decorates a Runtime so that any step input typed `file` whose value is a file
 // id is replaced — HOST-SIDE, before the code runs — with the file's bytes:
 //   { name, mime, size, base64 }
@@ -62,6 +67,27 @@ export class FileInjectingRuntime implements Runtime {
         base64: f.body.toString("base64"),
       };
     }
+
+    // Catch-all hydration: ANY other input whose value is a stored-file id gets
+    // resolved too, regardless of its declared type. This fixes steps that simply
+    // forward the picked file to a provider — e.g. dropbox.uploadFile(path,
+    // input.file) — without ever reading input.file.base64: they now receive the
+    // real { name, mime, size, base64 } object instead of the raw blob id. The
+    // UUID pre-check avoids a store lookup for ordinary string inputs.
+    for (const [name, v] of Object.entries(input)) {
+      if (names.has(name)) continue;
+      if (typeof v !== "string" || !FILE_ID_RE.test(v)) continue;
+      const f = await this.resolve(v);
+      if (!f) continue; // a UUID that isn't a stored file — leave it untouched
+      if (next === input) next = { ...input };
+      next[name] = {
+        name: f.name,
+        mime: f.mime,
+        size: f.size,
+        base64: f.body.toString("base64"),
+      };
+    }
+
     return this.inner.run(def, ctx, next);
   }
 }
