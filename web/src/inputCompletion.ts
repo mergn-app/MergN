@@ -26,6 +26,8 @@ export interface FlowCompletionOpts {
   wires: Wire[];
   config: Record<string, Record<string, string>>;
   triggerFields: string[];
+  // method names each provider's client exposes, for ctx.connections.<p>.<method>
+  providerMethods?: Record<string, string[]>;
   // When provided, picking an upstream output / trigger field auto-creates the wire
   // (and the target input port) so the value actually reaches the code at runtime.
   onWireInput?: (p: {
@@ -52,7 +54,8 @@ function srcDetail(s: Source): string {
 const WORD = /^[A-Za-z0-9_$]*$/;
 
 export function flowCompletion(opts: FlowCompletionOpts): Extension {
-  const { node, funcs, wires, config, triggerFields, onWireInput } = opts;
+  const { node, funcs, wires, config, triggerFields, providerMethods, onWireInput } =
+    opts;
   const { sourceOf } = lineage(funcs, wires, config);
 
   // Only upstream steps (those before this node topologically) can be wired in
@@ -122,6 +125,23 @@ export function flowCompletion(opts: FlowCompletionOpts): Extension {
         }
       }
 
+      return { from, options, validFor: WORD };
+    }
+
+    // ctx.connections.<provider>.<method> — suggest the provider's real methods
+    const meth = ctx.matchBefore(
+      /ctx\.connections\.[A-Za-z0-9_$]+\.[A-Za-z0-9_$]*/,
+    );
+    if (meth) {
+      const pm = /ctx\.connections\.([A-Za-z0-9_$]+)\./.exec(meth.text);
+      const provider = pm?.[1];
+      const methods = (provider && providerMethods?.[provider]) || [];
+      const from = meth.from + meth.text.lastIndexOf(".") + 1;
+      const options: Completion[] = methods.map((m) => ({
+        label: m,
+        type: "method",
+        detail: provider,
+      }));
       return { from, options, validFor: WORD };
     }
 

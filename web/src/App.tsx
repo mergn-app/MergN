@@ -769,6 +769,11 @@ export function App({
     [],
   );
 
+  // Diagnostics from the last normalize ("input X removed", "wire Y dropped"),
+  // shown as a dismissible lint banner in the editor.
+  const [lintDiag, setLintDiag] = useState<string[]>([]);
+  const clearLint = useCallback(() => setLintDiag([]), []);
+
   // After a manual code edit, ask the server to deterministically re-derive ports
   // and drop wires/gates that reference fields the edited code no longer exposes,
   // then apply the cleaned graph. Keeps hand-edits as consistent as AI builds.
@@ -792,8 +797,7 @@ export function App({
         };
         setFuncs(data.funcs);
         setWires(data.wires);
-        if (data.diagnostics?.length)
-          console.info("[normalize]", ...data.diagnostics);
+        setLintDiag(data.diagnostics ?? []);
       } catch {
         // network/normalize failure → keep the optimistic local edit as-is
       }
@@ -884,6 +888,44 @@ export function App({
     setWires((prev) => prev.filter((w) => w.from !== id && w.to !== id));
     setSelectedId((cur) => (cur === id ? null : cur));
   }, []);
+
+  // Provider method names for ctx.connections.<provider>.<method> autocomplete.
+  const [providerMethods, setProviderMethods] = useState<
+    Record<string, string[]>
+  >({});
+  const providerIdsKey = useMemo(
+    () =>
+      [...new Set(funcs.flatMap((f) => f.requires.map((r) => r.provider)))]
+        .filter(Boolean)
+        .sort()
+        .join(","),
+    [funcs],
+  );
+  useEffect(() => {
+    const ids = providerIdsKey ? providerIdsKey.split(",") : [];
+    if (!ids.length) {
+      setProviderMethods({});
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/providers/methods", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...spaceHeaders() },
+          body: JSON.stringify({ ids }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as Record<string, string[]>;
+        if (!cancelled) setProviderMethods(data);
+      } catch {
+        // ignore — autocomplete just won't have method names
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [providerIdsKey]);
 
   useEffect(() => {
     const eventFields = trigger.eventFields ?? [];
@@ -1553,6 +1595,9 @@ export function App({
                     void normalizeAndApply(updated, wires);
                   }}
                   onWireInput={onWireInput}
+                  providerMethods={providerMethods}
+                  lintDiag={lintDiag}
+                  onClearLint={clearLint}
                 />
               </div>
             </>

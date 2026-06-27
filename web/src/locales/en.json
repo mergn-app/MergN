@@ -413,6 +413,10 @@
     "removeWire": "Remove connection",
     "deleteStep": "Delete step"
   },
+  "lint": {
+    "title": "Graph updated after your edit",
+    "dismiss": "Dismiss"
+  },
   "mcp": {
     "title": "Connect Claude / ChatGPT",
     "subtitle": "Drive your workflows from an AI chat app — it builds and runs them for you.",

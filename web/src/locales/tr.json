@@ -413,6 +413,10 @@
     "removeWire": "Bağlantıyı kaldır",
     "deleteStep": "Adımı sil"
   },
+  "lint": {
+    "title": "Düzenlemenden sonra grafik güncellendi",
+    "dismiss": "Kapat"
+  },
   "mcp": {
     "title": "Claude / ChatGPT Bağla",
     "subtitle": "Workflow'larını bir yapay zeka sohbet uygulamasından yönet — senin için kurar ve çalıştırır.",

@@ -97,7 +97,11 @@ import {
   repairProvider,
   updateProvider,
 } from "../agent/provider-author";
-import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
+import {
+  designWorkflow,
+  planWorkflow,
+  providerMethodNames,
+} from "../agent/workflow-designer";
 import { reconcileWiring, type Wire } from "../agent/wiring-repair";
 import { normalizeGraph, type NormFunc } from "../agent/normalize";
 import { probeModel } from "../agent/probe";
@@ -3426,6 +3430,20 @@ app.get("/api/providers/:id/auth", async (c) => {
   const spec = registry.getProvider(c.get("spaceId"), c.req.param("id"));
   if (!spec) return c.json({ error: "provider not found" }, 404);
   return c.json(publicAuth(spec));
+});
+
+// Method names each given provider's client exposes — used by the step-code
+// editor to autocomplete `ctx.connections.<provider>.<method>()`.
+app.post("/api/providers/methods", async (c) => {
+  const spaceId = c.get("spaceId");
+  const { ids } = await c.req.json<{ ids?: string[] }>();
+  const out: Record<string, string[]> = {};
+  for (const id of [...new Set(ids ?? [])]) {
+    if (typeof id !== "string") continue;
+    const spec = registry.getProvider(spaceId, id);
+    out[id] = providerMethodNames(spec?.clientSource);
+  }
+  return c.json(out);
 });
 
 app.get("/api/providers/:id/source", async (c) => {

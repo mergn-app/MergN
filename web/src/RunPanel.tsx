@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
-import { RefreshCw, Loader2, Check, Pencil } from "lucide-react";
+import { RefreshCw, Loader2, Check, Pencil, Info, X } from "lucide-react";
 import { format } from "prettier/standalone";
 import babel from "prettier/plugins/babel";
 import estree from "prettier/plugins/estree";
@@ -96,6 +96,9 @@ export function RunPanel({
   onRepair,
   onUpdateFuncCode,
   onWireInput,
+  providerMethods,
+  lintDiag = [],
+  onClearLint,
   onConfigChange,
   savePending = false,
 }: {
@@ -138,6 +141,9 @@ export function RunPanel({
     from: string;
     fromOutput: string;
   }) => void;
+  providerMethods?: Record<string, string[]>;
+  lintDiag?: string[];
+  onClearLint?: () => void;
 }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
@@ -189,11 +195,27 @@ export function RunPanel({
             wires,
             config,
             triggerFields: trigger.eventFields ?? [],
+            providerMethods,
             onWireInput,
           })
         : undefined,
-    [selected, funcs, wires, config, trigger.eventFields, onWireInput],
+    [
+      selected,
+      funcs,
+      wires,
+      config,
+      trigger.eventFields,
+      providerMethods,
+      onWireInput,
+    ],
   );
+
+  // Auto-dismiss the lint banner after a while (also dismissable manually).
+  useEffect(() => {
+    if (!lintDiag.length || !onClearLint) return;
+    const id = setTimeout(onClearLint, 12000);
+    return () => clearTimeout(id);
+  }, [lintDiag, onClearLint]);
   const codeDirtyRef = useRef(false);
 
   useEffect(() => {
@@ -1071,6 +1093,28 @@ export function RunPanel({
                   )}
                 </div>
               </div>
+              {lintDiag.length > 0 && (
+                <div className="mb-2 rounded-md border border-sky-500/40 bg-sky-500/10 px-2.5 py-2 text-[11px] text-sky-100">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 font-medium">
+                      <Info className="h-3.5 w-3.5" />
+                      {t("lint.title")}
+                    </span>
+                    <button
+                      onClick={onClearLint}
+                      className="text-sky-300/70 transition-colors hover:text-sky-100"
+                      title={t("lint.dismiss")}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                  <ul className="list-disc space-y-0.5 pl-4 font-mono text-sky-200/90">
+                    {lintDiag.map((d, i) => (
+                      <li key={i}>{d}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               <div className="min-h-0 flex-1">
                 <CodeBlock
                   source={selected.bodySource}

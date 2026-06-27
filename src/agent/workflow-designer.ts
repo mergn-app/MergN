@@ -240,7 +240,7 @@ const BODY_SYSTEM = [
 // clientSource factory (`async foo(`/`foo: async`). Used to constrain the
 // step-body author so it can't call a method the provider doesn't have
 // (the gmail.sendMail-vs-sendEmail class of hallucination).
-function providerMethodNames(clientSource?: string): string[] {
+export function providerMethodNames(clientSource?: string): string[] {
   if (!clientSource) return [];
   const names = new Set<string>();
   for (const m of clientSource.matchAll(/async\s+([A-Za-z0-9_$]+)\s*\(/g))
