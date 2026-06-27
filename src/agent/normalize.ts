@@ -25,6 +25,8 @@ export interface NormFunc {
     properties?: Record<string, unknown>;
     required?: string[];
   };
+  requires?: { name: string; provider: string; scopes: string[] }[];
+  pure?: boolean;
   gate?: { ref?: string; equals?: unknown; truthy?: boolean } | null;
   [k: string]: unknown;
 }
@@ -131,7 +133,24 @@ export function normalizeGraph(
       properties[n] = f.outputSchema?.properties?.[n] ?? { type: "string" };
     const outputSchema = { type: "object", properties, required: outNames };
 
-    return { ...f, inputs, outputSchema };
+    // Derive provider requirements from ctx.connections.<name> usage so a manually
+    // written step that calls a provider gets the connection injected at run time
+    // (the runtime builds ctx.connections from func.requires). A step that calls a
+    // provider is effectful (pure: false).
+    const provs = [
+      ...new Set(
+        [...body.matchAll(/ctx\.connections\.([A-Za-z0-9_$]+)/g)].map(
+          (m) => m[1],
+        ),
+      ),
+    ];
+    const existingReq = new Map((f.requires ?? []).map((r) => [r.name, r]));
+    const requires = provs.map(
+      (name) => existingReq.get(name) ?? { name, provider: name, scopes: [] },
+    );
+    const pure = provs.length === 0 ? (f.pure ?? true) : false;
+
+    return { ...f, inputs, outputSchema, requires, pure };
   });
 
   const funcById = new Map(funcs.map((f) => [f.id, f]));

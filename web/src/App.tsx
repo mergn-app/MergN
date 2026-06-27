@@ -199,7 +199,7 @@ function Canvas({
         <button
           onClick={onAddStep}
           title={t("canvas.addStep")}
-          className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition-colors hover:border-primary/70 hover:bg-primary/15"
+          className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-foreground/90 transition-colors hover:border-border"
         >
           <Plus className="h-3.5 w-3.5" />
           {t("canvas.addStep")}
