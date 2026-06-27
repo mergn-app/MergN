@@ -1270,7 +1270,7 @@ export function RunPanel({
                                 : [],
                             });
                           }}
-                          className="ml-auto rounded-md bg-amber-500/20 px-2 py-0.5 text-[11px] text-amber-200 hover:bg-amber-500/30"
+                          className="ml-auto rounded-md border border-tone-amber/30 bg-tone-amber-surface px-2 py-0.5 text-[11px] font-medium text-tone-amber-fg hover:bg-tone-amber/20"
                         >
                           {t("run.fixWithAi")}
                         </button>
