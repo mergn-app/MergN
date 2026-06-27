@@ -1289,10 +1289,10 @@ export function RunPanel({
                         </div>
                         {r.error ? (
                           <div>
-                            <div className="text-[10px] text-rose-300/80">
+                            <div className="text-[10px] text-tone-rose-fg/80">
                               {t("node.errorLabel")}
                             </div>
-                            <pre className="mt-0.5 overflow-auto rounded-lg border border-rose-500/30 bg-rose-500/5 p-2 font-mono text-[11px] leading-relaxed text-rose-200">
+                            <pre className="mt-0.5 overflow-auto rounded-lg border border-tone-rose/30 bg-tone-rose/10 p-2 font-mono text-[11px] leading-relaxed text-tone-rose-fg">
                               {r.error}
                             </pre>
                           </div>
