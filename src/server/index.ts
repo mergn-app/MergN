@@ -98,7 +98,8 @@ import {
   updateProvider,
 } from "../agent/provider-author";
 import { designWorkflow, planWorkflow } from "../agent/workflow-designer";
-import { reconcileWiring } from "../agent/wiring-repair";
+import { reconcileWiring, type Wire } from "../agent/wiring-repair";
+import { normalizeGraph, type NormFunc } from "../agent/normalize";
 import { probeModel } from "../agent/probe";
 import { validateApiKey, validateModelName } from "../agent/validate-model";
 import { authorInputForm } from "../agent/form-author";
@@ -2405,6 +2406,21 @@ app.patch("/api/alert-handlers/:workflowId", async (c) => {
 app.delete("/api/alert-handlers/:workflowId", async (c) => {
   await alertHandlers.remove(c.get("spaceId"), c.req.param("workflowId"));
   return c.json({ ok: true });
+});
+
+// Deterministic (LLM-free) graph normalize: re-derive each step's ports from its
+// edited code, drop wires/gates referencing fields that no longer exist, and
+// recompute the run-form fields. The editor calls this after a manual code edit
+// so hand-edits stay as consistent as AI-authored graphs.
+app.post("/api/workflows/normalize", async (c) => {
+  const body = await c.req.json<{
+    funcs?: NormFunc[];
+    wires?: Wire[];
+    eventFields?: string[];
+  }>();
+  return c.json(
+    normalizeGraph(body.funcs ?? [], body.wires ?? [], body.eventFields ?? []),
+  );
 });
 
 app.put("/api/workflows/:id", async (c) => {

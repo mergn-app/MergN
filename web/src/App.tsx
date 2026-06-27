@@ -24,6 +24,7 @@ import {
   Plug,
 } from "lucide-react";
 import { detectIssues, repairWiring } from "./health";
+import { spaceHeaders } from "./space";
 import { VersionsPanel } from "./VersionsPanel";
 import { ChangeReview, type ChangeSource } from "./ChangeReview";
 import { FilesPanel } from "./FilesPanel";
@@ -742,6 +743,38 @@ export function App({
     [],
   );
 
+  // After a manual code edit, ask the server to deterministically re-derive ports
+  // and drop wires/gates that reference fields the edited code no longer exposes,
+  // then apply the cleaned graph. Keeps hand-edits as consistent as AI builds.
+  const normalizeAndApply = useCallback(
+    async (nextFuncs: AuthoredFunc[], nextWires: Wire[]) => {
+      try {
+        const res = await fetch("/api/workflows/normalize", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", ...spaceHeaders() },
+          body: JSON.stringify({
+            funcs: nextFuncs,
+            wires: nextWires,
+            eventFields: trigger.eventFields ?? [],
+          }),
+        });
+        if (!res.ok) return;
+        const data = (await res.json()) as {
+          funcs: AuthoredFunc[];
+          wires: Wire[];
+          diagnostics: string[];
+        };
+        setFuncs(data.funcs);
+        setWires(data.wires);
+        if (data.diagnostics?.length)
+          console.info("[normalize]", ...data.diagnostics);
+      } catch {
+        // network/normalize failure → keep the optimistic local edit as-is
+      }
+    },
+    [trigger.eventFields],
+  );
+
   useEffect(() => {
     const eventFields = trigger.eventFields ?? [];
     setWires((prev) => {
@@ -1395,15 +1428,13 @@ export function App({
                   onStatus={setRunStatus}
                   onData={setRunData}
                   onRepair={onRepair}
-                  onUpdateFuncCode={(funcId, bodySource) =>
-                    {
-                      setFuncs((prev) =>
-                      prev.map((f) =>
-                        f.id === funcId ? { ...f, bodySource } : f,
-                      ),
-                      );
-                    }
-                  }
+                  onUpdateFuncCode={(funcId, bodySource) => {
+                    const updated = funcs.map((f) =>
+                      f.id === funcId ? { ...f, bodySource } : f,
+                    );
+                    setFuncs(updated);
+                    void normalizeAndApply(updated, wires);
+                  }}
                   onWireInput={onWireInput}
                 />
               </div>
