@@ -14,7 +14,8 @@ interface ProviderPayload {
   name: string;
   clientSource: string;
   cred: Record<string, string>;
-  egressDomain: string;
+  egressDomain: string; // primary host (back-compat for the exec service)
+  egressDomains: string[]; // full allow-list incl. sibling upload/content/CDN hosts
 }
 
 interface RemoteCarrier {
@@ -22,6 +23,7 @@ interface RemoteCarrier {
   clientSource?: string;
   cred?: Record<string, string>;
   egressDomain?: string;
+  egressDomains?: string[];
   dependencies?: string[];
 }
 
@@ -36,11 +38,13 @@ function toProviders(connections: Record<string, unknown>): ProviderPayload[] {
   for (const [name, value] of Object.entries(connections ?? {})) {
     const c = value as RemoteCarrier;
     if (!c?.__remoteProvider || !c.clientSource) continue;
+    const hosts = c.egressDomains ?? (c.egressDomain ? [c.egressDomain] : []);
     out.push({
       name,
       clientSource: c.clientSource,
       cred: c.cred ?? {},
-      egressDomain: c.egressDomain ?? "",
+      egressDomain: c.egressDomain ?? hosts[0] ?? "",
+      egressDomains: hosts,
     });
   }
   return out;

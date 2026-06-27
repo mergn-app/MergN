@@ -54,6 +54,7 @@ interface Carrier {
   clientSource?: string;
   cred?: Record<string, string>;
   egressDomain?: string;
+  egressDomains?: string[];
   dependencies?: string[];
 }
 
@@ -61,10 +62,13 @@ interface ResolvedProvider {
   name: string;
   clientSource: string;
   cred: Record<string, string>;
-  egressDomain?: string;
+  egressDomains?: string[];
 }
 
-function guardedFetch(domain?: string) {
+function guardedFetch(domains?: string[] | string) {
+  const list = (
+    Array.isArray(domains) ? domains : domains ? [domains] : []
+  ).filter(Boolean);
   return async (i: unknown, init?: unknown): Promise<Response> => {
     const url =
       typeof i === "string"
@@ -81,8 +85,11 @@ function guardedFetch(domain?: string) {
       throw new Error("egress blocked: invalid url");
     }
     const bare = host.replace(/:\d+$/, "");
-    if (domain && bare !== domain && !host.endsWith(`.${domain}`)) {
-      throw new Error(`egress blocked: ${host} (allowed: ${domain})`);
+    if (
+      list.length &&
+      !list.some((d) => bare === d || host.endsWith(`.${d}`))
+    ) {
+      throw new Error(`egress blocked: ${host} (allowed: ${list.join(", ")})`);
     }
     await assertPublicHost(host);
     return fetch(url, init as RequestInit | undefined);
@@ -161,7 +168,7 @@ export class LocalRuntime implements Runtime {
     for (const [name, value] of Object.entries(ctx.connections ?? {})) {
       const c = value as Carrier;
       if (!c?.__remoteProvider || !c.clientSource) continue;
-      providers.push({ name, clientSource: c.clientSource, cred: c.cred ?? {}, egressDomain: c.egressDomain });
+      providers.push({ name, clientSource: c.clientSource, cred: c.cred ?? {}, egressDomains: c.egressDomains ?? (c.egressDomain ? [c.egressDomain] : []) });
     }
 
     const deps = [
@@ -188,7 +195,7 @@ export class LocalRuntime implements Runtime {
         if (typeof mod.default !== "function") {
           throw new Error(`provider ${p.name} must export default a factory function`);
         }
-        connections[p.name] = await mod.default(p.cred, guardedFetch(p.egressDomain));
+        connections[p.name] = await mod.default(p.cred, guardedFetch(p.egressDomains));
       }
 
       const funcFile = join(runDir, "fb_func.mjs");

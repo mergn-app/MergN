@@ -11,6 +11,7 @@ interface Carrier {
   clientSource?: string;
   cred?: Record<string, string>;
   egressDomain?: string;
+  egressDomains?: string[];
   dependencies?: string[];
 }
 
@@ -109,13 +110,14 @@ async function safeFetch(i, init) {
 }
 // step code that calls fetch() directly is guarded too (still allows public APIs)
 globalThis.fetch = safeFetch;
-function guardedFetch(domain) {
+function guardedFetch(domains) {
+  const list = (Array.isArray(domains) ? domains : (domains ? [domains] : [])).filter(Boolean);
   return async (i, init) => {
     const url = typeof i === "string" ? i : i instanceof URL ? i.href : i instanceof Request ? i.url : String(i);
     let host;
     try { host = new URL(url).host; } catch { throw new Error("egress blocked: invalid url"); }
     const bare = host.replace(/:[0-9]+$/, "");
-    if (domain && bare !== domain && !host.endsWith("." + domain)) throw new Error("egress blocked: " + host);
+    if (list.length && !list.some(function(d){ return bare === d || host.endsWith("." + d); })) throw new Error("egress blocked: " + host + " (allowed: " + list.join(", ") + ")");
     return safeFetch(url, init);
   };
 }
@@ -123,7 +125,7 @@ const connections = {};
 for (const p of payload.providers) {
   const mod = await import(pathToFileURL(join(here, p.file)).href);
   if (typeof mod.default !== "function") throw new Error("provider " + p.name + " must export default a factory");
-  connections[p.name] = await mod.default(p.cred ?? {}, guardedFetch(p.egressDomain));
+  connections[p.name] = await mod.default(p.cred ?? {}, guardedFetch(p.egressDomains));
 }
 const fnMod = await import(pathToFileURL(join(here, "fb_func.mjs")).href);
 if (typeof fnMod.default !== "function") throw new Error("func must export default an async (ctx, input) function");
@@ -252,7 +254,7 @@ export class DockerRuntime implements Runtime {
       name: string;
       clientSource: string;
       cred: Record<string, string>;
-      egressDomain?: string;
+      egressDomains?: string[];
     }[] = [];
     for (const [name, value] of Object.entries(ctx.connections ?? {})) {
       const c = value as Carrier;
@@ -261,7 +263,7 @@ export class DockerRuntime implements Runtime {
         name,
         clientSource: c.clientSource,
         cred: c.cred ?? {},
-        egressDomain: c.egressDomain,
+        egressDomains: c.egressDomains ?? (c.egressDomain ? [c.egressDomain] : []),
       });
     }
 
@@ -284,7 +286,7 @@ export class DockerRuntime implements Runtime {
         name: string;
         file: string;
         cred: Record<string, string>;
-        egressDomain?: string;
+        egressDomains?: string[];
       }[] = [];
       for (let i = 0; i < providers.length; i++) {
         const p = providers[i];
@@ -294,7 +296,7 @@ export class DockerRuntime implements Runtime {
           name: p.name,
           file,
           cred: p.cred,
-          egressDomain: p.egressDomain,
+          egressDomains: p.egressDomains,
         });
       }
       await writeFile(join(runDir, "fb_func.mjs"), def.body.source);

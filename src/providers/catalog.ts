@@ -10,7 +10,9 @@ export interface CatalogEntry {
   name: string;
   keywords: string[];
   auth: string;
-  egressHost: string | null;
+  // A single host, OR a list when the service splits API/upload/content/CDN
+  // across sibling domains (e.g. ["box.com","boxcloud.com"]). null = per-tenant.
+  egressHost: string | string[] | null;
   docsUrl: string;
   confidence: string; // "high" | "needs-verify" | "deprecated"
   note?: string; // human-readable caveat shown in the UI for non-"high" entries
@@ -93,8 +95,11 @@ export function catalogListForPrompt(entries: CatalogEntry[]): string {
 // Grounding hint handed to authorProvider so the generated client targets the
 // service's REAL API surface (host/auth/docs) instead of a hallucinated one.
 export function catalogAuthorHint(e: CatalogEntry, useOAuth = false): string {
-  const host = e.egressHost
-    ? `Fixed public API host: ${e.egressHost} — all requests go here.`
+  const hostStr = Array.isArray(e.egressHost)
+    ? e.egressHost.join(", ")
+    : e.egressHost;
+  const host = hostStr
+    ? `Fixed public API host(s): ${hostStr} — all requests go to these.`
     : `Host is per-tenant/region: derive it from the user's credential (use sandbox.egressFromField), do not hardcode one.`;
   const authLine = useOAuth
     ? `Auth: OAuth2 handled by the platform — use Authorization: Bearer \${cred.accessToken}; declare NO credential fields.`

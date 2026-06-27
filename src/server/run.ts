@@ -223,6 +223,7 @@ export interface RemoteProviderCarrier {
   clientSource: string;
   cred?: Record<string, string>;
   egressDomain?: string;
+  egressDomains?: string[];
   dependencies?: string[];
 }
 
@@ -285,6 +286,7 @@ export async function buildProviderCarrier(
     clientSource: spec.clientSource,
     cred: cred ?? undefined,
     egressDomain: eg.host,
+    egressDomains: eg.hosts,
     dependencies: spec.dependencies ?? [],
   };
 }

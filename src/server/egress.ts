@@ -30,17 +30,22 @@ export function hostFromCredValue(raw: string): string | undefined {
 export function resolveEgressHost(
   sandbox: SandboxPolicy | undefined,
   cred: Record<string, string> | undefined,
-): { host?: string; error?: string } {
-  if (!sandbox) return {};
+): { host?: string; hosts: string[]; error?: string } {
+  if (!sandbox) return { hosts: [] };
   if (sandbox.egressFromField) {
     const raw = cred?.[sandbox.egressFromField];
     const host = typeof raw === "string" ? hostFromCredValue(raw) : undefined;
     if (!host) {
       return {
+        hosts: [],
         error: `cannot derive egress host from credential field '${sandbox.egressFromField}'`,
       };
     }
-    return { host };
+    return { host, hosts: [host] };
   }
-  return { host: sandbox.egressDomain };
+  // Combined allow-list: primary host + any extra sibling hosts.
+  const hosts = [sandbox.egressDomain, ...(sandbox.egressDomains ?? [])].filter(
+    (h): h is string => typeof h === "string" && h.length > 0,
+  );
+  return { host: hosts[0], hosts };
 }

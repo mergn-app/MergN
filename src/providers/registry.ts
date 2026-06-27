@@ -19,6 +19,11 @@ export interface Credential {
 
 export interface SandboxPolicy {
   egressDomain?: string;
+  // Extra allowed hosts for services that split API vs upload/content/CDN across
+  // sibling-but-different domains (e.g. Dropbox content., Box dl.boxcloud.com).
+  // The full allow-list is [egressDomain, ...egressDomains]; each entry matches
+  // itself and its subdomains.
+  egressDomains?: string[];
   egressFromField?: string;
 }
 

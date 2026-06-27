@@ -378,9 +378,18 @@ export async function designWorkflow(
       m,
       useOAuth,
     );
-    // Pin egress to the catalog's known host so a drifted/guessed hostname can't
-    // silently reach a fabricated endpoint (the enrichment_service-style bug).
-    if (cat?.egressHost) draft.sandbox = { egressDomain: cat.egressHost };
+    // Pin egress to the catalog's known host(s) so a drifted/guessed hostname
+    // can't silently reach a fabricated endpoint (the enrichment_service-style
+    // bug). A list covers services that split API vs upload/content/CDN hosts.
+    if (cat?.egressHost) {
+      const hosts = Array.isArray(cat.egressHost)
+        ? cat.egressHost
+        : [cat.egressHost];
+      draft.sandbox = {
+        egressDomain: hosts[0],
+        ...(hosts.length > 1 ? { egressDomains: hosts.slice(1) } : {}),
+      };
+    }
     if (useOAuth && cat?.oauth) {
       // Wire to the platform's central OAuth app: runtime does the login + token
       // refresh + injection, so there are no user-entered credential fields.
