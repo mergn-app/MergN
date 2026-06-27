@@ -156,9 +156,11 @@ export function Landing() {
             <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
               {t("landing.heroSubtitle")}
             </p>
-            <div className="mt-5 flex items-center justify-center gap-3">
-              <Button onClick={() => openAuth("signin")}>{t("auth.signIn")}</Button>
-              <Button asChild variant="outline">
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
+              <Button className="w-full sm:w-auto" onClick={() => openAuth("signin")}>
+                {t("auth.signIn")}
+              </Button>
+              <Button asChild variant="outline" className="w-full sm:w-auto">
                 <a
                   href="https://discord.gg/wDxHFkcbhD"
                   target="_blank"
@@ -167,7 +169,7 @@ export function Landing() {
                   {t("landing.joinDiscord")}
                 </a>
               </Button>
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className="w-full sm:w-auto">
                 <a
                   href="https://github.com/mergn-app/mergn"
                   target="_blank"
