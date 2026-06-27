@@ -28,6 +28,7 @@ import {
   type ProviderSource,
 } from "./queries";
 import { CodeBlock } from "./CodeBlock";
+import { flowCompletion } from "./inputCompletion";
 import { ConfigField } from "./ConfigField";
 
 interface RunRecord {
@@ -94,6 +95,7 @@ export function RunPanel({
   onData,
   onRepair,
   onUpdateFuncCode,
+  onWireInput,
   onConfigChange,
   savePending = false,
 }: {
@@ -130,6 +132,12 @@ export function RunPanel({
     },
   ) => void;
   onUpdateFuncCode: (funcId: string, bodySource: string) => void;
+  onWireInput?: (p: {
+    funcId: string;
+    inputName: string;
+    from: string;
+    fromOutput: string;
+  }) => void;
 }) {
   const { t, i18n } = useTranslation();
   const qc = useQueryClient();
@@ -169,6 +177,23 @@ export function RunPanel({
   const [editingCodeId, setEditingCodeId] = useState<string | null>(null);
   const [draftCode, setDraftCode] = useState("");
   const isEditingCode = !!selected && editingCodeId === selected.id;
+
+  // Live autocomplete for the body editor: `input.` suggests the node's available
+  // inputs (and wireable upstream outputs), `ctx.connections.` suggests providers.
+  const completion = useMemo(
+    () =>
+      selected
+        ? flowCompletion({
+            node: selected,
+            funcs,
+            wires,
+            config,
+            triggerFields: trigger.eventFields ?? [],
+            onWireInput,
+          })
+        : undefined,
+    [selected, funcs, wires, config, trigger.eventFields, onWireInput],
+  );
   const codeDirtyRef = useRef(false);
 
   useEffect(() => {
@@ -1057,6 +1082,7 @@ export function RunPanel({
                   lockedPrefix={isEditingCode ? lockedPrefix : ""}
                   lockedSuffix={isEditingCode ? lockedSuffix : ""}
                   value={isEditingCode ? draftCode : undefined}
+                  completion={isEditingCode ? completion : undefined}
                   onChange={
                     isEditingCode
                       ? (next) => {

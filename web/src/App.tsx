@@ -697,6 +697,51 @@ export function App({
     }
   }, [ops]);
 
+  // Picking an upstream output / trigger field from the code editor's `input.`
+  // autocomplete: create the wire AND ensure the target input port exists, so the
+  // value actually reaches `input.<name>` at runtime.
+  const onWireInput = useCallback(
+    (p: {
+      funcId: string;
+      inputName: string;
+      from: string;
+      fromOutput: string;
+    }) => {
+      setWires((prev) => {
+        const w: Wire = {
+          from: p.from,
+          fromOutput: p.fromOutput,
+          to: p.funcId,
+          toInput: p.inputName,
+        };
+        const map = new Map(prev.map((x) => [wireKey(x), x]));
+        map.set(wireKey(w), w);
+        return [...map.values()];
+      });
+      setFuncs((prev) =>
+        prev.map((f) =>
+          f.id === p.funcId && !f.inputs.some((i) => i.name === p.inputName)
+            ? {
+                ...f,
+                inputs: [
+                  ...f.inputs,
+                  {
+                    name: p.inputName,
+                    role: "input",
+                    type: "string",
+                    required: true,
+                  },
+                ],
+              }
+            : f,
+        ),
+      );
+      // No explicit dirty flag needed — the derived-doc autosave funnel below
+      // picks up the funcs/wires change and debounce-saves.
+    },
+    [],
+  );
+
   useEffect(() => {
     const eventFields = trigger.eventFields ?? [];
     setWires((prev) => {
@@ -1357,9 +1402,9 @@ export function App({
                         f.id === funcId ? { ...f, bodySource } : f,
                       ),
                       );
-                      setAutoSave(true);
                     }
                   }
+                  onWireInput={onWireInput}
                 />
               </div>
             </>

@@ -3,7 +3,7 @@ import CodeMirror from "@uiw/react-codemirror";
 import { javascript } from "@codemirror/lang-javascript";
 import { oneDark } from "@codemirror/theme-one-dark";
 import { Decoration, EditorView } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
+import { EditorState, type Extension } from "@codemirror/state";
 import { cn } from "@/lib/utils";
 import { format } from "prettier/standalone";
 import babel from "prettier/plugins/babel";
@@ -36,6 +36,7 @@ export function CodeBlock({
   lockedSuffix = "",
   value,
   onChange,
+  completion,
 }: {
   source: string;
   name: string;
@@ -47,6 +48,7 @@ export function CodeBlock({
   lockedSuffix?: string;
   value?: string;
   onChange?: (next: string) => void;
+  completion?: Extension;
 }) {
   const [code, setCode] = useState("");
   const displayCode = value ?? code;
@@ -127,6 +129,7 @@ export function CodeBlock({
         theme={theme === "dark" ? oneDark : "light"}
         extensions={[
           javascript(),
+          ...(completion ? [completion] : []),
           ...(wrap ? [EditorView.lineWrapping] : []),
           ...guardedExtensions,
           EditorView.theme({
