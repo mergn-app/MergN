@@ -11,7 +11,7 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useTranslation } from "react-i18next";
-import { ArrowUp, Network, Pause, Play } from "lucide-react";
+import { ArrowUp, Copy, Network, Pause, Play } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useShowcaseSpacePause } from "@/hooks/useShowcaseSpacePause";
 import { FuncNode } from "./FuncNode";
@@ -21,6 +21,7 @@ import { Story } from "./Story";
 import { Pipeline } from "./Pipeline";
 import { layoutPositions } from "./layout";
 import { outputsOf } from "./lineage";
+import { CodeBlock } from "./CodeBlock";
 import type { AuthoredFunc, TriggerConfig, Wire } from "./types";
 
 const nodeTypes = { func: FuncNode, trigger: TriggerNode };
@@ -73,7 +74,7 @@ function mkFunc(o: {
       properties: Object.fromEntries(outputs.map((k) => [k, { type: "string" }])),
       required: outputs,
     },
-    bodySource: "",
+    bodySource: mockBodySource(o),
     requires: o.provider
       ? [{ name: o.provider, provider: o.provider, scopes: [] }]
       : [],
@@ -88,6 +89,130 @@ const w = (from: string, fromOutput: string, to: string, toInput: string): Wire 
   to,
   toInput,
 });
+
+const MOCK_BODIES: Record<string, string> = {
+  parse_event: `  const payload = input.payload;
+  const obj = payload?.data?.object ?? payload?.object ?? payload;
+  return {
+    amount: obj.amount,
+    currency: obj.currency,
+    customer: obj.customer,
+  };`,
+  fetch_customer: `  const customer = input.customer;
+  const profile = await ctx.connections.stripe.customers.retrieve(customer);
+  return {
+    name: profile.name ?? profile.email,
+    email: profile.email,
+  };`,
+  format_alert: `  const { amount, currency, name } = input;
+  const formatted = (amount / 100).toFixed(2);
+  return {
+    message: \`Payment received: \${formatted} \${currency.toUpperCase()} from \${name}\`,
+  };`,
+  post_discord: `  const { message } = input;
+  const messageId = await ctx.connections.discord.send(message);
+  return { messageId };`,
+  list_overdue: `  const { timestamp } = input;
+  const invoices = await ctx.connections.stripe.invoices.list({
+    status: "open",
+    due_date: { lt: Math.floor(Date.now() / 1000) },
+  });
+  return { invoices: invoices.data };`,
+  build_reminders: `  const { invoices } = input;
+  const reminders = invoices.map((inv) => ({
+    to: inv.customer_email,
+    body: \`Invoice \${inv.number} is \${inv.amount_due / 100} overdue\`,
+  }));
+  return { reminders };`,
+  send_reminders: `  const { reminders } = input;
+  let sent = 0;
+  for (const r of reminders) {
+    await ctx.connections.slack.postMessage(r.body);
+    sent++;
+  }
+  return { sent };`,
+  finance_summary: `  const { sent } = input;
+  const messageId = await ctx.connections.slack.postMessage(
+    \`Sent \${sent} invoice reminders today\`,
+  );
+  return { messageId };`,
+  parse_order: `  const payload = input.payload;
+  const obj = payload?.data?.object ?? payload;
+  return {
+    orderId: obj.id,
+    items: obj.lines?.data ?? [],
+    customer: obj.customer,
+  };`,
+  confirm_charge: `  const { orderId } = input;
+  const charge = await ctx.connections.stripe.charges.retrieve(orderId);
+  return { receipt: charge.receipt_url, total: charge.amount };`,
+  alert_fulfillment: `  const { items, total } = input;
+  await ctx.connections.slack.postMessage(
+    \`Pack order: \${items.length} items, total \${total / 100}\`,
+  );
+  return { sent: true };`,
+  ping_community: `  const { total, receipt } = input;
+  const messageId = await ctx.connections.discord.send(
+    \`New sale! \${total / 100} — \${receipt}\`,
+  );
+  return { messageId };`,
+  normalize_alert: `  const payload = input.payload;
+  return {
+    alert: {
+      title: payload.title ?? payload.message,
+      service: payload.service ?? payload.host,
+      severity: payload.severity ?? "unknown",
+    },
+  };`,
+  classify_severity: `  const { alert } = input;
+  const critical = alert.severity === "critical" || alert.severity === "P1";
+  return { severity: alert.severity, critical };`,
+  page_slack: `  const { alert, severity } = input;
+  await ctx.connections.slack.postMessage(
+    \`[\${severity}] \${alert.service}: \${alert.title}\`,
+  );
+  return { sent: true };`,
+  alert_discord: `  const { alert, critical } = input;
+  if (!critical) return { messageId: null };
+  const messageId = await ctx.connections.discord.send(
+    \`CRITICAL: \${alert.title}\`,
+  );
+  return { messageId };`,
+  parse_refund: `  const payload = input.payload;
+  const obj = payload?.data?.object ?? payload;
+  return { chargeId: obj.charge, amount: obj.amount };`,
+  lookup_charge: `  const { chargeId } = input;
+  const charge = await ctx.connections.stripe.charges.retrieve(chargeId);
+  return { customer: charge.customer, order: charge.metadata?.orderId };`,
+  notify_support: `  const { customer, amount } = input;
+  await ctx.connections.slack.postMessage(
+    \`Refund issued: \${amount / 100} for customer \${customer}\`,
+  );
+  return { sent: true };`,
+  log_discord: `  const { order, amount } = input;
+  const messageId = await ctx.connections.discord.send(
+    \`Refund logged — order \${order}, \${amount / 100}\`,
+  );
+  return { messageId };`,
+};
+
+function mockBodySource(o: {
+  id: string;
+  provider?: string;
+  inputs?: string[];
+  outputs?: string[];
+}): string {
+  if (MOCK_BODIES[o.id]) return MOCK_BODIES[o.id];
+  const ins = o.inputs ?? [];
+  const outs = o.outputs ?? [];
+  const reads = ins.map((n) => `  const ${n} = input.${n};`).join("\n");
+  if (o.provider) {
+    const ret = outs.map((n) => `    ${n},`).join("\n");
+    return `${reads || "  // read inputs"}\n  // call ${o.provider}\n  return {\n${ret}\n  };`;
+  }
+  const ret = outs.map((n) => `    ${n}: /* derived */`).join(",\n");
+  return `${reads || "  // read inputs"}\n  return {\n${ret}\n  };`;
+}
 
 const SCENARIOS: MockScenario[] = [
   {
@@ -493,10 +618,17 @@ interface GraphViewProps {
   scenario: MockScenario;
   selectedId: string | null;
   onSelect: (id: string) => void;
+  onClearSelect: () => void;
   theme: "dark" | "light";
 }
 
-function GraphCanvas({ scenario, selectedId, onSelect, theme }: GraphViewProps) {
+function GraphCanvas({
+  scenario,
+  selectedId,
+  onSelect,
+  onClearSelect,
+  theme,
+}: GraphViewProps) {
   const { t } = useTranslation();
   const { nodes, edges } = useMemo(
     () => buildGraph(scenario, selectedId),
@@ -526,6 +658,7 @@ function GraphCanvas({ scenario, selectedId, onSelect, theme }: GraphViewProps) 
       proOptions={{ hideAttribution: true }}
       nodesConnectable={false}
       onNodeClick={(_, node) => node.type === "func" && onSelect(node.id)}
+      onPaneClick={onClearSelect}
     >
       <Background />
       <Controls showInteractive={false} />
@@ -665,6 +798,57 @@ function MockComposer() {
   );
 }
 
+const MOCK_PANEL_HEIGHT = 220;
+
+function MockRunPanel({
+  selected,
+  theme,
+}: {
+  selected: AuthoredFunc | null;
+  theme: "dark" | "light";
+}) {
+  const { t } = useTranslation();
+
+  return (
+    <div className="flex h-full min-h-0 flex-col bg-card">
+      <div className="flex h-full min-h-0 flex-col px-3 pb-3 pt-2">
+        {!selected ? (
+          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+            {t("run.selectStepCode")}
+          </div>
+        ) : (
+          <>
+            <div className="mb-2 flex shrink-0 items-center gap-2 border-b border-border/40 pb-2">
+              <span className="text-xs font-medium">
+                {selected.title || selected.id}
+              </span>
+              <span className="font-mono text-[10px] text-muted-foreground/60">
+                {selected.id} · v{selected.version}
+              </span>
+              <button
+                type="button"
+                className="ml-auto inline-flex items-center gap-1 rounded-md border border-border/50 px-1.5 py-0.5 text-[10px] text-muted-foreground"
+              >
+                <Copy className="h-3 w-3" />
+                {t("run.copy")}
+              </button>
+            </div>
+            <div className="min-h-0 flex-1">
+              <CodeBlock
+                source={selected.bodySource}
+                name={selected.id}
+                theme={theme}
+                wrap={false}
+                fill
+              />
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function BuilderMockShowcase() {
   const { t } = useTranslation();
   const [view, setView] = useState<"story" | "pipeline" | "graph">("graph");
@@ -699,6 +883,15 @@ export function BuilderMockShowcase() {
     setSelected(id);
     setSelectedId(null);
   };
+
+  const onSelectNode = (id: string) => {
+    setAutoRotate(false);
+    setSelectedId(id);
+  };
+
+  const selectedFunc =
+    scenario.funcs.find((f) => f.id === selectedId) ?? null;
+  const panelOpen = selectedId != null;
 
   // Advance the showcase once per cycle only — one cheap re-render every
   // AUTO_ROTATE_MS. The ring fill is pure CSS (see index.css), so progress
@@ -799,54 +992,80 @@ export function BuilderMockShowcase() {
           </button>
         </div>
 
-        <div className="relative min-h-0 flex-1">
-          <div className="absolute left-3 top-3 z-10 flex rounded-lg border border-border/50 bg-muted p-0.5 text-xs">
-            {(["story", "pipeline", "graph"] as const).map((item) => (
-              <button
-                key={item}
-                onClick={() => setView(item)}
-                className={cn(
-                  "rounded-md px-2.5 py-1 capitalize transition-colors",
-                  view === item
-                    ? "bg-background text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t(`view.${item}`)}
-              </button>
-            ))}
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div className="relative min-h-0 flex-1">
+            <div className="absolute left-3 top-3 z-10 flex rounded-lg border border-border/50 bg-muted p-0.5 text-xs">
+              {(["story", "pipeline", "graph"] as const).map((item) => (
+                <button
+                  key={item}
+                  onClick={() => setView(item)}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 capitalize transition-colors",
+                    view === item
+                      ? "bg-background text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t(`view.${item}`)}
+                </button>
+              ))}
+            </div>
+
+            {view === "graph" ? (
+              <GraphView
+                scenario={scenario}
+                selectedId={selectedId}
+                onSelect={onSelectNode}
+                onClearSelect={() => setSelectedId(null)}
+                theme={theme}
+              />
+            ) : view === "story" ? (
+              <Story
+                funcs={scenario.funcs}
+                wires={scenario.wires}
+                triggerFields={triggerFields}
+                runStatus={NO_RUN_STATUS}
+                connectedProviders={connectedProviders}
+                configValues={NO_CONFIG}
+                selectedId={selectedId}
+                onSelect={onSelectNode}
+              />
+            ) : (
+              <Pipeline
+                funcs={scenario.funcs}
+                wires={scenario.wires}
+                triggerFields={triggerFields}
+                runStatus={NO_RUN_STATUS}
+                connectedProviders={connectedProviders}
+                configValues={NO_CONFIG}
+                selectedId={selectedId}
+                onSelect={onSelectNode}
+              />
+            )}
           </div>
 
-          {view === "graph" ? (
-            <GraphView
-              scenario={scenario}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-              theme={theme}
-            />
-          ) : view === "story" ? (
-            <Story
-              funcs={scenario.funcs}
-              wires={scenario.wires}
-              triggerFields={triggerFields}
-              runStatus={NO_RUN_STATUS}
-              connectedProviders={connectedProviders}
-              configValues={NO_CONFIG}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-            />
-          ) : (
-            <Pipeline
-              funcs={scenario.funcs}
-              wires={scenario.wires}
-              triggerFields={triggerFields}
-              runStatus={NO_RUN_STATUS}
-              connectedProviders={connectedProviders}
-              configValues={NO_CONFIG}
-              selectedId={selectedId}
-              onSelect={setSelectedId}
-            />
-          )}
+          <div
+            className={cn(
+              "pointer-events-none absolute inset-x-0 bottom-0 z-10 flex justify-center transition-opacity duration-300",
+              panelOpen ? "opacity-0" : "opacity-100",
+            )}
+          >
+            <div className="mb-3 rounded-full border border-border/50 bg-muted/90 px-3 py-1 text-[11px] text-muted-foreground backdrop-blur-sm">
+              {t("landing.showcase.clickStep")}
+            </div>
+          </div>
+        </div>
+
+        <div className="group flex h-2 shrink-0 cursor-default items-center justify-center border-t border-border/40">
+          <div className="h-0.5 w-8 rounded-full bg-border transition-colors group-hover:bg-foreground/40" />
+        </div>
+        <div
+          className="shrink-0 overflow-hidden transition-[height] duration-300 ease-out"
+          style={{ height: panelOpen ? MOCK_PANEL_HEIGHT : 0 }}
+        >
+          <div style={{ height: MOCK_PANEL_HEIGHT }}>
+            <MockRunPanel selected={selectedFunc} theme={theme} />
+          </div>
         </div>
       </div>
 

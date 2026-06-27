@@ -69,15 +69,31 @@
     "privacyPolicy": "Datenschutz"
   },
   "landing": {
-    "heroTitle": "Automatisierungen mit KI erstellen",
-    "heroSubtitle": "Beschreibe, was du automatisieren möchtest. MergN erstellt und betreibt den gesamten Flow in Echtzeit — inklusive Schritte, Logik und Integrationen.",
+    "heroTitle": "Beschreibe, was passieren soll. MergN führt es aus.",
+    "heroSubtitle": "MergN baut die Schritte aus deiner Beschreibung, führt sie in Production aus und hält jeden Lauf sichtbar. Schlägt etwas fehl, findet es die Ursache und schlägt eine Korrektur vor — du gibst jede Änderung frei.",
+    "differentiators": {
+      "title": "Für laufende Arbeit gebaut, nicht zum Verdrahten von Flows",
+      "subtitle": "MergN macht aus deiner Beschreibung ein System, das du sehen, betreiben und in Production vertrauen kannst.",
+      "generated": {
+        "title": "Keine Vorlagen",
+        "desc": "Keine vorgefertigten Workflows zum Auswählen. Beschreib einfach dein Problem — MergN baut die Schritte um deinen Fall herum, statt dich in ein generisches Template zu pressen."
+      },
+      "visible": {
+        "title": "Jeder Schritt ist echter Code",
+        "desc": "Klicke einen Schritt an, um das JavaScript dahinter zu sehen, und passe es an, wenn du möchtest. Du siehst immer, was wirklich läuft — nichts im Hintergrund versteckt."
+      },
+      "resilient": {
+        "title": "Robust in Production",
+        "desc": "Schlägt ein Lauf fehl, findet MergN heraus, was schiefgelaufen ist, und schlägt eine Korrektur vor. Du prüfst und gibst jede Änderung frei, bevor sie live geht."
+      }
+    },
     "learnMore": "Mehr erfahren",
     "tryIdea": "Eine Idee ausprobieren",
     "joinDiscord": "Discord beitreten",
     "starGithub": "Auf GitHub mit Stern markieren",
     "contactUs": "Kontakt",
     "selfHeal": {
-      "title": "Bricht ein Flow, repariert er sich selbst",
+      "title": "Wenn ein Lauf fehlschlägt, hilft MergN beim Beheben",
       "subtitle": "MergN erkennt den Fehler, findet die Ursache und schlägt eine Korrektur vor. Ob sie angewendet wird, entscheidest allein du.",
       "detect": "Erkennen",
       "diagnose": "Diagnose",
@@ -92,7 +108,7 @@
       "controlBanner": "Nichts wird angewendet, bevor du es freigibst.",
       "controlTitle": "Du behältst die Kontrolle",
       "applied": "Mit deiner Freigabe angewendet",
-      "rejected": "Abgelehnt — der Flow blieb unverändert",
+      "rejected": "Abgelehnt — nichts geändert",
       "guardrails": "Auch im Auto-Modus gelten die Grenzen: Blast Radius, Schleifen-Limit und Kill-Switch."
     },
     "ideas": {
@@ -103,9 +119,12 @@
       "refund-handler": "Rückerstattungsverwaltung"
     },
     "describeChange": "Beschreibe eine Änderung…",
+    "showcase": {
+      "clickStep": "Klicke einen Schritt an, um den Code zu sehen"
+    },
     "useCases": {
-      "title": "Was kannst du bauen?",
-      "subtitle": "Verbinde die Tools, die du bereits nutzt, und lass die KI die Schritte verknüpfen.",
+      "title": "Was kannst du ausführen?",
+      "subtitle": "Beschreibe das Ergebnis — MergN findet die Schritte und hält sie am Laufen.",
       "items": {
         "payments": {
           "title": "Zahlungsalarme",
@@ -144,7 +163,7 @@
     },
     "community": {
       "badge": "Community",
-      "title": "Komm zu uns und baue die nächste Workflow-Generation mit.",
+      "title": "Komm zu uns und gestalte mit, was als Nächstes kommt.",
       "desc": "Komm in unseren Discord: direktes Feedback, früher Zugriff auf neue Features und schnelle Unterstützung.",
       "joinNow": "Jetzt mitmachen",
       "joinDiscord": "Discord beitreten",

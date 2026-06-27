@@ -69,15 +69,31 @@
     "privacyPolicy": "Politique de confidentialité"
   },
   "landing": {
-    "heroTitle": "Créez des automatisations avec l'IA",
-    "heroSubtitle": "Décrivez ce que vous voulez automatiser. MergN construit et exécute tout le flux en temps réel — étapes, logique et intégrations incluses.",
+    "heroTitle": "Décrivez ce qui doit se passer. MergN l'exécute.",
+    "heroSubtitle": "MergN construit les étapes à partir de votre description, les exécute en production et garde chaque exécution visible. En cas d'échec, il trouve la cause et propose une correction — vous approuvez chaque changement.",
+    "differentiators": {
+      "title": "Conçu pour exécuter le travail, pas pour câbler des flux",
+      "subtitle": "MergN transforme ce que vous décrivez en un système que vous pouvez voir, exploiter et faire confiance en production.",
+      "generated": {
+        "title": "Pas de modèles",
+        "desc": "Pas de workflows prédéfinis à choisir. Décrivez simplement votre problème — MergN construit les étapes autour de votre cas, sans vous enfermer dans un modèle générique."
+      },
+      "visible": {
+        "title": "Chaque étape est du vrai code",
+        "desc": "Cliquez sur une étape pour voir le JavaScript derrière, et ajustez-le si vous voulez. Vous voyez toujours ce qui tourne vraiment — rien de caché en arrière-plan."
+      },
+      "resilient": {
+        "title": "Fiable en production",
+        "desc": "Quand une exécution échoue, MergN identifie ce qui n'a pas fonctionné et propose une correction. Vous examinez et approuvez chaque changement avant qu'il ne soit appliqué."
+      }
+    },
     "learnMore": "En savoir plus",
     "tryIdea": "Essayer une idée",
     "joinDiscord": "Rejoindre Discord",
     "starGithub": "Mettre une étoile sur GitHub",
     "contactUs": "Nous contacter",
     "selfHeal": {
-      "title": "Quand un flux casse, il se répare tout seul",
+      "title": "Quand une exécution échoue, MergN vous aide à corriger",
       "subtitle": "MergN détecte la panne, en trouve la cause et propose une correction. L'appliquer ne dépend que de vous.",
       "detect": "Détecter",
       "diagnose": "Diagnostiquer",
@@ -92,7 +108,7 @@
       "controlBanner": "Rien n'est appliqué tant que vous ne l'avez pas approuvé.",
       "controlTitle": "Vous gardez le contrôle",
       "applied": "Appliqué avec votre approbation",
-      "rejected": "Rejeté — le flux est resté tel quel",
+      "rejected": "Rejeté — rien n'a changé",
       "guardrails": "Même en mode auto, les garde-fous s'appliquent : périmètre d'impact, limite de boucle et kill switch."
     },
     "ideas": {
@@ -103,9 +119,12 @@
       "refund-handler": "Gestion Remboursement"
     },
     "describeChange": "Décrivez une modification…",
+    "showcase": {
+      "clickStep": "Cliquez sur une étape pour voir son code"
+    },
     "useCases": {
-      "title": "Que pouvez-vous créer ?",
-      "subtitle": "Connectez les outils que vous utilisez déjà et laissez l'IA relier les étapes.",
+      "title": "Que pouvez-vous exécuter ?",
+      "subtitle": "Décrivez le résultat — MergN trouve les étapes et les maintient en marche.",
       "items": {
         "payments": {
           "title": "Alertes de paiement",
@@ -144,7 +163,7 @@
     },
     "community": {
       "badge": "Communauté",
-      "title": "Rejoignez-nous pour construire ensemble la prochaine génération de workflows.",
+      "title": "Rejoignez-nous pour construire la suite.",
       "desc": "Rejoignez le Discord pour partager vos retours, accéder tôt aux nouveautés et obtenir une aide rapide.",
       "joinNow": "Nous rejoindre",
       "joinDiscord": "Rejoindre Discord",

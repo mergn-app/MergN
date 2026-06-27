@@ -6,6 +6,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { MergNLogo } from "@/components/MergNLogo";
 import { LanguageSwitcher } from "./LanguageSwitcher";
 import { BuilderMockShowcase } from "./BuilderMockShowcase";
+import { LandingDifferentiators } from "./LandingDifferentiators";
 import { LandingUseCases } from "./LandingUseCases";
 import { SelfHealShowcase } from "./SelfHealShowcase";
 import { AuthForm } from "./AuthForm";
@@ -132,7 +133,7 @@ export function Landing() {
       </section>
 
       <div className="px-10 pb-16 pt-4">
-        <LandingUseCases onUseCaseClick={() => openAuth("signup")} />
+        <LandingDifferentiators />
 
         <div className="mx-auto mt-14 w-full max-w-6xl">
           <div className="text-center">
@@ -146,6 +147,10 @@ export function Landing() {
           <div className="mt-6">
             <SelfHealShowcase />
           </div>
+        </div>
+
+        <div className="mt-14">
+          <LandingUseCases onUseCaseClick={() => openAuth("signup")} />
         </div>
 
         <div

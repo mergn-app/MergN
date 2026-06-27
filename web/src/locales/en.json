@@ -69,15 +69,31 @@
     "privacyPolicy": "Privacy Policy"
   },
   "landing": {
-    "heroTitle": "Build automations with AI",
-    "heroSubtitle": "Describe what you want to automate. MergN builds and runs the whole flow in real time — steps, logic, and integrations included.",
+    "heroTitle": "Describe what should happen. MergN runs it.",
+    "heroSubtitle": "MergN builds the steps from your description, runs them in production, and keeps every run in view. When something fails, it finds the cause and proposes a fix — you approve every change.",
+    "differentiators": {
+      "title": "Built for running work, not wiring flows",
+      "subtitle": "MergN turns what you describe into a system you can see, operate, and trust in production.",
+      "generated": {
+        "title": "No templates",
+        "desc": "No pre-built workflows to pick from. Just describe your problem, and MergN builds the steps around your exact case instead of forcing you into a generic template."
+      },
+      "visible": {
+        "title": "Every step is real code",
+        "desc": "Click any step to see the JavaScript behind it, and tweak it if you want. You always see what's actually running, nothing hidden in the background."
+      },
+      "resilient": {
+        "title": "Resilient in production",
+        "desc": "When a run fails, MergN figures out what went wrong and suggests a fix. You review and approve every change before it goes live."
+      }
+    },
     "learnMore": "Learn more",
     "tryIdea": "Try an idea",
     "joinDiscord": "Join Discord",
     "starGithub": "Star on GitHub",
     "contactUs": "Contact us",
     "selfHeal": {
-      "title": "When a flow breaks, it heals itself",
+      "title": "When a run fails, MergN helps you fix it",
       "subtitle": "MergN catches the failure, finds the cause, and proposes a fix. Applying it is entirely up to you.",
       "detect": "Detect",
       "diagnose": "Diagnose",
@@ -92,7 +108,7 @@
       "controlBanner": "Nothing is applied until you approve it.",
       "controlTitle": "You stay in control",
       "applied": "Applied with your approval",
-      "rejected": "Rejected — the flow stayed as is",
+      "rejected": "Rejected — nothing changed",
       "guardrails": "Even in auto mode the guardrails apply: blast radius, loop limit, and kill switch."
     },
     "ideas": {
@@ -103,9 +119,12 @@
       "refund-handler": "Refund Handler"
     },
     "describeChange": "Describe a change…",
+    "showcase": {
+      "clickStep": "Click a step to see its code"
+    },
     "useCases": {
-      "title": "What can you build?",
-      "subtitle": "Connect the tools you already use and let AI wire the steps together.",
+      "title": "What can you run?",
+      "subtitle": "Describe the outcome — MergN figures out the steps and keeps them running.",
       "items": {
         "payments": {
           "title": "Payment alerts",
@@ -144,7 +163,7 @@
     },
     "community": {
       "badge": "Community",
-      "title": "Join us and build the next wave of workflows together.",
+      "title": "Join us as we build what's next.",
       "desc": "Jump into Discord for direct feedback, early feature access, and fast support as MergN grows.",
       "joinNow": "Join Now",
       "joinDiscord": "Join Discord",

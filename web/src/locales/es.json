@@ -69,15 +69,31 @@
     "privacyPolicy": "Política de privacidad"
   },
   "landing": {
-    "heroTitle": "Crea automatizaciones con IA",
-    "heroSubtitle": "Describe lo que quieres automatizar. MergN crea y ejecuta todo el flujo en tiempo real, con pasos, lógica e integraciones incluidas.",
+    "heroTitle": "Describe lo que debe ocurrir. MergN lo ejecuta.",
+    "heroSubtitle": "MergN construye los pasos a partir de tu descripción, los ejecuta en producción y mantiene cada ejecución visible. Si algo falla, encuentra la causa y propone una corrección — tú apruebas cada cambio.",
+    "differentiators": {
+      "title": "Hecho para ejecutar trabajo, no para cablear flujos",
+      "subtitle": "MergN convierte lo que describes en un sistema que puedes ver, operar y confiar en producción.",
+      "generated": {
+        "title": "Sin plantillas",
+        "desc": "No hay workflows prefabricados que elegir. Solo describe tu problema — MergN construye los pasos alrededor de tu caso, sin meterte en una plantilla genérica."
+      },
+      "visible": {
+        "title": "Cada paso es código real",
+        "desc": "Haz clic en un paso para ver el JavaScript detrás, y ajústalo si quieres. Siempre ves lo que realmente se ejecuta — nada oculto en segundo plano."
+      },
+      "resilient": {
+        "title": "Resistente en producción",
+        "desc": "Si una ejecución falla, MergN identifica qué salió mal y sugiere una corrección. Revisas y apruebas cada cambio antes de que se aplique."
+      }
+    },
     "learnMore": "Más información",
     "tryIdea": "Prueba una idea",
     "joinDiscord": "Unirse a Discord",
     "starGithub": "Dar estrella en GitHub",
     "contactUs": "Contáctanos",
     "selfHeal": {
-      "title": "Si un flujo se rompe, se repara solo",
+      "title": "Si una ejecución falla, MergN te ayuda a corregirla",
       "subtitle": "MergN detecta el fallo, encuentra la causa y propone una corrección. Aplicarla depende totalmente de ti.",
       "detect": "Detectar",
       "diagnose": "Diagnosticar",
@@ -92,7 +108,7 @@
       "controlBanner": "Nada se aplica hasta que tú lo apruebes.",
       "controlTitle": "Tú tienes el control",
       "applied": "Aplicado con tu aprobación",
-      "rejected": "Rechazado — el flujo quedó igual",
+      "rejected": "Rechazado — nada cambió",
       "guardrails": "Incluso en modo automático rigen los límites: alcance, límite de bucle y kill switch."
     },
     "ideas": {
@@ -103,9 +119,12 @@
       "refund-handler": "Gestión Reembolsos"
     },
     "describeChange": "Describe un cambio…",
+    "showcase": {
+      "clickStep": "Haz clic en un paso para ver su código"
+    },
     "useCases": {
-      "title": "¿Qué puedes crear?",
-      "subtitle": "Conecta las herramientas que ya usas y deja que la IA enlace los pasos.",
+      "title": "¿Qué puedes ejecutar?",
+      "subtitle": "Describe el resultado — MergN encuentra los pasos y los mantiene en marcha.",
       "items": {
         "payments": {
           "title": "Alertas de pago",
@@ -144,7 +163,7 @@
     },
     "community": {
       "badge": "Comunidad",
-      "title": "Únete y construyamos juntos la próxima ola de workflows.",
+      "title": "Únete y construyamos lo que viene.",
       "desc": "Entra a Discord para darnos feedback directo, acceder antes a nuevas funciones y recibir soporte rápido.",
       "joinNow": "Unirme ahora",
       "joinDiscord": "Unirse a Discord",

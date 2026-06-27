@@ -69,15 +69,31 @@
     "privacyPolicy": "Gizlilik Politikası"
   },
   "landing": {
-    "heroTitle": "Otomasyonları yapay zekâ ile oluştur",
-    "heroSubtitle": "Neyi otomatikleştirmek istediğini anlat. MergN akışın tamamını çalışma anında senin için üretir ve çalıştırır; adımlar, mantık ve entegrasyonlar dahil.",
+    "heroTitle": "Ne olması gerektiğini tarif et. MergN çalıştırır.",
+    "heroSubtitle": "MergN tarifinden adımları oluşturur, production'da çalıştırır ve her çalıştırmayı görünür tutar. Bir şey kırılırsa nedeni bulur, düzeltmeyi önerir — onay senden.",
+    "differentiators": {
+      "title": "Akış çizmek için değil, işi çalıştırmak için",
+      "subtitle": "MergN tarif ettiğin işi görebileceğin, yönetebileceğin ve production'da güvenebileceğin bir yapıya dönüştürür.",
+      "generated": {
+        "title": "Şablon yok",
+        "desc": "Hazır akış seçmek yok. Sadece problemini anlat — MergN adımları senin durumuna göre kurar, genel bir şablona sıkıştırmaz."
+      },
+      "visible": {
+        "title": "Her adım gerçek kod",
+        "desc": "Herhangi bir adıma tıkla, arkasındaki JavaScript'i gör, istersen ince ayar yap. Çalışan her şey görünür — arka planda gizli bir şey yok."
+      },
+      "resilient": {
+        "title": "Production'da dayanıklı",
+        "desc": "Bir çalıştırma kırılırsa MergN neyin yanlış gittiğini bulur ve düzeltme önerir. Canlıya almadan önce her değişikliği inceler ve onaylarsın."
+      }
+    },
     "learnMore": "Daha fazla bilgi",
     "tryIdea": "Bir fikir dene",
     "joinDiscord": "Discord'a Katıl",
     "starGithub": "GitHub'da Yıldızla",
     "contactUs": "Bize Ulaşın",
     "selfHeal": {
-      "title": "Akış kırılırsa kendi kendine onarır",
+      "title": "Bir çalıştırma başarısız olunca MergN düzeltmene yardım eder",
       "subtitle": "MergN hatayı yakalar, nedenini bulur ve bir düzeltme önerir. Uygulamak tamamen senin elinde.",
       "detect": "Tespit",
       "diagnose": "Teşhis",
@@ -92,7 +108,7 @@
       "controlBanner": "Sen onaylamadan hiçbir değişiklik uygulanmaz.",
       "controlTitle": "Kontrol sende",
       "applied": "Senin onayınla uygulandı",
-      "rejected": "Reddedildi — akış olduğu gibi kaldı",
+      "rejected": "Reddedildi — hiçbir şey değişmedi",
       "guardrails": "Otomatik modda bile sınırlar geçerli: etki alanı, döngü limiti ve kill-switch."
     },
     "ideas": {
@@ -103,9 +119,12 @@
       "refund-handler": "İade Takibi"
     },
     "describeChange": "Bir değişiklik yaz…",
+    "showcase": {
+      "clickStep": "Kodunu görmek için bir adıma tıkla"
+    },
     "useCases": {
-      "title": "Neler kurabilirsin?",
-      "subtitle": "Zaten kullandığın araçları bağla, adımları yapay zekâ birbirine bağlasın.",
+      "title": "Neler çalıştırabilirsin?",
+      "subtitle": "Sonucu tarif et — MergN adımları çıkarır ve çalışır halde tutar.",
       "items": {
         "payments": {
           "title": "Ödeme uyarıları",
@@ -144,7 +163,7 @@
     },
     "community": {
       "badge": "Topluluk",
-      "title": "Aramıza katıl, gelişen ürün akışını birlikte kuralım.",
+      "title": "Birlikte bir sonraki adımı inşa edelim.",
       "desc": "Discord sohbetleri, yeni özelliklere erken erişim ve hızlı destek ile MergN yolculuğuna şimdi dahil ol.",
       "joinNow": "Hemen Katıl",
       "joinDiscord": "Discord'a Gel",
