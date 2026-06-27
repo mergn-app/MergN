@@ -66,8 +66,8 @@ function IndexPage() {
     }
   }, [user, spaces, navigate]);
 
-  if (pending) return <Loader />;
   if (!user) return <Landing />;
+  if (pending) return <Loader />;
   return <Loader />;
 }
 
@@ -107,8 +107,8 @@ function BuilderPage() {
     spaceId?: string;
     workflowId?: string;
   };
-  if (pending) return <Loader />;
   if (!user) return <Landing />;
+  if (pending) return <Loader />;
   const spaceId = params.spaceId ?? "";
   return (
     <App

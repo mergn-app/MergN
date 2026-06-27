@@ -28,7 +28,7 @@ export function LegalPage({ kind }: { kind: LegalKind }) {
     if (managed === false) void navigate({ to: "/", replace: true });
   }, [managed, navigate]);
 
-  if (managed !== true) return null;
+  if (managed === false) return null;
 
   return (
     <div className="min-h-screen w-full bg-background px-4 py-8 text-foreground">
