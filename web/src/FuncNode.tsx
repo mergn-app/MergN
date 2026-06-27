@@ -55,8 +55,8 @@ function AddPort({
           setEditing(true);
         }}
         className={cn(
-          "nodrag flex h-5 items-center gap-1 text-[10px] text-muted-foreground/60 transition-colors hover:text-foreground",
-          align === "right" && "justify-end",
+          "nodrag mt-0.5 flex h-5 w-fit items-center gap-1 rounded-md border border-dashed border-border px-1.5 text-[10px] font-medium text-muted-foreground transition-colors hover:border-primary/60 hover:bg-primary/10 hover:text-foreground",
+          align === "right" && "ml-auto",
         )}
       >
         <Plus className="size-3" />

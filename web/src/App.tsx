@@ -190,36 +190,33 @@ function Canvas({
     >
       <Background />
       <Controls />
-      <Panel
-        position="top-left"
-        style={{ marginLeft: "0.75rem", marginTop: "0.75rem" }}
-      >
-        <button
-          onClick={onAddStep}
-          title={t("canvas.addStep")}
-          className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs font-medium text-foreground/90 shadow-sm transition-colors hover:border-border"
-        >
-          <Plus className="h-3.5 w-3.5" />
-          {t("canvas.addStep")}
-        </button>
-      </Panel>
-      {nodes.length > 1 && (
-        // sit just left of the monitoring entry pill (absolute right-3 top-3),
-        // top-aligned to it (marginTop matches the pill's top-3), tight gap
-        <Panel position="top-right" style={{ marginRight: "7rem", marginTop: "0.75rem" }}>
+      {/* Canvas actions grouped top-right, next to the (visible) auto-arrange so
+          they're never hidden behind a top-left overlay. */}
+      <Panel position="top-right" style={{ marginRight: "7rem", marginTop: "0.75rem" }}>
+        <div className="flex items-center gap-1.5">
           <button
-            onClick={() => {
-              onArrange();
-              setTimeout(() => fitView({ duration: 400, padding: 0.28 }), 60);
-            }}
-            title={t("canvas.autoArrange")}
-            className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-foreground/90 transition-colors hover:border-border"
+            onClick={onAddStep}
+            title={t("canvas.addStep")}
+            className="flex items-center gap-1.5 rounded-lg border border-primary/40 bg-primary/10 px-2.5 py-1 text-xs font-medium text-foreground shadow-sm transition-colors hover:border-primary/70 hover:bg-primary/15"
           >
-            <Network className="h-3.5 w-3.5" />
-            {t("canvas.autoArrange")}
+            <Plus className="h-3.5 w-3.5" />
+            {t("canvas.addStep")}
           </button>
-        </Panel>
-      )}
+          {nodes.length > 1 && (
+            <button
+              onClick={() => {
+                onArrange();
+                setTimeout(() => fitView({ duration: 400, padding: 0.28 }), 60);
+              }}
+              title={t("canvas.autoArrange")}
+              className="flex items-center gap-1.5 rounded-lg border border-border/50 bg-muted px-2.5 py-1 text-xs text-foreground/90 transition-colors hover:border-border"
+            >
+              <Network className="h-3.5 w-3.5" />
+              {t("canvas.autoArrange")}
+            </button>
+          )}
+        </div>
+      </Panel>
     </ReactFlow>
   );
 }
