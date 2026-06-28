@@ -40,12 +40,18 @@ const inputClass =
   "w-full rounded-lg border border-border/60 bg-background-subtle px-2.5 py-1.5 text-[12px] text-foreground/90 outline-none focus:border-border";
 
 function withDefaults(kind: TriggerKind, current: TriggerConfig): TriggerConfig {
+  // Preserve the trigger's event-data fields (its outputs) across a kind switch
+  // so toggling the type and back doesn't wipe the outputs and their edges.
+  const carry = current.eventFields?.length
+    ? { eventFields: current.eventFields }
+    : {};
   if (kind === "schedule") {
     return {
       kind,
       enabled: current.enabled ?? true,
       schedule:
         current.schedule ?? { mode: "interval", intervalValue: 5, intervalUnit: "minute" },
+      ...carry,
     };
   }
   if (kind === "poll") {
@@ -54,9 +60,10 @@ function withDefaults(kind: TriggerKind, current: TriggerConfig): TriggerConfig 
       enabled: current.enabled ?? true,
       poll:
         current.poll ?? { provider: "", intervalValue: 5, intervalUnit: "minute", params: {} },
+      ...carry,
     };
   }
-  return { kind };
+  return { kind, ...carry };
 }
 
 function CopyChip({ value }: { value: string }) {
