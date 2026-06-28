@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import type { ActivationState } from "./queries";
@@ -120,6 +120,48 @@ function EnabledToggle({
   );
 }
 
+// A text input that only commits (and thus triggers a save) after a typing
+// pause or on blur — not on every keystroke.
+function DebouncedInput({
+  value,
+  onCommit,
+  placeholder,
+  className,
+}: {
+  value: string;
+  onCommit: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [text, setText] = useState(value);
+  const focused = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!focused.current) setText(value);
+  }, [value]);
+  return (
+    <input
+      value={text}
+      placeholder={placeholder}
+      className={className}
+      onFocus={() => {
+        focused.current = true;
+      }}
+      onChange={(e) => {
+        const v = e.target.value;
+        setText(v);
+        if (timer.current) clearTimeout(timer.current);
+        timer.current = setTimeout(() => onCommit(v), 600);
+      }}
+      onBlur={() => {
+        focused.current = false;
+        if (timer.current) clearTimeout(timer.current);
+        onCommit(text);
+      }}
+    />
+  );
+}
+
 function IntervalFields({
   value,
   unit,
@@ -131,14 +173,37 @@ function IntervalFields({
   onValue: (v: number) => void;
   onUnit: (u: IntervalUnit) => void;
 }) {
+  // Debounce the number input so typing each digit doesn't fire onValue (and a
+  // workflow save) per keystroke. Local state holds what's typed; commit after a
+  // pause or on blur. Don't resync from props while focused (avoids mid-typing
+  // resets).
+  const [text, setText] = useState(String(value));
+  const focused = useRef(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!focused.current) setText(String(value));
+  }, [value]);
+  const commit = (raw: string) => onValue(Math.max(1, Number(raw) || 1));
   return (
     <div className="flex items-center gap-2">
       <span className="text-[11px] text-muted-foreground">Every</span>
       <input
         type="number"
         min={1}
-        value={value}
-        onChange={(e) => onValue(Math.max(1, Number(e.target.value) || 1))}
+        value={text}
+        onFocus={() => {
+          focused.current = true;
+        }}
+        onChange={(e) => {
+          setText(e.target.value);
+          if (timer.current) clearTimeout(timer.current);
+          timer.current = setTimeout(() => commit(e.target.value), 600);
+        }}
+        onBlur={() => {
+          focused.current = false;
+          if (timer.current) clearTimeout(timer.current);
+          commit(text);
+        }}
         className={cn(inputClass, "w-20")}
       />
       <select
@@ -192,16 +257,16 @@ function ScheduleConfig({
         />
       ) : (
         <div className="space-y-1.5">
-          <input
+          <DebouncedInput
             value={config.cron ?? ""}
             placeholder="*/5 * * * *"
-            onChange={(e) => onChange({ cron: e.target.value })}
+            onCommit={(cron) => onChange({ cron })}
             className={cn(inputClass, "font-mono")}
           />
-          <input
+          <DebouncedInput
             value={config.timezone ?? ""}
             placeholder="UTC"
-            onChange={(e) => onChange({ timezone: e.target.value })}
+            onCommit={(timezone) => onChange({ timezone })}
             className={inputClass}
           />
         </div>
@@ -244,11 +309,11 @@ function PollConfig({
       />
 
       {(config.paramNames ?? []).map((name) => (
-        <input
+        <DebouncedInput
           key={name}
           value={String(params[name] ?? "")}
           placeholder={name}
-          onChange={(e) => onParam(name, e.target.value)}
+          onCommit={(v) => onParam(name, v)}
           className={inputClass}
         />
       ))}
